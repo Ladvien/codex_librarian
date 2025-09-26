@@ -6,10 +6,10 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = "listening_neuron"
+project = "PDF to Markdown MCP Server"
 copyright = "2025, C. Thomas Brittain"
 author = "C. Thomas Brittain"
-release = "0.0.29"
+release = "0.1.0"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -37,5 +37,5 @@ html_theme = "furo"
 html_static_path = ["_static"]
 
 # https://sphinx-autoapi.readthedocs.io/en/latest/reference/config.html
-# autoapi_dirs = ['../../listening_neuron']
-autodoc2_packages = ["../../listening_neuron"]
+# autoapi_dirs = ['../../src/pdf_to_markdown_mcp']
+autodoc2_packages = ["../../src/pdf_to_markdown_mcp"]

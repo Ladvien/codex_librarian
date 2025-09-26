@@ -1,0 +1,102 @@
+# Pre-commit configuration for PDF-to-Markdown MCP Server
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+
+repos:
+  # General code formatting and checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: ['--unsafe']
+      - id: check-toml
+      - id: check-json
+      - id: check-added-large-files
+        args: ['--maxkb=10000']
+      - id: check-merge-conflict
+      - id: debug-statements
+      - id: name-tests-test
+
+  # Python code formatting with Black
+  - repo: https://github.com/psf/black
+    rev: 25.1.0
+    hooks:
+      - id: black
+        language_version: python3.11
+        args: [--target-version=py311]
+
+  # Python linting and auto-fixing with Ruff
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.13.1
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  # Type checking with MyPy
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.18.2
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - pydantic>=2.11.9
+          - types-requests
+          - types-redis
+          - types-psycopg2
+        args: [--strict, --ignore-missing-imports]
+        files: ^src/
+
+  # Security scanning with Bandit
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.8.6
+    hooks:
+      - id: bandit
+        args: [-r, src/pdf_to_markdown_mcp/, -f, json, -o, bandit-report.json]
+        files: ^src/
+
+  # SQL migrations and database schema checks
+  - repo: local
+    hooks:
+      - id: alembic-check
+        name: alembic-check
+        entry: bash -c 'if [ -d "alembic/versions" ]; then alembic check || (echo "Database migrations are not up to date. Run: alembic revision --autogenerate"; exit 1); fi'
+        language: system
+        types: [python]
+        files: ^(alembic/|src/.*\.py)$
+
+  # uv dependency and configuration validation
+  - repo: local
+    hooks:
+      - id: uv-check
+        name: uv-check
+        entry: bash -c 'uv lock --check'
+        language: system
+        files: ^(pyproject\.toml|uv\.lock)$
+        pass_filenames: false
+
+  # Test suite validation (optional - runs on CI)
+  - repo: local
+    hooks:
+      - id: pytest-check
+        name: pytest-check
+        entry: bash -c 'python -m pytest tests/unit/ --maxfail=1 -q'
+        language: system
+        types: [python]
+        files: ^(src/|tests/).*\.py$
+        stages: [manual]  # Only run manually with --hook-stage manual
+
+# Global configuration
+default_language_version:
+  python: python3.11
+
+# Configuration for specific stages
+default_stages: [commit, push]
+minimum_pre_commit_version: '3.0.0'
+
+# CI-specific configuration
+ci:
+  autofix_prs: true
+  autoupdate_schedule: weekly
+  skip: [pytest-check]  # Skip slow tests in CI pre-commit
