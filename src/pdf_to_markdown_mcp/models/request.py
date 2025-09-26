@@ -13,6 +13,7 @@ from enum import Enum
 
 class SupportedLanguage(str, Enum):
     """Supported OCR languages."""
+
     ENGLISH = "eng"
     CHINESE_SIMPLIFIED = "chi_sim"
     CHINESE_TRADITIONAL = "chi_tra"
@@ -27,17 +28,24 @@ class ProcessingOptions(BaseModel):
     """Common processing options for PDF conversion."""
 
     ocr_language: SupportedLanguage = Field(
-        default=SupportedLanguage.ENGLISH,
-        description="OCR language code"
+        default=SupportedLanguage.ENGLISH, description="OCR language code"
     )
     preserve_layout: bool = Field(default=True, description="Preserve document layout")
-    chunk_size: int = Field(default=1000, ge=100, le=5000, description="Text chunk size for embeddings")
-    chunk_overlap: int = Field(default=200, ge=0, le=1000, description="Overlap between chunks")
+    chunk_size: int = Field(
+        default=1000, ge=100, le=5000, description="Text chunk size for embeddings"
+    )
+    chunk_overlap: int = Field(
+        default=200, ge=0, le=1000, description="Overlap between chunks"
+    )
 
     extract_images: bool = Field(default=True, description="Extract images from PDF")
     extract_tables: bool = Field(default=True, description="Extract tables from PDF")
-    extract_formulas: bool = Field(default=True, description="Extract mathematical formulas")
-    chunk_for_embeddings: bool = Field(default=True, description="Generate text chunks for embeddings")
+    extract_formulas: bool = Field(
+        default=True, description="Extract mathematical formulas"
+    )
+    chunk_for_embeddings: bool = Field(
+        default=True, description="Generate text chunks for embeddings"
+    )
 
     @validator("chunk_overlap")
     def validate_chunk_overlap(cls, v, values):
@@ -50,7 +58,9 @@ class ProcessingOptions(BaseModel):
     def validate_ocr_language(cls, v):
         """Validate OCR language is supported."""
         if isinstance(v, str) and v not in [lang.value for lang in SupportedLanguage]:
-            raise ValueError(f"Unsupported OCR language: {v}. Supported: {[lang.value for lang in SupportedLanguage]}")
+            raise ValueError(
+                f"Unsupported OCR language: {v}. Supported: {[lang.value for lang in SupportedLanguage]}"
+            )
         return v
 
     class Config:
@@ -72,8 +82,12 @@ class ConvertSingleRequest(BaseModel):
     """Request model for single PDF conversion."""
 
     file_path: Union[str, Path] = Field(..., description="Path to PDF file")
-    output_dir: Optional[Union[str, Path]] = Field(None, description="Output directory for markdown files")
-    store_embeddings: bool = Field(default=True, description="Generate and store vector embeddings")
+    output_dir: Optional[Union[str, Path]] = Field(
+        None, description="Output directory for markdown files"
+    )
+    store_embeddings: bool = Field(
+        default=True, description="Generate and store vector embeddings"
+    )
     options: ProcessingOptions = Field(default_factory=ProcessingOptions)
 
     @validator("file_path", pre=True)
@@ -90,13 +104,15 @@ class ConvertSingleRequest(BaseModel):
         # Check file size (max 500MB as per architecture)
         file_size_mb = path.stat().st_size / (1024 * 1024)
         if file_size_mb > 500:
-            raise ValueError(f"File too large: {file_size_mb:.1f}MB. Maximum allowed: 500MB")
+            raise ValueError(
+                f"File too large: {file_size_mb:.1f}MB. Maximum allowed: 500MB"
+            )
 
         # Basic PDF header validation
         try:
-            with open(path, 'rb') as f:
+            with open(path, "rb") as f:
                 header = f.read(8)
-                if not header.startswith(b'%PDF-'):
+                if not header.startswith(b"%PDF-"):
                     raise ValueError("File does not appear to be a valid PDF")
         except (IOError, OSError) as e:
             raise ValueError(f"Cannot read file: {str(e)}")
@@ -124,7 +140,7 @@ class ConvertSingleRequest(BaseModel):
                     "preserve_layout": True,
                     "chunk_size": 1000,
                     "chunk_overlap": 200,
-                }
+                },
             }
         }
 
@@ -134,13 +150,23 @@ class BatchConvertRequest(BaseModel):
 
     directory: Union[str, Path] = Field(..., description="Directory to search for PDFs")
     pattern: str = Field(default="**/*.pdf", description="File pattern to match")
-    recursive: bool = Field(default=True, description="Search subdirectories recursively")
-    output_base: Optional[Union[str, Path]] = Field(None, description="Base output directory")
-    store_embeddings: bool = Field(default=True, description="Generate and store vector embeddings")
+    recursive: bool = Field(
+        default=True, description="Search subdirectories recursively"
+    )
+    output_base: Optional[Union[str, Path]] = Field(
+        None, description="Base output directory"
+    )
+    store_embeddings: bool = Field(
+        default=True, description="Generate and store vector embeddings"
+    )
     options: ProcessingOptions = Field(default_factory=ProcessingOptions)
 
-    max_files: int = Field(default=100, ge=1, le=1000, description="Maximum number of files to process")
-    priority: int = Field(default=5, ge=1, le=10, description="Processing priority (1=highest, 10=lowest)")
+    max_files: int = Field(
+        default=100, ge=1, le=1000, description="Maximum number of files to process"
+    )
+    priority: int = Field(
+        default=5, ge=1, le=10, description="Processing priority (1=highest, 10=lowest)"
+    )
 
     @validator("directory", pre=True)
     def validate_directory(cls, v):
@@ -180,11 +206,17 @@ class SemanticSearchRequest(BaseModel):
     """Request model for semantic search."""
 
     query: str = Field(..., min_length=1, max_length=1000, description="Search query")
-    top_k: int = Field(default=10, ge=1, le=100, description="Number of results to return")
-    threshold: float = Field(default=0.7, ge=0.0, le=1.0, description="Minimum similarity threshold")
+    top_k: int = Field(
+        default=10, ge=1, le=100, description="Number of results to return"
+    )
+    threshold: float = Field(
+        default=0.7, ge=0.0, le=1.0, description="Minimum similarity threshold"
+    )
 
     filter: Optional[Dict[str, Any]] = Field(None, description="Filter criteria")
-    include_content: bool = Field(default=True, description="Include chunk content in results")
+    include_content: bool = Field(
+        default=True, description="Include chunk content in results"
+    )
 
     @validator("query")
     def validate_query(cls, v):
@@ -209,12 +241,20 @@ class HybridSearchRequest(BaseModel):
     """Request model for hybrid search (semantic + keyword)."""
 
     query: str = Field(..., min_length=1, max_length=1000, description="Search query")
-    semantic_weight: float = Field(default=0.7, ge=0.0, le=1.0, description="Weight for semantic search")
-    keyword_weight: float = Field(default=0.3, ge=0.0, le=1.0, description="Weight for keyword search")
-    top_k: int = Field(default=10, ge=1, le=100, description="Number of results to return")
+    semantic_weight: float = Field(
+        default=0.7, ge=0.0, le=1.0, description="Weight for semantic search"
+    )
+    keyword_weight: float = Field(
+        default=0.3, ge=0.0, le=1.0, description="Weight for keyword search"
+    )
+    top_k: int = Field(
+        default=10, ge=1, le=100, description="Number of results to return"
+    )
 
     filter: Optional[Dict[str, Any]] = Field(None, description="Filter criteria")
-    include_content: bool = Field(default=True, description="Include chunk content in results")
+    include_content: bool = Field(
+        default=True, description="Include chunk content in results"
+    )
 
     @validator("query")
     def validate_query(cls, v):
@@ -248,10 +288,16 @@ class FindSimilarRequest(BaseModel):
     """Request model for finding similar documents."""
 
     document_id: int = Field(..., description="Reference document ID")
-    top_k: int = Field(default=5, ge=1, le=50, description="Number of similar documents to return")
-    min_similarity: float = Field(default=0.6, ge=0.0, le=1.0, description="Minimum similarity threshold")
+    top_k: int = Field(
+        default=5, ge=1, le=50, description="Number of similar documents to return"
+    )
+    min_similarity: float = Field(
+        default=0.6, ge=0.0, le=1.0, description="Minimum similarity threshold"
+    )
 
-    include_self: bool = Field(default=False, description="Include the reference document in results")
+    include_self: bool = Field(
+        default=False, description="Include the reference document in results"
+    )
 
     class Config:
         schema_extra = {
@@ -267,12 +313,22 @@ class FindSimilarRequest(BaseModel):
 class ConfigurationRequest(BaseModel):
     """Request model for server configuration updates."""
 
-    watch_directories: Optional[List[Union[str, Path]]] = Field(None, description="Directories to monitor")
-    embedding_config: Optional[Dict[str, Any]] = Field(None, description="Embedding service configuration")
-    ocr_settings: Optional[Dict[str, Any]] = Field(None, description="OCR processing settings")
-    processing_limits: Optional[Dict[str, Any]] = Field(None, description="Processing resource limits")
+    watch_directories: Optional[List[Union[str, Path]]] = Field(
+        None, description="Directories to monitor"
+    )
+    embedding_config: Optional[Dict[str, Any]] = Field(
+        None, description="Embedding service configuration"
+    )
+    ocr_settings: Optional[Dict[str, Any]] = Field(
+        None, description="OCR processing settings"
+    )
+    processing_limits: Optional[Dict[str, Any]] = Field(
+        None, description="Processing resource limits"
+    )
 
-    restart_watcher: bool = Field(default=False, description="Restart file watcher after changes")
+    restart_watcher: bool = Field(
+        default=False, description="Restart file watcher after changes"
+    )
 
     @validator("watch_directories", pre=True)
     def validate_watch_directories(cls, v):
@@ -298,12 +354,9 @@ class ConfigurationRequest(BaseModel):
                 "embedding_config": {
                     "provider": "ollama",
                     "model": "nomic-embed-text",
-                    "batch_size": 32
+                    "batch_size": 32,
                 },
-                "ocr_settings": {
-                    "language": "eng+fra",
-                    "dpi": 300
-                },
+                "ocr_settings": {"language": "eng+fra", "dpi": 300},
                 "restart_watcher": True,
             }
         }

@@ -82,7 +82,7 @@ startxref
 %%EOF"""
 
     # Create temporary PDF file
-    with tempfile.NamedTemporaryFile(mode='wb', suffix='.pdf', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="wb", suffix=".pdf", delete=False) as f:
         f.write(pdf_content)
         return Path(f.name)
 
@@ -108,16 +108,16 @@ async def demo_basic_processing():
             extract_images=True,
             chunk_for_embeddings=True,
             chunk_size=1000,
-            chunk_overlap=200
+            chunk_overlap=200,
         )
 
         print("🚀 Starting PDF processing...")
         result = await service.process_pdf(pdf_path, options)
 
         print("✅ Processing completed!")
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("PROCESSING RESULTS")
-        print("="*60)
+        print("=" * 60)
 
         # Display results
         print(f"📊 Processing Statistics:")
@@ -140,23 +140,25 @@ async def demo_basic_processing():
         print(f"\n📖 Extracted Content:")
         print("   Markdown content:")
         print("   " + "-" * 40)
-        for i, line in enumerate(result.markdown_content.split('\n')[:10]):
+        for i, line in enumerate(result.markdown_content.split("\n")[:10]):
             print(f"   {i+1:2}: {line}")
-        if len(result.markdown_content.split('\n')) > 10:
+        if len(result.markdown_content.split("\n")) > 10:
             print("   ... (truncated)")
 
         print(f"\n   Plain text content:")
         print("   " + "-" * 40)
-        for i, line in enumerate(result.plain_text.split('\n')[:10]):
+        for i, line in enumerate(result.plain_text.split("\n")[:10]):
             print(f"   {i+1:2}: {line}")
-        if len(result.plain_text.split('\n')) > 10:
+        if len(result.plain_text.split("\n")) > 10:
             print("   ... (truncated)")
 
         if result.chunk_data:
             print(f"\n🧩 Text Chunks (showing first 3):")
             for i, chunk in enumerate(result.chunk_data[:3]):
                 print(f"   Chunk {i+1}:")
-                print(f"     • Text: {chunk.text[:100]}{'...' if len(chunk.text) > 100 else ''}")
+                print(
+                    f"     • Text: {chunk.text[:100]}{'...' if len(chunk.text) > 100 else ''}"
+                )
                 print(f"     • Position: {chunk.start_char}-{chunk.end_char}")
                 print(f"     • Tokens: ~{chunk.token_count}")
 
@@ -166,9 +168,9 @@ async def demo_basic_processing():
         else:
             print(f"\n📄 Document contains only plain text content")
 
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("SERVICE STATISTICS")
-        print("="*60)
+        print("=" * 60)
 
         stats = await service.get_processing_stats()
         print(f"🔧 Service: {stats['service']} v{stats['version']}")
@@ -176,19 +178,19 @@ async def demo_basic_processing():
         print(f"⏱️  Timeout: {stats['timeout_seconds']} seconds")
         print(f"🌐 Languages: {', '.join(stats['supported_languages'])}")
         print(f"✨ Features:")
-        for feature in stats['features']:
+        for feature in stats["features"]:
             print(f"   • {feature.replace('_', ' ').title()}")
 
     except ValidationError as e:
         print(f"❌ Validation Error: {e}")
         print(f"   Error code: {getattr(e, 'error_code', 'N/A')}")
-        if hasattr(e, 'details'):
+        if hasattr(e, "details"):
             print(f"   Details: {e.details}")
 
     except ProcessingError as e:
         print(f"❌ Processing Error: {e}")
         print(f"   Error code: {getattr(e, 'error_code', 'N/A')}")
-        if hasattr(e, 'pdf_path'):
+        if hasattr(e, "pdf_path"):
             print(f"   PDF path: {e.pdf_path}")
 
     except Exception as e:
@@ -203,9 +205,9 @@ async def demo_basic_processing():
 
 async def demo_error_handling():
     """Demonstrate error handling capabilities."""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("ERROR HANDLING DEMONSTRATION")
-    print("="*60)
+    print("=" * 60)
 
     service = MinerUService()
 
@@ -218,8 +220,8 @@ async def demo_error_handling():
 
     # Test 2: Invalid file type
     print("\n🧪 Test 2: Invalid file type")
-    with tempfile.NamedTemporaryFile(suffix='.txt') as f:
-        f.write(b'Not a PDF')
+    with tempfile.NamedTemporaryFile(suffix=".txt") as f:
+        f.write(b"Not a PDF")
         f.flush()
         try:
             await service.process_pdf(Path(f.name), ProcessingOptions())
@@ -240,9 +242,9 @@ async def demo_error_handling():
 
 async def demo_concurrent_processing():
     """Demonstrate concurrent processing capabilities."""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("CONCURRENT PROCESSING DEMONSTRATION")
-    print("="*60)
+    print("=" * 60)
 
     service = MinerUService()
 
@@ -276,7 +278,9 @@ async def demo_concurrent_processing():
                 print(f"   ❌ PDF {i+1}: {result}")
                 failed += 1
             else:
-                print(f"   ✅ PDF {i+1}: {result.processing_metadata.processing_time_ms}ms")
+                print(
+                    f"   ✅ PDF {i+1}: {result.processing_metadata.processing_time_ms}ms"
+                )
                 successful += 1
 
         print(f"\n📊 Results: {successful} successful, {failed} failed")
@@ -290,9 +294,9 @@ async def demo_concurrent_processing():
 
 def main():
     """Main demo function."""
-    print("="*60)
+    print("=" * 60)
     print("MINERU PDF PROCESSING SERVICE DEMO")
-    print("="*60)
+    print("=" * 60)
     print("This demo showcases MinerU service capabilities")
     print("Note: Using mock implementation (MinerU library not installed)")
     print()
@@ -300,7 +304,7 @@ def main():
     # Check if a PDF path was provided
     if len(sys.argv) > 1:
         pdf_path = Path(sys.argv[1])
-        if pdf_path.exists() and pdf_path.suffix.lower() == '.pdf':
+        if pdf_path.exists() and pdf_path.suffix.lower() == ".pdf":
             print(f"📄 Using provided PDF: {pdf_path}")
             # You could modify demo_basic_processing to use this file
         else:
@@ -312,9 +316,9 @@ def main():
     asyncio.run(demo_error_handling())
     asyncio.run(demo_concurrent_processing())
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("DEMO COMPLETED")
-    print("="*60)
+    print("=" * 60)
     print("✨ MinerU service is ready for integration!")
     print("🚀 Next steps:")
     print("   • Install MinerU library for production use")

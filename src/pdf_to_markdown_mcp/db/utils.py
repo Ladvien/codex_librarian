@@ -12,7 +12,13 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
-from .models import Document, DocumentContent, DocumentEmbedding, DocumentImage, ProcessingQueue
+from .models import (
+    Document,
+    DocumentContent,
+    DocumentEmbedding,
+    DocumentImage,
+    ProcessingQueue,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -22,9 +28,7 @@ class DatabaseUtils:
 
     @staticmethod
     def cleanup_old_records(
-        db: Session,
-        days_old: int = 30,
-        dry_run: bool = True
+        db: Session, days_old: int = 30, dry_run: bool = True
     ) -> Dict[str, int]:
         """
         Clean up old processing queue records and failed documents.
@@ -41,37 +45,25 @@ class DatabaseUtils:
         stats = {}
 
         # Clean up completed processing queue records
-        completed_jobs = (
-            db.query(ProcessingQueue)
-            .filter(
-                ProcessingQueue.status == "completed",
-                ProcessingQueue.completed_at < cutoff_date
-            )
+        completed_jobs = db.query(ProcessingQueue).filter(
+            ProcessingQueue.status == "completed",
+            ProcessingQueue.completed_at < cutoff_date,
         )
         stats["completed_queue_jobs"] = completed_jobs.count()
         if not dry_run:
             completed_jobs.delete(synchronize_session=False)
 
         # Clean up failed jobs older than threshold
-        failed_jobs = (
-            db.query(ProcessingQueue)
-            .filter(
-                ProcessingQueue.status == "failed",
-                ProcessingQueue.created_at < cutoff_date
-            )
+        failed_jobs = db.query(ProcessingQueue).filter(
+            ProcessingQueue.status == "failed", ProcessingQueue.created_at < cutoff_date
         )
         stats["failed_queue_jobs"] = failed_jobs.count()
         if not dry_run:
             failed_jobs.delete(synchronize_session=False)
 
         # Clean up orphaned embeddings (documents that were deleted)
-        orphaned_embeddings = (
-            db.query(DocumentEmbedding)
-            .filter(
-                ~DocumentEmbedding.document_id.in_(
-                    db.query(Document.id)
-                )
-            )
+        orphaned_embeddings = db.query(DocumentEmbedding).filter(
+            ~DocumentEmbedding.document_id.in_(db.query(Document.id))
         )
         stats["orphaned_embeddings"] = orphaned_embeddings.count()
         if not dry_run:
@@ -102,7 +94,7 @@ class DatabaseUtils:
             "document_content",
             "document_embeddings",
             "document_images",
-            "processing_queue"
+            "processing_queue",
         ]
 
         for table in tables:
@@ -148,7 +140,9 @@ class DatabaseUtils:
 
         try:
             # Check PGVector extension
-            result = db.execute(text("SELECT * FROM pg_extension WHERE extname = 'vector';"))
+            result = db.execute(
+                text("SELECT * FROM pg_extension WHERE extname = 'vector';")
+            )
             if result.fetchone():
                 health["checks"]["pgvector"] = "OK"
             else:
@@ -165,18 +159,19 @@ class DatabaseUtils:
                 ("document_content", DocumentContent),
                 ("document_embeddings", DocumentEmbedding),
                 ("document_images", DocumentImage),
-                ("processing_queue", ProcessingQueue)
+                ("processing_queue", ProcessingQueue),
             ]
 
             for table_name, model in tables:
                 count = db.query(model).count()
-                size_result = db.execute(text(f"SELECT pg_size_pretty(pg_total_relation_size('{table_name}'));"))
+                size_result = db.execute(
+                    text(
+                        f"SELECT pg_size_pretty(pg_total_relation_size('{table_name}'));"
+                    )
+                )
                 size = size_result.fetchone()[0] if size_result else "unknown"
 
-                table_stats[table_name] = {
-                    "row_count": count,
-                    "size": size
-                }
+                table_stats[table_name] = {"row_count": count, "size": size}
 
             health["checks"]["table_stats"] = table_stats
         except Exception as e:
@@ -184,12 +179,14 @@ class DatabaseUtils:
 
         try:
             # Check index usage
-            index_query = text("""
+            index_query = text(
+                """
                 SELECT schemaname, tablename, attname, n_distinct, correlation
                 FROM pg_stats
                 WHERE schemaname = 'public'
                 ORDER BY tablename, attname;
-            """)
+            """
+            )
             result = db.execute(index_query)
             health["checks"]["index_stats"] = [dict(row._mapping) for row in result]
         except Exception as e:
@@ -197,15 +194,21 @@ class DatabaseUtils:
 
         try:
             # Check for long-running queries
-            long_queries = db.execute(text("""
+            long_queries = db.execute(
+                text(
+                    """
                 SELECT pid, now() - pg_stat_activity.query_start AS duration, query
                 FROM pg_stat_activity
                 WHERE (now() - pg_stat_activity.query_start) > interval '5 minutes'
                 AND state = 'active';
-            """))
+            """
+                )
+            )
             active_long_queries = long_queries.fetchall()
             if active_long_queries:
-                health["warnings"].append(f"Found {len(active_long_queries)} long-running queries")
+                health["warnings"].append(
+                    f"Found {len(active_long_queries)} long-running queries"
+                )
                 health["checks"]["long_queries"] = len(active_long_queries)
             else:
                 health["checks"]["long_queries"] = 0
@@ -232,17 +235,20 @@ class DatabaseUtils:
             doc_embedding_counts = (
                 db.query(
                     DocumentEmbedding.document_id,
-                    func.count(DocumentEmbedding.id).label('embedding_count')
+                    func.count(DocumentEmbedding.id).label("embedding_count"),
                 )
                 .group_by(DocumentEmbedding.document_id)
                 .all()
             )
 
             stats["documents_with_embeddings"] = len(doc_embedding_counts)
-            stats["total_text_embeddings"] = sum(count.embedding_count for count in doc_embedding_counts)
+            stats["total_text_embeddings"] = sum(
+                count.embedding_count for count in doc_embedding_counts
+            )
             stats["avg_embeddings_per_document"] = (
                 stats["total_text_embeddings"] / stats["documents_with_embeddings"]
-                if stats["documents_with_embeddings"] > 0 else 0
+                if stats["documents_with_embeddings"] > 0
+                else 0
             )
 
             # Count image embeddings
@@ -252,7 +258,7 @@ class DatabaseUtils:
             page_distribution = (
                 db.query(
                     DocumentEmbedding.page_number,
-                    func.count(DocumentEmbedding.id).label('count')
+                    func.count(DocumentEmbedding.id).label("count"),
                 )
                 .group_by(DocumentEmbedding.page_number)
                 .order_by(DocumentEmbedding.page_number)
@@ -279,7 +285,9 @@ class DatabaseUtils:
             SQL CREATE TABLE statement
         """
         try:
-            result = db.execute(text(f"""
+            result = db.execute(
+                text(
+                    f"""
                 SELECT
                     'CREATE TABLE ' || quote_ident(schemaname) || '.' || quote_ident(tablename) || E' (\\n' ||
                     string_agg(
@@ -296,7 +304,9 @@ class DatabaseUtils:
                   AND NOT pg_attribute.attisdropped
                   AND pg_namespace.nspname = 'public'
                 GROUP BY schemaname, tablename;
-            """))
+            """
+                )
+            )
 
             result_row = result.fetchone()
             if result_row:
@@ -310,9 +320,7 @@ class DatabaseUtils:
 
     @staticmethod
     def reset_failed_jobs(
-        db: Session,
-        older_than_hours: int = 24,
-        max_attempts: int = 3
+        db: Session, older_than_hours: int = 24, max_attempts: int = 3
     ) -> int:
         """
         Reset failed jobs to queued status for retry.
@@ -327,22 +335,22 @@ class DatabaseUtils:
         """
         cutoff_time = datetime.utcnow() - timedelta(hours=older_than_hours)
 
-        failed_jobs = (
-            db.query(ProcessingQueue)
-            .filter(
-                ProcessingQueue.status == "failed",
-                ProcessingQueue.created_at < cutoff_time,
-                ProcessingQueue.attempts < max_attempts
-            )
+        failed_jobs = db.query(ProcessingQueue).filter(
+            ProcessingQueue.status == "failed",
+            ProcessingQueue.created_at < cutoff_time,
+            ProcessingQueue.attempts < max_attempts,
         )
 
         count = failed_jobs.count()
-        failed_jobs.update({
-            "status": "queued",
-            "worker_id": None,
-            "started_at": None,
-            "error_message": None,
-        }, synchronize_session=False)
+        failed_jobs.update(
+            {
+                "status": "queued",
+                "worker_id": None,
+                "started_at": None,
+                "error_message": None,
+            },
+            synchronize_session=False,
+        )
 
         db.commit()
         logger.info(f"Reset {count} failed jobs to queued status")

@@ -15,7 +15,11 @@ from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session
 
-from pdf_to_markdown_mcp.models.document import ProcessingStatus, Document, DocumentContent
+from pdf_to_markdown_mcp.models.document import (
+    ProcessingStatus,
+    Document,
+    DocumentContent,
+)
 from pdf_to_markdown_mcp.models.request import ProcessingOptions
 from pdf_to_markdown_mcp.services.mineru import MinerUService
 from pdf_to_markdown_mcp.services.database import VectorDatabaseService
@@ -25,12 +29,12 @@ from pdf_to_markdown_mcp.core.streaming import (
     StreamingProgressTracker,
     MemoryMappedFileReader,
     stream_processing_with_backpressure,
-    get_streaming_stats
+    get_streaming_stats,
 )
 from pdf_to_markdown_mcp.core.exceptions import (
     ProcessingError,
     ValidationError,
-    ResourceError
+    ResourceError,
 )
 
 logger = logging.getLogger(__name__)
@@ -72,7 +76,7 @@ class PDFProcessor:
         output_dir: Optional[Path] = None,
         options: ProcessingOptions = None,
         progress_callback: Optional[Callable[[int, int, str], None]] = None,
-        operation_id: Optional[str] = None
+        operation_id: Optional[str] = None,
     ) -> ProcessingResult:
         """
         Process a PDF file through the complete pipeline with streaming support.
@@ -103,7 +107,9 @@ class PDFProcessor:
 
         file_size = file_path.stat().st_size
         file_size_mb = file_size / (1024 * 1024)
-        use_streaming = self.enable_streaming and file_size_mb > 50  # Use streaming for files > 50MB
+        use_streaming = (
+            self.enable_streaming and file_size_mb > 50
+        )  # Use streaming for files > 50MB
 
         logger.info(
             "Starting PDF processing",
@@ -112,8 +118,8 @@ class PDFProcessor:
                 "file_path": str(file_path),
                 "file_size_mb": file_size_mb,
                 "streaming_enabled": use_streaming,
-                "options": options.dict()
-            }
+                "options": options.dict(),
+            },
         )
 
         # Create progress tracker
@@ -122,7 +128,7 @@ class PDFProcessor:
             progress_tracker = StreamingProgressTracker(
                 operation_id=operation_id,
                 total_size=file_size,
-                callback=progress_callback
+                callback=progress_callback,
             )
             self._active_operations[operation_id] = progress_tracker
 
@@ -130,8 +136,7 @@ class PDFProcessor:
             # Update progress: Starting validation
             if progress_tracker:
                 await progress_tracker.update_progress(
-                    bytes_processed=0,
-                    current_step="Validating PDF file"
+                    bytes_processed=0, current_step="Validating PDF file"
                 )
 
             # Validate input file with streaming support
@@ -147,7 +152,10 @@ class PDFProcessor:
 
             # Check if already processed
             existing_doc = await self.database_service.get_document_by_hash(file_hash)
-            if existing_doc and existing_doc.conversion_status == ProcessingStatus.COMPLETED:
+            if (
+                existing_doc
+                and existing_doc.conversion_status == ProcessingStatus.COMPLETED
+            ):
                 logger.info(f"PDF already processed: {file_path}")
                 return ProcessingResult(
                     document_id=existing_doc.id,
@@ -156,29 +164,27 @@ class PDFProcessor:
                     page_count=0,
                     chunk_count=0,
                     has_images=False,
-                    has_tables=False
+                    has_tables=False,
                 )
 
             # Update progress: Creating document record
             if progress_tracker:
                 await progress_tracker.update_progress(
-                    bytes_processed=0,
-                    current_step="Creating document record"
+                    bytes_processed=0, current_step="Creating document record"
                 )
 
             # Create or update document record
             document = await self._create_or_update_document(
                 file_path=file_path,
                 file_hash=file_hash,
-                status=ProcessingStatus.PROCESSING
+                status=ProcessingStatus.PROCESSING,
             )
 
             try:
                 # Update progress: Starting PDF processing
                 if progress_tracker:
                     await progress_tracker.update_progress(
-                        bytes_processed=0,
-                        current_step="Processing PDF with MinerU"
+                        bytes_processed=0, current_step="Processing PDF with MinerU"
                     )
 
                 # Process PDF with MinerU with streaming support
@@ -187,30 +193,34 @@ class PDFProcessor:
                         file_path=file_path,
                         output_dir=output_dir,
                         options=options,
-                        progress_callback=lambda processed, total, step:
-                            asyncio.create_task(progress_tracker.update_progress(
-                                bytes_processed=0,  # MinerU handles its own progress
-                                current_step=step or "Processing PDF"
-                            )) if progress_tracker else None
+                        progress_callback=lambda processed, total, step: (
+                            asyncio.create_task(
+                                progress_tracker.update_progress(
+                                    bytes_processed=0,  # MinerU handles its own progress
+                                    current_step=step or "Processing PDF",
+                                )
+                            )
+                            if progress_tracker
+                            else None
+                        ),
                     )
                 else:
                     mineru_result = await self.mineru_service.process_pdf(
-                        file_path=file_path,
-                        output_dir=output_dir,
-                        options=options
+                        file_path=file_path, output_dir=output_dir, options=options
                     )
 
                 # Update progress: Creating chunks
                 if progress_tracker:
                     await progress_tracker.update_progress(
-                        bytes_processed=0,
-                        current_step="Creating text chunks"
+                        bytes_processed=0, current_step="Creating text chunks"
                     )
 
                 # Create chunks for embeddings if requested
                 chunks = []
                 if options.chunk_for_embeddings:
-                    if use_streaming and len(mineru_result.plain_text) > 100000:  # > 100KB
+                    if (
+                        use_streaming and len(mineru_result.plain_text) > 100000
+                    ):  # > 100KB
                         # Use streaming chunking for large text
                         chunks = await self._create_chunks_streaming(
                             text=mineru_result.plain_text,
@@ -219,9 +229,9 @@ class PDFProcessor:
                             filename=file_path.name,
                             metadata={
                                 "has_images": mineru_result.has_images,
-                                "has_tables": mineru_result.has_tables
+                                "has_tables": mineru_result.has_tables,
                             },
-                            progress_tracker=progress_tracker
+                            progress_tracker=progress_tracker,
                         )
                     else:
                         chunks = await self.chunker.create_chunks(
@@ -232,15 +242,14 @@ class PDFProcessor:
                                 "document_id": document.id,
                                 "filename": file_path.name,
                                 "has_images": mineru_result.has_images,
-                                "has_tables": mineru_result.has_tables
-                            }
+                                "has_tables": mineru_result.has_tables,
+                            },
                         )
 
                 # Update progress: Storing content
                 if progress_tracker:
                     await progress_tracker.update_progress(
-                        bytes_processed=0,
-                        current_step="Storing content in database"
+                        bytes_processed=0, current_step="Storing content in database"
                     )
 
                 # Store content in database
@@ -251,35 +260,35 @@ class PDFProcessor:
                     page_count=mineru_result.page_count,
                     has_images=mineru_result.has_images,
                     has_tables=mineru_result.has_tables,
-                    processing_time_ms=int((time.time() - start_time) * 1000)
+                    processing_time_ms=int((time.time() - start_time) * 1000),
                 )
 
                 # Update progress: Storing chunks
                 if progress_tracker:
                     await progress_tracker.update_progress(
-                        bytes_processed=0,
-                        current_step="Storing text chunks"
+                        bytes_processed=0, current_step="Storing text chunks"
                     )
 
                 # Store chunks in database for embedding generation
                 if chunks:
-                    if use_streaming and len(chunks) > 100:  # Use streaming for many chunks
+                    if (
+                        use_streaming and len(chunks) > 100
+                    ):  # Use streaming for many chunks
                         await self._store_chunks_streaming(
                             document_id=document.id,
                             chunks=chunks,
-                            progress_tracker=progress_tracker
+                            progress_tracker=progress_tracker,
                         )
                     else:
                         await self.database_service.store_text_chunks(
-                            document_id=document.id,
-                            chunks=chunks
+                            document_id=document.id, chunks=chunks
                         )
 
                 # Update document status to completed
                 await self.database_service.update_document_status(
                     document_id=document.id,
                     status=ProcessingStatus.COMPLETED,
-                    error_message=None
+                    error_message=None,
                 )
 
                 processing_time_ms = int((time.time() - start_time) * 1000)
@@ -288,15 +297,23 @@ class PDFProcessor:
                 if progress_tracker:
                     await progress_tracker.update_progress(
                         bytes_processed=0,
-                        current_step="Processing completed successfully"
+                        current_step="Processing completed successfully",
                     )
                     await progress_tracker.set_completion(success=True)
 
                     # Cleanup from active operations
                     self._active_operations.pop(operation_id, None)
 
-                memory_usage = progress_tracker.metrics.memory_usage_mb if progress_tracker else None
-                peak_memory = progress_tracker.metrics.peak_memory_mb if progress_tracker else None
+                memory_usage = (
+                    progress_tracker.metrics.memory_usage_mb
+                    if progress_tracker
+                    else None
+                )
+                peak_memory = (
+                    progress_tracker.metrics.peak_memory_mb
+                    if progress_tracker
+                    else None
+                )
 
                 logger.info(
                     "PDF processing completed successfully",
@@ -308,8 +325,8 @@ class PDFProcessor:
                         "chunk_count": len(chunks),
                         "streaming_enabled": use_streaming,
                         "memory_usage_mb": memory_usage,
-                        "peak_memory_mb": peak_memory
-                    }
+                        "peak_memory_mb": peak_memory,
+                    },
                 )
 
                 return ProcessingResult(
@@ -323,7 +340,7 @@ class PDFProcessor:
                     operation_id=operation_id,
                     streaming_enabled=use_streaming,
                     memory_usage_mb=memory_usage,
-                    peak_memory_mb=peak_memory
+                    peak_memory_mb=peak_memory,
                 )
 
             except Exception as processing_error:
@@ -331,14 +348,13 @@ class PDFProcessor:
                 await self.database_service.update_document_status(
                     document_id=document.id,
                     status=ProcessingStatus.FAILED,
-                    error_message=str(processing_error)
+                    error_message=str(processing_error),
                 )
 
                 # Update progress tracker with error
                 if progress_tracker:
                     await progress_tracker.set_completion(
-                        success=False,
-                        error=str(processing_error)
+                        success=False, error=str(processing_error)
                     )
                     self._active_operations.pop(operation_id, None)
 
@@ -365,7 +381,7 @@ class PDFProcessor:
         if not file_path.is_file():
             raise ValidationError(f"Path is not a file: {file_path}")
 
-        if file_path.suffix.lower() != '.pdf':
+        if file_path.suffix.lower() != ".pdf":
             raise ValidationError(f"File is not a PDF: {file_path}")
 
         # Check file size
@@ -373,13 +389,15 @@ class PDFProcessor:
         max_size_mb = 500  # TODO: Get from settings
 
         if file_size_mb > max_size_mb:
-            raise ValidationError(f"File too large: {file_size_mb:.1f}MB > {max_size_mb}MB")
+            raise ValidationError(
+                f"File too large: {file_size_mb:.1f}MB > {max_size_mb}MB"
+            )
 
         # Basic PDF header validation
         try:
-            with open(file_path, 'rb') as f:
+            with open(file_path, "rb") as f:
                 header = f.read(8)
-                if not header.startswith(b'%PDF-'):
+                if not header.startswith(b"%PDF-"):
                     raise ValidationError("Invalid PDF file format")
         except IOError as e:
             raise ValidationError(f"Cannot read PDF file: {e}")
@@ -389,7 +407,7 @@ class PDFProcessor:
         hash_sha256 = hashlib.sha256()
 
         try:
-            with open(file_path, 'rb') as f:
+            with open(file_path, "rb") as f:
                 # Read file in chunks to handle large files efficiently
                 for chunk in iter(lambda: f.read(8192), b""):
                     hash_sha256.update(chunk)
@@ -400,10 +418,7 @@ class PDFProcessor:
             raise ValidationError(f"Cannot calculate file hash: {e}")
 
     async def _create_or_update_document(
-        self,
-        file_path: Path,
-        file_hash: str,
-        status: ProcessingStatus
+        self, file_path: Path, file_hash: str, status: ProcessingStatus
     ) -> Document:
         """Create new document record or update existing one."""
 
@@ -427,7 +442,7 @@ class PDFProcessor:
                 file_hash=file_hash,
                 file_size_bytes=file_path.stat().st_size,
                 conversion_status=status,
-                metadata={}
+                metadata={},
             )
 
             return await self.database_service.create_document(document)
@@ -446,13 +461,11 @@ class PDFProcessor:
             "file_size_bytes": document.file_size_bytes,
             "created_at": document.created_at,
             "updated_at": document.updated_at,
-            "error_message": document.error_message
+            "error_message": document.error_message,
         }
 
     async def reprocess_failed_document(
-        self,
-        document_id: int,
-        options: ProcessingOptions = None
+        self, document_id: int, options: ProcessingOptions = None
     ) -> ProcessingResult:
         """Retry processing a failed document."""
         document = await self.database_service.get_document_by_id(document_id)
@@ -461,19 +474,18 @@ class PDFProcessor:
             raise ValidationError(f"Document not found: {document_id}")
 
         if document.conversion_status != ProcessingStatus.FAILED:
-            raise ValidationError(f"Document is not in failed status: {document.conversion_status}")
+            raise ValidationError(
+                f"Document is not in failed status: {document.conversion_status}"
+            )
 
         logger.info(f"Retrying processing for document {document_id}")
 
-        return await self.process_pdf(
-            file_path=document.source_path,
-            options=options
-        )
+        return await self.process_pdf(file_path=document.source_path, options=options)
 
     async def _calculate_file_hash_streaming(
         self,
         file_path: Path,
-        progress_tracker: Optional[StreamingProgressTracker] = None
+        progress_tracker: Optional[StreamingProgressTracker] = None,
     ) -> str:
         """Calculate SHA-256 hash using streaming for large files."""
         hash_sha256 = hashlib.sha256()
@@ -485,11 +497,12 @@ class PDFProcessor:
             progress_callback=lambda processed, total, step: (
                 asyncio.create_task(
                     progress_tracker.update_progress(
-                        bytes_processed=0,
-                        current_step="Calculating file hash"
+                        bytes_processed=0, current_step="Calculating file hash"
                     )
-                ) if progress_tracker else None
-            )
+                )
+                if progress_tracker
+                else None
+            ),
         ):
             hash_sha256.update(chunk)
 
@@ -502,15 +515,16 @@ class PDFProcessor:
         document_id: int,
         filename: str,
         metadata: Dict[str, Any],
-        progress_tracker: Optional[StreamingProgressTracker] = None
+        progress_tracker: Optional[StreamingProgressTracker] = None,
     ) -> List[Any]:
         """Create text chunks using streaming for large text content."""
-        logger.info(f"Creating chunks with streaming for large text ({len(text)} characters)")
+        logger.info(
+            f"Creating chunks with streaming for large text ({len(text)} characters)"
+        )
 
         if progress_tracker:
             await progress_tracker.update_progress(
-                bytes_processed=0,
-                current_step="Starting text chunking"
+                bytes_processed=0, current_step="Starting text chunking"
             )
 
         # Process text in streaming fashion for very large content
@@ -518,17 +532,13 @@ class PDFProcessor:
             text=text,
             chunk_size=options.chunk_size,
             chunk_overlap=options.chunk_overlap,
-            metadata={
-                "document_id": document_id,
-                "filename": filename,
-                **metadata
-            }
+            metadata={"document_id": document_id, "filename": filename, **metadata},
         )
 
         if progress_tracker:
             await progress_tracker.update_progress(
-                bytes_processed=len(text.encode('utf-8')),
-                current_step=f"Created {len(chunks)} text chunks"
+                bytes_processed=len(text.encode("utf-8")),
+                current_step=f"Created {len(chunks)} text chunks",
             )
 
         return chunks
@@ -537,7 +547,7 @@ class PDFProcessor:
         self,
         document_id: int,
         chunks: List[Any],
-        progress_tracker: Optional[StreamingProgressTracker] = None
+        progress_tracker: Optional[StreamingProgressTracker] = None,
     ) -> None:
         """Store chunks in database using batching for large chunk counts."""
         batch_size = 50  # Process chunks in batches
@@ -552,14 +562,13 @@ class PDFProcessor:
 
             # Store batch
             await self.database_service.store_text_chunks(
-                document_id=document_id,
-                chunks=batch_chunks
+                document_id=document_id, chunks=batch_chunks
             )
 
             if progress_tracker:
                 await progress_tracker.update_progress(
                     bytes_processed=0,
-                    current_step=f"Stored batch {batch_idx + 1}/{total_batches} ({len(batch_chunks)} chunks)"
+                    current_step=f"Stored batch {batch_idx + 1}/{total_batches} ({len(batch_chunks)} chunks)",
                 )
 
             # Small delay to prevent overwhelming the database
@@ -584,8 +593,7 @@ class PDFProcessor:
         tracker = self._active_operations.get(operation_id)
         if tracker:
             await tracker.set_completion(
-                success=False,
-                error="Operation cancelled by user"
+                success=False, error="Operation cancelled by user"
             )
             self._active_operations.pop(operation_id, None)
             logger.info(f"Cancelled operation {operation_id}")
@@ -598,7 +606,7 @@ class PDFProcessor:
             "processor_stats": {
                 "active_operations": len(self._active_operations),
                 "streaming_enabled": self.enable_streaming,
-                "operations": list(self._active_operations.keys())
+                "operations": list(self._active_operations.keys()),
             },
-            "global_streaming_stats": get_streaming_stats()
+            "global_streaming_stats": get_streaming_stats(),
         }

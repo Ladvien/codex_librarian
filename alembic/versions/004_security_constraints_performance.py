@@ -84,11 +84,12 @@ def upgrade() -> None:
     )
 
     # Index on conversion_status for filtering
-    op.create_index(
-        'idx_documents_status',
-        'documents',
-        ['conversion_status']
-    )
+    # Note: This index is already created in migration 001
+    # op.create_index(
+    #     'idx_documents_status',
+    #     'documents',
+    #     ['conversion_status']
+    # )
 
     # SECURITY: Make file_hash unique to prevent duplicate processing
     # This prevents potential security issues with duplicate hash handling
@@ -120,7 +121,7 @@ def downgrade() -> None:
     op.drop_index('idx_embeddings_page_chunk', table_name='document_embeddings')
     op.drop_index('idx_documents_status_created', table_name='documents')
     op.drop_constraint('uq_documents_file_hash', 'documents', type_='unique')
-    op.drop_index('idx_documents_status', table_name='documents')
+    # op.drop_index('idx_documents_status', table_name='documents')  # Already handled in migration 001
     op.drop_index('idx_documents_created_at', table_name='documents')
     op.drop_index('idx_documents_filename', table_name='documents')
 

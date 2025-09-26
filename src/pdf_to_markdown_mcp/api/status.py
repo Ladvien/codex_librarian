@@ -14,13 +14,15 @@ from sqlalchemy.orm import Session
 import json
 import asyncio
 
-from pdf_to_markdown_mcp.models.response import StatusResponse, ErrorResponse, ErrorType, JobStatus
+from pdf_to_markdown_mcp.models.response import (
+    StatusResponse,
+    ErrorResponse,
+    ErrorType,
+    JobStatus,
+)
 from pdf_to_markdown_mcp.db.session import get_db
 from pdf_to_markdown_mcp.worker.celery import create_celery_app
-from pdf_to_markdown_mcp.api.streaming import (
-    format_sse_data,
-    create_sse_response
-)
+from pdf_to_markdown_mcp.api.streaming import format_sse_data, create_sse_response
 from pdf_to_markdown_mcp.core.streaming import get_streaming_stats
 
 logger = logging.getLogger(__name__)
@@ -31,7 +33,7 @@ router = APIRouter()
 async def get_processing_status(
     job_id: Optional[str] = Query(None, description="Specific job ID to query"),
     include_stats: bool = Query(True, description="Include system statistics"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ) -> StatusResponse:
     """
     Get current processing status and queue information.
@@ -41,7 +43,7 @@ async def get_processing_status(
     try:
         logger.info(
             "Status request received",
-            extra={"job_id": job_id, "include_stats": include_stats}
+            extra={"job_id": job_id, "include_stats": include_stats},
         )
 
         # Get Celery app instance
@@ -64,11 +66,11 @@ async def get_processing_status(
 
                 # Map Celery states to our JobStatus enum
                 state_mapping = {
-                    'PENDING': JobStatus.QUEUED,
-                    'STARTED': JobStatus.RUNNING,
-                    'SUCCESS': JobStatus.COMPLETED,
-                    'FAILURE': JobStatus.FAILED,
-                    'REVOKED': JobStatus.CANCELLED,
+                    "PENDING": JobStatus.QUEUED,
+                    "STARTED": JobStatus.RUNNING,
+                    "SUCCESS": JobStatus.COMPLETED,
+                    "FAILURE": JobStatus.FAILED,
+                    "REVOKED": JobStatus.CANCELLED,
                 }
 
                 job_status = state_mapping.get(job_result.state, JobStatus.QUEUED)
@@ -76,12 +78,14 @@ async def get_processing_status(
                 # Get additional job info
                 if job_result.info:
                     if isinstance(job_result.info, dict):
-                        progress_percent = job_result.info.get('progress')
-                        current_step = job_result.info.get('current_step')
-                        started_at = job_result.info.get('started_at')
-                        estimated_completion = job_result.info.get('estimated_completion')
+                        progress_percent = job_result.info.get("progress")
+                        current_step = job_result.info.get("current_step")
+                        started_at = job_result.info.get("started_at")
+                        estimated_completion = job_result.info.get(
+                            "estimated_completion"
+                        )
 
-                if job_result.state == 'FAILURE':
+                if job_result.state == "FAILURE":
                     error_message = str(job_result.info)
 
             except Exception as e:
@@ -117,8 +121,9 @@ async def get_processing_status(
             try:
                 # Get document statistics from database
                 from pdf_to_markdown_mcp.db.queries import DocumentQueries
+
                 doc_stats = DocumentQueries.get_statistics(db)
-                total_documents = doc_stats.get('total_documents', 0)
+                total_documents = doc_stats.get("total_documents", 0)
 
                 # Calculate processing rate (simplified - documents processed in last hour)
                 from datetime import datetime, timedelta
@@ -130,8 +135,8 @@ async def get_processing_status(
                     db.query(Document)
                     .filter(
                         and_(
-                            Document.conversion_status == 'completed',
-                            Document.updated_at >= one_hour_ago
+                            Document.conversion_status == "completed",
+                            Document.updated_at >= one_hour_ago,
                         )
                     )
                     .count()
@@ -162,9 +167,8 @@ async def get_processing_status(
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
-                error=ErrorType.SYSTEM,
-                message=f"Failed to retrieve status: {str(e)}"
-            ).dict()
+                error=ErrorType.SYSTEM, message=f"Failed to retrieve status: {str(e)}"
+            ).dict(),
         )
 
 
@@ -188,23 +192,20 @@ async def get_queue_statistics(db: Session = Depends(get_db)) -> Dict[str, Any]:
         if reserved:
             for worker, jobs in reserved.items():
                 for job in jobs:
-                    queue_name = job.get('delivery_info', {}).get('routing_key', 'default')
+                    queue_name = job.get("delivery_info", {}).get(
+                        "routing_key", "default"
+                    )
                     queue_stats[queue_name] = queue_stats.get(queue_name, 0) + 1
 
         return {
             "workers": {
                 "total": len(stats) if stats else 0,
                 "active": len([w for w in stats.keys()]) if stats else 0,
-                "stats": stats or {}
+                "stats": stats or {},
             },
-            "queues": {
-                "depths": queue_stats,
-                "active_queues": active_queues or {}
-            },
-            "tasks": {
-                "registered": registered_tasks or {}
-            },
-            "timestamp": datetime.utcnow().isoformat()
+            "queues": {"depths": queue_stats, "active_queues": active_queues or {}},
+            "tasks": {"registered": registered_tasks or {}},
+            "timestamp": datetime.utcnow().isoformat(),
         }
 
     except Exception as e:
@@ -213,15 +214,15 @@ async def get_queue_statistics(db: Session = Depends(get_db)) -> Dict[str, Any]:
             status_code=500,
             detail=ErrorResponse(
                 error=ErrorType.SYSTEM,
-                message=f"Failed to retrieve queue statistics: {str(e)}"
-            ).dict()
+                message=f"Failed to retrieve queue statistics: {str(e)}",
+            ).dict(),
         )
 
 
 @router.get("/jobs/{job_id}/logs")
 async def get_job_logs(
     job_id: str,
-    limit: int = Query(100, ge=1, le=1000, description="Maximum log entries to return")
+    limit: int = Query(100, ge=1, le=1000, description="Maximum log entries to return"),
 ) -> Dict[str, Any]:
     """
     Get detailed logs for a specific job.
@@ -236,7 +237,7 @@ async def get_job_logs(
             job_result = celery_app.AsyncResult(job_id)
             if job_result and job_result.info and isinstance(job_result.info, dict):
                 # Extract log entries from job result metadata
-                log_entries = job_result.info.get('logs', [])
+                log_entries = job_result.info.get("logs", [])
                 total_entries = len(log_entries)
 
                 # Apply limit
@@ -249,12 +250,14 @@ async def get_job_logs(
                         formatted_logs.append(entry)
                     else:
                         # Convert string entries to structured format
-                        formatted_logs.append({
-                            "timestamp": datetime.utcnow().isoformat(),
-                            "level": "INFO",
-                            "message": str(entry),
-                            "job_id": job_id
-                        })
+                        formatted_logs.append(
+                            {
+                                "timestamp": datetime.utcnow().isoformat(),
+                                "level": "INFO",
+                                "message": str(entry),
+                                "job_id": job_id,
+                            }
+                        )
                 logs = formatted_logs
 
         except Exception as e:
@@ -265,7 +268,7 @@ async def get_job_logs(
             "logs": logs,
             "total_entries": total_entries,
             "limit": limit,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
         }
 
     except Exception as e:
@@ -273,9 +276,8 @@ async def get_job_logs(
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
-                error=ErrorType.SYSTEM,
-                message=f"Failed to retrieve job logs: {str(e)}"
-            ).dict()
+                error=ErrorType.SYSTEM, message=f"Failed to retrieve job logs: {str(e)}"
+            ).dict(),
         )
 
 
@@ -296,7 +298,7 @@ async def cancel_job(job_id: str) -> Dict[str, Any]:
             "success": True,
             "job_id": job_id,
             "message": "Job cancellation requested",
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
         }
 
     except Exception as e:
@@ -304,9 +306,8 @@ async def cancel_job(job_id: str) -> Dict[str, Any]:
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
-                error=ErrorType.SYSTEM,
-                message=f"Failed to cancel job: {str(e)}"
-            ).dict()
+                error=ErrorType.SYSTEM, message=f"Failed to cancel job: {str(e)}"
+            ).dict(),
         )
 
 
@@ -322,20 +323,23 @@ async def get_system_performance(db: Session = Depends(get_db)) -> Dict[str, Any
         # System metrics
         cpu_percent = psutil.cpu_percent(interval=1)
         memory = psutil.virtual_memory()
-        disk = psutil.disk_usage('/')
+        disk = psutil.disk_usage("/")
 
         # Database connection pool status
         db_metrics = {"connection_pool": "healthy", "active_connections": 0}
         try:
             # Get database engine info
             from pdf_to_markdown_mcp.db.session import engine
-            if hasattr(engine.pool, 'size'):
-                db_metrics.update({
-                    "pool_size": engine.pool.size(),
-                    "checked_in": engine.pool.checkedin(),
-                    "checked_out": engine.pool.checkedout(),
-                    "overflow": engine.pool.overflow(),
-                })
+
+            if hasattr(engine.pool, "size"):
+                db_metrics.update(
+                    {
+                        "pool_size": engine.pool.size(),
+                        "checked_in": engine.pool.checkedin(),
+                        "checked_out": engine.pool.checkedout(),
+                        "overflow": engine.pool.overflow(),
+                    }
+                )
         except Exception as e:
             logger.warning(f"Could not get database pool metrics: {e}")
 
@@ -348,12 +352,13 @@ async def get_system_performance(db: Session = Depends(get_db)) -> Dict[str, Any
         try:
             # Get processing statistics from database
             from pdf_to_markdown_mcp.db.queries import DocumentQueries
+
             stats = DocumentQueries.get_statistics(db)
 
             # Calculate success rate
-            by_status = stats.get('by_status', {})
+            by_status = stats.get("by_status", {})
             total = sum(by_status.values())
-            completed = by_status.get('completed', 0)
+            completed = by_status.get("completed", 0)
             if total > 0:
                 processing_metrics["success_rate_percent"] = (completed / total) * 100
 
@@ -367,18 +372,18 @@ async def get_system_performance(db: Session = Depends(get_db)) -> Dict[str, Any
                     "total_mb": memory.total / (1024 * 1024),
                     "used_mb": memory.used / (1024 * 1024),
                     "available_mb": memory.available / (1024 * 1024),
-                    "percent": memory.percent
+                    "percent": memory.percent,
                 },
                 "disk": {
                     "total_gb": disk.total / (1024 * 1024 * 1024),
                     "used_gb": disk.used / (1024 * 1024 * 1024),
                     "free_gb": disk.free / (1024 * 1024 * 1024),
-                    "percent": (disk.used / disk.total) * 100
-                }
+                    "percent": (disk.used / disk.total) * 100,
+                },
             },
             "processing": processing_metrics,
             "database": db_metrics,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
         }
 
     except Exception as e:
@@ -387,12 +392,13 @@ async def get_system_performance(db: Session = Depends(get_db)) -> Dict[str, Any
             status_code=500,
             detail=ErrorResponse(
                 error=ErrorType.SYSTEM,
-                message=f"Failed to retrieve performance metrics: {str(e)}"
-            ).dict()
+                message=f"Failed to retrieve performance metrics: {str(e)}",
+            ).dict(),
         )
 
 
 # Server-Sent Events endpoints for real-time progress streaming
+
 
 @router.get("/stream/{job_id}")
 async def stream_job_progress(job_id: str) -> StreamingResponse:
@@ -418,8 +424,8 @@ async def stream_job_progress(job_id: str) -> StreamingResponse:
             status_code=500,
             detail=ErrorResponse(
                 error=ErrorType.SYSTEM,
-                message=f"Failed to create progress stream: {str(e)}"
-            ).dict()
+                message=f"Failed to create progress stream: {str(e)}",
+            ).dict(),
         )
 
 
@@ -438,12 +444,15 @@ async def stream_batch_progress(batch_id: str) -> StreamingResponse:
         # as well as individual job updates within the batch
         async def batch_progress_generator():
             # Initial connection event
-            yield format_sse_data({
-                "batch_id": batch_id,
-                "event": "connected",
-                "message": "Connected to batch progress stream",
-                "timestamp": datetime.utcnow().isoformat()
-            }, event_type="batch_status")
+            yield format_sse_data(
+                {
+                    "batch_id": batch_id,
+                    "event": "connected",
+                    "message": "Connected to batch progress stream",
+                    "timestamp": datetime.utcnow().isoformat(),
+                },
+                event_type="batch_status",
+            )
 
             # Stream batch progress updates
             # This would typically monitor multiple jobs within the batch
@@ -458,32 +467,41 @@ async def stream_batch_progress(batch_id: str) -> StreamingResponse:
                     try:
                         batch_result = celery_app.AsyncResult(batch_id)
 
-                        if batch_result.state == 'SUCCESS':
-                            yield format_sse_data({
-                                "batch_id": batch_id,
-                                "status": "completed",
-                                "message": "Batch processing completed",
-                                "timestamp": datetime.utcnow().isoformat()
-                            }, event_type="batch_complete")
+                        if batch_result.state == "SUCCESS":
+                            yield format_sse_data(
+                                {
+                                    "batch_id": batch_id,
+                                    "status": "completed",
+                                    "message": "Batch processing completed",
+                                    "timestamp": datetime.utcnow().isoformat(),
+                                },
+                                event_type="batch_complete",
+                            )
                             break
-                        elif batch_result.state == 'FAILURE':
-                            yield format_sse_data({
-                                "batch_id": batch_id,
-                                "status": "failed",
-                                "error": str(batch_result.info),
-                                "timestamp": datetime.utcnow().isoformat()
-                            }, event_type="batch_error")
+                        elif batch_result.state == "FAILURE":
+                            yield format_sse_data(
+                                {
+                                    "batch_id": batch_id,
+                                    "status": "failed",
+                                    "error": str(batch_result.info),
+                                    "timestamp": datetime.utcnow().isoformat(),
+                                },
+                                event_type="batch_error",
+                            )
                             break
                         else:
                             # Send periodic updates
                             current_time = datetime.utcnow()
                             if (current_time - last_update_time).total_seconds() >= 30:
-                                yield format_sse_data({
-                                    "batch_id": batch_id,
-                                    "status": batch_result.state,
-                                    "message": f"Batch status: {batch_result.state}",
-                                    "timestamp": current_time.isoformat()
-                                }, event_type="batch_progress")
+                                yield format_sse_data(
+                                    {
+                                        "batch_id": batch_id,
+                                        "status": batch_result.state,
+                                        "message": f"Batch status: {batch_result.state}",
+                                        "timestamp": current_time.isoformat(),
+                                    },
+                                    event_type="batch_progress",
+                                )
                                 last_update_time = current_time
 
                     except Exception as e:
@@ -492,12 +510,15 @@ async def stream_batch_progress(batch_id: str) -> StreamingResponse:
                     await asyncio.sleep(10)  # Check every 10 seconds
 
             except Exception as e:
-                yield format_sse_data({
-                    "batch_id": batch_id,
-                    "error": "stream_error",
-                    "message": str(e),
-                    "timestamp": datetime.utcnow().isoformat()
-                }, event_type="error")
+                yield format_sse_data(
+                    {
+                        "batch_id": batch_id,
+                        "error": "stream_error",
+                        "message": str(e),
+                        "timestamp": datetime.utcnow().isoformat(),
+                    },
+                    event_type="error",
+                )
 
         return create_sse_response(batch_progress_generator())
 
@@ -507,15 +528,14 @@ async def stream_batch_progress(batch_id: str) -> StreamingResponse:
             status_code=500,
             detail=ErrorResponse(
                 error=ErrorType.SYSTEM,
-                message=f"Failed to create batch progress stream: {str(e)}"
-            ).dict()
+                message=f"Failed to create batch progress stream: {str(e)}",
+            ).dict(),
         )
 
 
 @router.get("/stream/system")
 async def stream_system_metrics(
-    update_interval: float = 5.0,
-    include_streaming_stats: bool = True
+    update_interval: float = 5.0, include_streaming_stats: bool = True
 ) -> StreamingResponse:
     """
     Stream real-time system metrics and queue statistics with enhanced capabilities.
@@ -533,13 +553,15 @@ async def stream_system_metrics(
         include_streaming_stats: Include comprehensive streaming statistics
     """
     try:
-        logger.info(f"Starting enhanced system metrics stream (interval: {update_interval}s)")
+        logger.info(
+            f"Starting enhanced system metrics stream (interval: {update_interval}s)"
+        )
 
         # Use our enhanced system metrics stream from the streaming module
         return create_sse_response(
             create_system_metrics_stream(
                 update_interval=update_interval,
-                include_streaming_stats=include_streaming_stats
+                include_streaming_stats=include_streaming_stats,
             )
         )
 
@@ -549,8 +571,8 @@ async def stream_system_metrics(
             status_code=500,
             detail=ErrorResponse(
                 error=ErrorType.SYSTEM,
-                message=f"Failed to create system metrics stream: {str(e)}"
-            ).dict()
+                message=f"Failed to create system metrics stream: {str(e)}",
+            ).dict(),
         )
 
 
@@ -576,7 +598,7 @@ async def get_streaming_status_endpoint() -> Dict[str, Any]:
             "streaming_infrastructure": {
                 "core_streaming": core_streaming_stats,
                 "api_streaming": api_streaming_stats,
-                "integration_status": "fully_integrated"
+                "integration_status": "fully_integrated",
             },
             "capabilities": {
                 "large_file_processing": "up_to_500MB",
@@ -585,7 +607,7 @@ async def get_streaming_status_endpoint() -> Dict[str, Any]:
                 "progress_streaming": True,
                 "server_sent_events": True,
                 "concurrent_operations": True,
-                "memory_monitoring": True
+                "memory_monitoring": True,
             },
             "performance_thresholds": {
                 "streaming_activation_size_mb": 50,
@@ -595,9 +617,9 @@ async def get_streaming_status_endpoint() -> Dict[str, Any]:
                 "chunk_sizes": {
                     "default": "64KB",
                     "large_files": "1MB",
-                    "hash_calculation": "64KB"
-                }
-            }
+                    "hash_calculation": "64KB",
+                },
+            },
         }
 
         return streaming_status
@@ -608,8 +630,8 @@ async def get_streaming_status_endpoint() -> Dict[str, Any]:
             status_code=500,
             detail=ErrorResponse(
                 error=ErrorType.SYSTEM,
-                message=f"Failed to retrieve streaming status: {str(e)}"
-            ).dict()
+                message=f"Failed to retrieve streaming status: {str(e)}",
+            ).dict(),
         )
 
 
@@ -636,14 +658,14 @@ async def cancel_streaming_operation(operation_id: str) -> Dict[str, Any]:
                 "operation_id": operation_id,
                 "status": "cancelled",
                 "message": "Operation successfully cancelled",
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.utcnow().isoformat(),
             }
         else:
             return {
                 "operation_id": operation_id,
                 "status": "not_found",
                 "message": "Operation not found or already completed",
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.utcnow().isoformat(),
             }
 
     except Exception as e:
@@ -651,7 +673,6 @@ async def cancel_streaming_operation(operation_id: str) -> Dict[str, Any]:
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
-                error=ErrorType.SYSTEM,
-                message=f"Failed to cancel operation: {str(e)}"
-            ).dict()
+                error=ErrorType.SYSTEM, message=f"Failed to cancel operation: {str(e)}"
+            ).dict(),
         )

@@ -63,7 +63,9 @@ def _validate_embedding(embedding: List[float], expected_dim: int) -> List[float
     if not isinstance(embedding, list):
         raise ValueError("Embedding must be a list of floats")
     if len(embedding) != expected_dim:
-        raise ValueError(f"Embedding must have {expected_dim} dimensions, got {len(embedding)}")
+        raise ValueError(
+            f"Embedding must have {expected_dim} dimensions, got {len(embedding)}"
+        )
     if not all(isinstance(x, (int, float)) for x in embedding):
         raise ValueError("All embedding values must be numeric")
     return embedding
@@ -92,7 +94,7 @@ class DocumentQueries:
         db: Session,
         status: str,
         limit: Optional[int] = None,
-        offset: Optional[int] = None
+        offset: Optional[int] = None,
     ) -> List[Document]:
         """Get documents by conversion status."""
         query = db.query(Document).filter(Document.conversion_status == status)
@@ -106,9 +108,7 @@ class DocumentQueries:
 
     @staticmethod
     def get_recent(
-        db: Session,
-        limit: int = 50,
-        offset: Optional[int] = None
+        db: Session, limit: int = 50, offset: Optional[int] = None
     ) -> List[Document]:
         """Get recent documents by creation date."""
         query = db.query(Document).order_by(Document.created_at.desc())
@@ -133,7 +133,8 @@ class DocumentQueries:
         stats = {
             "total_documents": total,
             "by_status": dict(by_status),
-            "total_size_bytes": db.query(func.sum(Document.file_size_bytes)).scalar() or 0,
+            "total_size_bytes": db.query(func.sum(Document.file_size_bytes)).scalar()
+            or 0,
         }
 
         return stats
@@ -149,7 +150,7 @@ class SearchQueries:
         limit: int = 10,
         offset: Optional[int] = None,
         filters: Optional[Dict[str, Any]] = None,
-        include_content: bool = True
+        include_content: bool = True,
     ) -> List[Any]:
         """
         Perform full-text search on document content with input validation.
@@ -199,11 +200,7 @@ class SearchQueries:
         """
 
         # Add filters if provided using parameterized queries
-        params = {
-            "query": query,
-            "limit": limit,
-            "offset": offset or 0
-        }
+        params = {"query": query, "limit": limit, "offset": offset or 0}
 
         # Build parameterized filter conditions safely
         filter_clause = ""
@@ -247,7 +244,7 @@ class SearchQueries:
         limit: int = 10,
         threshold: float = 0.7,
         filters: Optional[Dict[str, Any]] = None,
-        include_content: bool = True
+        include_content: bool = True,
     ) -> List[Any]:
         """
         Perform vector similarity search with input validation.
@@ -292,7 +289,7 @@ class SearchQueries:
         params = {
             "query_embedding": query_embedding,
             "threshold": threshold,
-            "limit": limit
+            "limit": limit,
         }
 
         # Build parameterized filter conditions safely
@@ -325,7 +322,7 @@ class SearchQueries:
                 self.page_number = row.page_number
                 self.chunk_index = row.chunk_index
                 self.metadata = row.metadata or {}
-                if hasattr(row, 'doc_metadata') and row.doc_metadata:
+                if hasattr(row, "doc_metadata") and row.doc_metadata:
                     self.metadata.update(row.doc_metadata)
 
         results = [SearchResult(row) for row in result]
@@ -338,7 +335,7 @@ class SearchQueries:
         query_embedding: List[float],
         limit: int = 10,
         semantic_weight: float = 0.7,
-        keyword_weight: float = 0.3
+        keyword_weight: float = 0.3,
     ) -> List[Dict[str, Any]]:
         """
         Perform optimized hybrid search combining semantic and keyword search.
@@ -379,12 +376,14 @@ class SearchQueries:
 
         # Log performance measurement start
         import time
+
         start_time = time.time()
 
         try:
             # Optimized hybrid query that avoids CTEs and reduces complexity
             # Uses efficient joins and DISTINCT ON for better performance
-            hybrid_query = text("""
+            hybrid_query = text(
+                """
                 SELECT DISTINCT ON (d.id)
                     d.id,
                     d.filename,
@@ -450,10 +449,13 @@ class SearchQueries:
                 )
                 ORDER BY d.id, combined_score DESC
                 LIMIT :expanded_limit
-            """)
+            """
+            )
 
             # Use expanded limit to account for DISTINCT ON filtering
-            expanded_limit = min(limit * 2, 200)  # Cap at 200 to prevent excessive results
+            expanded_limit = min(
+                limit * 2, 200
+            )  # Cap at 200 to prevent excessive results
             semantic_threshold = 0.2  # Minimum semantic similarity threshold
 
             result = db.execute(
@@ -464,8 +466,8 @@ class SearchQueries:
                     "semantic_weight": semantic_weight,
                     "keyword_weight": keyword_weight,
                     "semantic_threshold": semantic_threshold,
-                    "expanded_limit": expanded_limit
-                }
+                    "expanded_limit": expanded_limit,
+                },
             )
 
             # Process results with deduplication and proper sorting
@@ -481,19 +483,27 @@ class SearchQueries:
                         "document_id": row.id,
                         "filename": row.filename,
                         "source_path": row.source_path,
-                        "combined_score": float(row.combined_score) if row.combined_score else 0.0,
-                        "semantic_score": float(row.semantic_score) if row.semantic_score else 0.0,
-                        "keyword_score": float(row.keyword_score) if row.keyword_score else 0.0,
+                        "combined_score": (
+                            float(row.combined_score) if row.combined_score else 0.0
+                        ),
+                        "semantic_score": (
+                            float(row.semantic_score) if row.semantic_score else 0.0
+                        ),
+                        "keyword_score": (
+                            float(row.keyword_score) if row.keyword_score else 0.0
+                        ),
                         "chunk_text": row.chunk_text,
                         "page_number": row.page_number,
                         "chunk_index": row.chunk_index,
                         "file_size_bytes": row.file_size_bytes,
                         "conversion_status": row.conversion_status,
-                        "created_at": row.created_at.isoformat() if row.created_at else None,
+                        "created_at": (
+                            row.created_at.isoformat() if row.created_at else None
+                        ),
                         "metadata": {
                             **(row.metadata or {}),
-                            **(row.chunk_metadata or {})
-                        }
+                            **(row.chunk_metadata or {}),
+                        },
                     }
                     results.append(result_dict)
 
@@ -518,10 +528,7 @@ class SearchQueries:
 
     @staticmethod
     def _fallback_vector_search(
-        db: Session,
-        query_embedding: List[float],
-        limit: int,
-        weight: float = 0.7
+        db: Session, query_embedding: List[float], limit: int, weight: float = 0.7
     ) -> List[Dict[str, Any]]:
         """
         Fallback vector search if hybrid search fails.
@@ -532,7 +539,8 @@ class SearchQueries:
         try:
             logger.info("Using fallback vector search due to hybrid search failure")
 
-            fallback_query = text("""
+            fallback_query = text(
+                """
                 SELECT DISTINCT
                     d.id,
                     d.filename,
@@ -551,15 +559,12 @@ class SearchQueries:
                 WHERE (1 - (de.embedding <=> :query_embedding::vector)) >= 0.2
                 ORDER BY combined_score DESC
                 LIMIT :limit
-            """)
+            """
+            )
 
             result = db.execute(
                 fallback_query,
-                {
-                    "query_embedding": query_embedding,
-                    "weight": weight,
-                    "limit": limit
-                }
+                {"query_embedding": query_embedding, "weight": weight, "limit": limit},
             )
 
             return [
@@ -568,18 +573,19 @@ class SearchQueries:
                     "filename": row.filename,
                     "source_path": row.source_path,
                     "combined_score": float(row.combined_score),
-                    "semantic_score": float(row.combined_score),  # Same as combined for vector-only
+                    "semantic_score": float(
+                        row.combined_score
+                    ),  # Same as combined for vector-only
                     "keyword_score": 0.0,
                     "chunk_text": row.chunk_text,
                     "page_number": row.page_number,
                     "chunk_index": row.chunk_index,
                     "file_size_bytes": row.file_size_bytes,
                     "conversion_status": row.conversion_status,
-                    "created_at": row.created_at.isoformat() if row.created_at else None,
-                    "metadata": {
-                        **(row.metadata or {}),
-                        **(row.chunk_metadata or {})
-                    }
+                    "created_at": (
+                        row.created_at.isoformat() if row.created_at else None
+                    ),
+                    "metadata": {**(row.metadata or {}), **(row.chunk_metadata or {})},
                 }
                 for row in result
             ]
@@ -589,7 +595,9 @@ class SearchQueries:
             return []  # Return empty results rather than crash
 
     @staticmethod
-    def get_document_embeddings(db: Session, document_id: int) -> List[DocumentEmbedding]:
+    def get_document_embeddings(
+        db: Session, document_id: int
+    ) -> List[DocumentEmbedding]:
         """Get all embeddings for a document."""
         return (
             db.query(DocumentEmbedding)
@@ -603,7 +611,7 @@ class SearchQueries:
         reference_embedding: List[float],
         reference_doc_id: Optional[int] = None,
         top_k: int = 5,
-        threshold: float = 0.6
+        threshold: float = 0.6,
     ) -> List[Any]:
         """
         Find documents similar to a reference embedding.
@@ -629,7 +637,7 @@ class SearchQueries:
         params = {
             "reference_embedding": reference_embedding,
             "threshold": threshold,
-            "top_k": top_k
+            "top_k": top_k,
         }
 
         # Add reference document exclusion using parameterized query
@@ -690,7 +698,9 @@ class QueueQueries:
             job = (
                 db.query(ProcessingQueue)
                 .filter(ProcessingQueue.status == "queued")
-                .order_by(ProcessingQueue.priority.asc(), ProcessingQueue.created_at.asc())
+                .order_by(
+                    ProcessingQueue.priority.asc(), ProcessingQueue.created_at.asc()
+                )
                 .with_for_update(skip_locked=True)
                 .first()
             )
@@ -725,14 +735,19 @@ class QueueQueries:
         )
 
         avg_processing_time = (
-            db.query(func.avg(
-                func.extract('epoch', ProcessingQueue.completed_at - ProcessingQueue.started_at)
-            ))
+            db.query(
+                func.avg(
+                    func.extract(
+                        "epoch",
+                        ProcessingQueue.completed_at - ProcessingQueue.started_at,
+                    )
+                )
+            )
             .filter(
                 and_(
                     ProcessingQueue.status == "completed",
                     ProcessingQueue.started_at.is_not(None),
-                    ProcessingQueue.completed_at.is_not(None)
+                    ProcessingQueue.completed_at.is_not(None),
                 )
             )
             .scalar()
@@ -746,9 +761,7 @@ class QueueQueries:
 
     @staticmethod
     def retry_failed_jobs(
-        db: Session,
-        max_attempts: int = 3,
-        batch_size: int = 10
+        db: Session, max_attempts: int = 3, batch_size: int = 10
     ) -> int:
         """Retry failed jobs that haven't exceeded max attempts."""
         failed_jobs = (
@@ -756,7 +769,7 @@ class QueueQueries:
             .filter(
                 and_(
                     ProcessingQueue.status == "failed",
-                    ProcessingQueue.attempts < max_attempts
+                    ProcessingQueue.attempts < max_attempts,
                 )
             )
             .limit(batch_size)
@@ -809,12 +822,7 @@ class QueueQueries:
             .all()
         )
 
-        result = {
-            'queued': 0,
-            'processing': 0,
-            'completed': 0,
-            'failed': 0
-        }
+        result = {"queued": 0, "processing": 0, "completed": 0, "failed": 0}
 
         for status, count in stats:
             if status in result:
@@ -834,7 +842,7 @@ class QueueQueries:
             .filter(
                 and_(
                     ProcessingQueue.status == "completed",
-                    ProcessingQueue.completed_at < cutoff_date
+                    ProcessingQueue.completed_at < cutoff_date,
                 )
             )
             .delete()

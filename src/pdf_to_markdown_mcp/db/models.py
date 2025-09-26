@@ -53,36 +53,40 @@ class Document(Base):
 
     id = Column(Integer, primary_key=True)
     source_path = Column(Text, unique=True, nullable=False, index=True)
-    filename = Column(Text, nullable=False, index=True)  # Add index for filename searches
-    file_hash = Column(Text, nullable=False, unique=True, index=True)  # Make hash unique
+    filename = Column(
+        Text, nullable=False, index=True
+    )  # Add index for filename searches
+    file_hash = Column(
+        Text, nullable=False, unique=True, index=True
+    )  # Make hash unique
     file_size_bytes = Column(BigInteger)
     created_at = Column(
         DateTime,
         default=datetime.utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
-        index=True  # Add index for date range queries
+        index=True,  # Add index for date range queries
     )
     updated_at = Column(
         DateTime,
         default=datetime.utcnow,
         onupdate=datetime.utcnow,
-        server_default=text("CURRENT_TIMESTAMP")
+        server_default=text("CURRENT_TIMESTAMP"),
     )
     conversion_status = Column(
         String(50),
         nullable=False,
         default="pending",
         server_default=text("'pending'"),
-        index=True  # Add index for status filtering
+        index=True,  # Add index for status filtering
     )
     error_message = Column(Text)
-    meta_data = Column(JSONB)
+    meta_data = Column("metadata", JSONB)  # Map to 'metadata' column in database
 
     # Add check constraint for conversion status
     __table_args__ = (
         CheckConstraint(
             "conversion_status IN ('pending', 'processing', 'completed', 'failed')",
-            name="check_conversion_status"
+            name="check_conversion_status",
         ),
     )
 
@@ -91,17 +95,13 @@ class Document(Base):
         "DocumentContent",
         back_populates="document",
         cascade="all, delete-orphan",
-        uselist=False
+        uselist=False,
     )
     embeddings = relationship(
-        "DocumentEmbedding",
-        back_populates="document",
-        cascade="all, delete-orphan"
+        "DocumentEmbedding", back_populates="document", cascade="all, delete-orphan"
     )
     images = relationship(
-        "DocumentImage",
-        back_populates="document",
-        cascade="all, delete-orphan"
+        "DocumentImage", back_populates="document", cascade="all, delete-orphan"
     )
 
     def __repr__(self) -> str:
@@ -123,7 +123,7 @@ class DocumentContent(Base):
         Integer,
         ForeignKey("documents.id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
     )
     markdown_content = Column(Text)
     plain_text = Column(Text)
@@ -132,9 +132,7 @@ class DocumentContent(Base):
     has_tables = Column(Boolean, default=False)
     processing_time_ms = Column(Integer)
     created_at = Column(
-        DateTime,
-        default=datetime.utcnow,
-        server_default=text("CURRENT_TIMESTAMP")
+        DateTime, default=datetime.utcnow, server_default=text("CURRENT_TIMESTAMP")
     )
 
     # Relationship
@@ -160,29 +158,23 @@ class DocumentEmbedding(Base):
         Integer,
         ForeignKey("documents.id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
     )
     page_number = Column(Integer)
     chunk_index = Column(Integer)
     chunk_text = Column(Text)
-    embedding = Column(Vector(1536))  # Text embeddings dimension
-    meta_data = Column(JSONB)
+    embedding = Column(Vector(768))  # Text embeddings dimension (nomic-embed-text)
+    meta_data = Column("metadata", JSONB)  # Map to 'metadata' column
     created_at = Column(
-        DateTime,
-        default=datetime.utcnow,
-        server_default=text("CURRENT_TIMESTAMP")
+        DateTime, default=datetime.utcnow, server_default=text("CURRENT_TIMESTAMP")
     )
 
     # Add vector dimension validation constraint
     __table_args__ = (
         CheckConstraint(
-            "vector_dims(embedding) = 1536",
-            name="check_text_embedding_dimensions"
+            "vector_dims(embedding) = 768", name="check_text_embedding_dimensions"
         ),
-        CheckConstraint(
-            "chunk_index >= 0",
-            name="check_chunk_index_positive"
-        ),
+        CheckConstraint("chunk_index >= 0", name="check_chunk_index_positive"),
     )
 
     # Relationship
@@ -207,7 +199,7 @@ class DocumentImage(Base):
         Integer,
         ForeignKey("documents.id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
     )
     page_number = Column(Integer)
     image_index = Column(Integer)
@@ -215,27 +207,22 @@ class DocumentImage(Base):
     ocr_text = Column(Text)
     ocr_confidence = Column(Float)
     image_embedding = Column(Vector(512))  # CLIP embeddings dimension
-    meta_data = Column(JSONB)
+    meta_data = Column("metadata", JSONB)  # Map to 'metadata' column
     created_at = Column(
-        DateTime,
-        default=datetime.utcnow,
-        server_default=text("CURRENT_TIMESTAMP")
+        DateTime, default=datetime.utcnow, server_default=text("CURRENT_TIMESTAMP")
     )
 
     # Add vector dimension validation constraint
     __table_args__ = (
         CheckConstraint(
             "vector_dims(image_embedding) = 512",
-            name="check_image_embedding_dimensions"
+            name="check_image_embedding_dimensions",
         ),
         CheckConstraint(
             "ocr_confidence >= 0 AND ocr_confidence <= 1",
-            name="check_ocr_confidence_range"
+            name="check_ocr_confidence_range",
         ),
-        CheckConstraint(
-            "image_index >= 0",
-            name="check_image_index_positive"
-        ),
+        CheckConstraint("image_index >= 0", name="check_image_index_positive"),
     )
 
     # Relationship
@@ -261,9 +248,7 @@ class ProcessingQueue(Base):
     status = Column(String(50), default="queued")
     attempts = Column(Integer, default=0)
     created_at = Column(
-        DateTime,
-        default=datetime.utcnow,
-        server_default=text("CURRENT_TIMESTAMP")
+        DateTime, default=datetime.utcnow, server_default=text("CURRENT_TIMESTAMP")
     )
     started_at = Column(DateTime)
     completed_at = Column(DateTime)
@@ -274,7 +259,7 @@ class ProcessingQueue(Base):
     __table_args__ = (
         CheckConstraint(
             "status IN ('queued', 'processing', 'completed', 'failed', 'retrying')",
-            name="check_queue_status"
+            name="check_queue_status",
         ),
     )
 

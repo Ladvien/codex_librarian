@@ -18,7 +18,7 @@ from pdf_to_markdown_mcp.core.streaming import (
     stream_large_file,
     StreamingProgressTracker,
     MemoryMappedFileReader,
-    stream_processing_with_backpressure
+    stream_processing_with_backpressure,
 )
 from pdf_to_markdown_mcp.models.processing import (
     ProcessingResult,
@@ -26,7 +26,7 @@ from pdf_to_markdown_mcp.models.processing import (
     TableData,
     FormulaData,
     ImageData,
-    ChunkData
+    ChunkData,
 )
 from pdf_to_markdown_mcp.core.errors import (
     ValidationError,
@@ -34,7 +34,7 @@ from pdf_to_markdown_mcp.core.errors import (
     OCRError,
     ResourceError,
     validation_error,
-    processing_error
+    processing_error,
 )
 from pdf_to_markdown_mcp.config import settings
 
@@ -98,7 +98,7 @@ class MinerUService:
                         "MinerU library not available in production environment. "
                         "Please install MinerU or enable mock services for development.",
                         "dependency_validation",
-                        "DEPENDENCY_MISSING"
+                        "DEPENDENCY_MISSING",
                     )
 
     def validate_mineru_dependency(self) -> bool:
@@ -123,26 +123,21 @@ class MinerUService:
                     "MinerU library not available in production environment. "
                     "Please install MinerU or enable mock services for development.",
                     "dependency_validation",
-                    "DEPENDENCY_MISSING"
+                    "DEPENDENCY_MISSING",
                 )
 
     async def process_pdf(
-        self,
-        pdf_path: Path,
-        options: ProcessingOptions
+        self, pdf_path: Path, options: ProcessingOptions
     ) -> ProcessingResult:
         """Process PDF without streaming (compatibility method)."""
-        return await self.process_pdf_streaming(
-            pdf_path=pdf_path,
-            options=options
-        )
+        return await self.process_pdf_streaming(pdf_path=pdf_path, options=options)
 
     async def process_pdf_streaming(
         self,
         pdf_path: Path,
         options: ProcessingOptions,
         progress_callback: Optional[Callable[[int, int, Optional[str]], None]] = None,
-        output_dir: Optional[Path] = None
+        output_dir: Optional[Path] = None,
     ) -> ProcessingResult:
         """
         Process PDF file with MinerU library using streaming support.
@@ -163,7 +158,9 @@ class MinerUService:
         start_time = time.time()
         operation_id = f"mineru_{uuid.uuid4().hex[:8]}"
         file_size = pdf_path.stat().st_size
-        use_streaming = file_size > STREAMING_THRESHOLD_BYTES  # Use streaming for files > 25MB
+        use_streaming = (
+            file_size > STREAMING_THRESHOLD_BYTES
+        )  # Use streaming for files > 25MB
 
         # Create progress tracker if callback provided
         progress_tracker = None
@@ -171,15 +168,14 @@ class MinerUService:
             progress_tracker = StreamingProgressTracker(
                 operation_id=operation_id,
                 total_size=file_size,
-                callback=progress_callback
+                callback=progress_callback,
             )
 
         try:
             # Update progress: Starting validation
             if progress_tracker:
                 await progress_tracker.update_progress(
-                    bytes_processed=0,
-                    current_step="Validating PDF file"
+                    bytes_processed=0, current_step="Validating PDF file"
                 )
 
             # Validate input file with streaming support
@@ -189,16 +185,13 @@ class MinerUService:
                 await self.validate_pdf_file(pdf_path)
 
             self.logger.info(
-                "Starting PDF processing: %s (streaming: %s)",
-                pdf_path,
-                use_streaming
+                "Starting PDF processing: %s (streaming: %s)", pdf_path, use_streaming
             )
 
             # Update progress: Starting processing
             if progress_tracker:
                 await progress_tracker.update_progress(
-                    bytes_processed=0,
-                    current_step="Configuring MinerU"
+                    bytes_processed=0, current_step="Configuring MinerU"
                 )
 
             # Get MinerU configuration
@@ -207,8 +200,7 @@ class MinerUService:
             # Update progress: Processing with MinerU
             if progress_tracker:
                 await progress_tracker.update_progress(
-                    bytes_processed=0,
-                    current_step="Processing PDF with MinerU"
+                    bytes_processed=0, current_step="Processing PDF with MinerU"
                 )
 
             # Process PDF with timeout and streaming support
@@ -217,12 +209,12 @@ class MinerUService:
                     self._process_with_mineru_streaming(
                         pdf_path, mineru_config, output_dir, progress_tracker
                     ),
-                    timeout=PROCESSING_TIMEOUT_SECONDS
+                    timeout=PROCESSING_TIMEOUT_SECONDS,
                 )
             else:
                 result = await asyncio.wait_for(
                     self._process_with_mineru(pdf_path, mineru_config),
-                    timeout=PROCESSING_TIMEOUT_SECONDS
+                    timeout=PROCESSING_TIMEOUT_SECONDS,
                 )
 
             # Calculate processing time
@@ -234,17 +226,14 @@ class MinerUService:
             # Generate chunks if requested
             if options.chunk_for_embeddings:
                 chunks = self._generate_chunks(
-                    result.plain_text,
-                    options.chunk_size,
-                    options.chunk_overlap
+                    result.plain_text, options.chunk_size, options.chunk_overlap
                 )
                 result.chunk_data = chunks
 
             # Final progress update
             if progress_tracker:
                 await progress_tracker.update_progress(
-                    bytes_processed=file_size,
-                    current_step="PDF processing completed"
+                    bytes_processed=file_size, current_step="PDF processing completed"
                 )
                 await progress_tracker.set_completion(success=True)
 
@@ -252,7 +241,7 @@ class MinerUService:
                 "PDF processing completed: %s (%.2fs, streaming: %s)",
                 pdf_path,
                 processing_time_ms / 1000,
-                use_streaming
+                use_streaming,
             )
 
             return result
@@ -261,28 +250,23 @@ class MinerUService:
             if progress_tracker:
                 await progress_tracker.set_completion(
                     success=False,
-                    error=f"Processing timeout exceeded {PROCESSING_TIMEOUT_SECONDS}s"
+                    error=f"Processing timeout exceeded {PROCESSING_TIMEOUT_SECONDS}s",
                 )
             self.logger.error("PDF processing timeout: %s", pdf_path)
             raise ProcessingError(
                 f"Processing timeout exceeded {PROCESSING_TIMEOUT_SECONDS}s",
                 pdf_path=str(pdf_path),
-                error_code="TIMEOUT"
+                error_code="TIMEOUT",
             )
         except ValidationError:
             # Re-raise validation errors as-is
             raise
         except Exception as e:
             if progress_tracker:
-                await progress_tracker.set_completion(
-                    success=False,
-                    error=str(e)
-                )
+                await progress_tracker.set_completion(success=False, error=str(e))
             self.logger.exception("PDF processing failed: %s", pdf_path)
             raise processing_error(
-                f"PDF processing failed: {str(e)}",
-                str(pdf_path),
-                "mineru_processing"
+                f"PDF processing failed: {str(e)}", str(pdf_path), "mineru_processing"
             )
 
     async def validate_pdf_file(self, pdf_path: Path) -> bool:
@@ -301,25 +285,21 @@ class MinerUService:
         # Check if file exists
         if not pdf_path.exists():
             raise validation_error(
-                f"File not found: {pdf_path}",
-                "pdf_path",
-                str(pdf_path)
+                f"File not found: {pdf_path}", "pdf_path", str(pdf_path)
             )
 
         # Check if it's a file (not directory)
         if not pdf_path.is_file():
             raise validation_error(
-                f"Path is not a file: {pdf_path}",
-                "pdf_path",
-                str(pdf_path)
+                f"Path is not a file: {pdf_path}", "pdf_path", str(pdf_path)
             )
 
         # Check file extension
-        if pdf_path.suffix.lower() != '.pdf':
+        if pdf_path.suffix.lower() != ".pdf":
             raise validation_error(
                 f"Invalid file type. Expected PDF, got: {pdf_path.suffix}",
                 "file_type",
-                pdf_path.suffix
+                pdf_path.suffix,
             )
 
         # Check file size
@@ -328,25 +308,23 @@ class MinerUService:
             raise validation_error(
                 f"File too large: {file_size / 1024 / 1024:.1f}MB. Maximum allowed: {MAX_FILE_SIZE_BYTES / 1024 / 1024:.1f}MB",
                 "file_size",
-                file_size
+                file_size,
             )
 
         # Check if file is readable
         try:
-            with open(pdf_path, 'rb') as f:
+            with open(pdf_path, "rb") as f:
                 # Read first few bytes to verify it's a valid PDF
                 header = f.read(8)
-                if not header.startswith(b'%PDF-'):
+                if not header.startswith(b"%PDF-"):
                     raise validation_error(
                         "File does not appear to be a valid PDF",
                         "pdf_header",
-                        header.decode('ascii', errors='ignore')
+                        header.decode("ascii", errors="ignore"),
                     )
         except IOError as e:
             raise validation_error(
-                f"Cannot read PDF file: {str(e)}",
-                "file_access",
-                str(e)
+                f"Cannot read PDF file: {str(e)}", "file_access", str(e)
             )
 
         return True
@@ -363,31 +341,41 @@ class MinerUService:
         """
         if not self.MinerUConfig:
             # Mock configuration for testing
-            return type('MockConfig', (), {
-                'layout_mode': 'preserve' if options.preserve_layout else 'auto',
-                'ocr_language': options.ocr_language,
-                'extract_tables': options.extract_tables,
-                'extract_formulas': options.extract_formulas,
-                'extract_images': options.extract_images,
-                'chunk_for_embeddings': options.chunk_for_embeddings
-            })()
+            return type(
+                "MockConfig",
+                (),
+                {
+                    "layout_mode": "preserve" if options.preserve_layout else "auto",
+                    "ocr_language": options.ocr_language,
+                    "extract_tables": options.extract_tables,
+                    "extract_formulas": options.extract_formulas,
+                    "extract_images": options.extract_images,
+                    "chunk_for_embeddings": options.chunk_for_embeddings,
+                },
+            )()
 
         # Real MinerU configuration
-        layout_mode = self.LayoutMode.PRESERVE if options.preserve_layout else self.LayoutMode.AUTO
+        layout_mode = (
+            self.LayoutMode.PRESERVE
+            if options.preserve_layout
+            else self.LayoutMode.AUTO
+        )
 
         # Map language codes to MinerU OCR languages
         ocr_language_map = {
-            'eng': self.OCRLanguage.ENGLISH,
-            'chi_sim': self.OCRLanguage.CHINESE_SIMPLIFIED,
-            'chi_tra': self.OCRLanguage.CHINESE_TRADITIONAL,
-            'fra': self.OCRLanguage.FRENCH,
-            'deu': self.OCRLanguage.GERMAN,
-            'spa': self.OCRLanguage.SPANISH,
-            'jpn': self.OCRLanguage.JAPANESE,
-            'kor': self.OCRLanguage.KOREAN
+            "eng": self.OCRLanguage.ENGLISH,
+            "chi_sim": self.OCRLanguage.CHINESE_SIMPLIFIED,
+            "chi_tra": self.OCRLanguage.CHINESE_TRADITIONAL,
+            "fra": self.OCRLanguage.FRENCH,
+            "deu": self.OCRLanguage.GERMAN,
+            "spa": self.OCRLanguage.SPANISH,
+            "jpn": self.OCRLanguage.JAPANESE,
+            "kor": self.OCRLanguage.KOREAN,
         }
 
-        ocr_language = ocr_language_map.get(options.ocr_language, self.OCRLanguage.ENGLISH)
+        ocr_language = ocr_language_map.get(
+            options.ocr_language, self.OCRLanguage.ENGLISH
+        )
 
         return self.MinerUConfig(
             layout_mode=layout_mode,
@@ -395,10 +383,12 @@ class MinerUService:
             extract_tables=options.extract_tables,
             extract_formulas=options.extract_formulas,
             extract_images=options.extract_images,
-            chunk_for_embeddings=options.chunk_for_embeddings
+            chunk_for_embeddings=options.chunk_for_embeddings,
         )
 
-    async def _process_with_mineru(self, pdf_path: Path, config: Any) -> ProcessingResult:
+    async def _process_with_mineru(
+        self, pdf_path: Path, config: Any
+    ) -> ProcessingResult:
         """
         Internal method to process PDF with MinerU.
 
@@ -415,7 +405,7 @@ class MinerUService:
                 raise processing_error(
                     "MinerU library not available in production environment",
                     "dependency_validation",
-                    "DEPENDENCY_MISSING"
+                    "DEPENDENCY_MISSING",
                 )
             # Mock processing for testing/development only
             return self._mock_mineru_processing(pdf_path, config)
@@ -443,7 +433,7 @@ class MinerUService:
             "Using mock MinerU processing (MinerU library not available) - "
             "Environment: %s, Mock Services: %s",
             settings.environment,
-            settings.mock_services
+            settings.mock_services,
         )
 
         # Generate file hash
@@ -470,13 +460,15 @@ class MinerUService:
                 "ocr_language": config.ocr_language,
                 "extract_tables": config.extract_tables,
                 "extract_formulas": config.extract_formulas,
-                "extract_images": config.extract_images
-            }
+                "extract_images": config.extract_images,
+            },
         )
 
         # Mock content
         filename = pdf_path.name
-        markdown_content = f"# {filename}\n\nThis is mock content extracted from {filename}."
+        markdown_content = (
+            f"# {filename}\n\nThis is mock content extracted from {filename}."
+        )
         plain_text = f"{filename}\n\nThis is mock content extracted from {filename}."
 
         return ProcessingResult(
@@ -486,14 +478,11 @@ class MinerUService:
             extracted_formulas=[],
             extracted_images=[],
             chunk_data=[],
-            processing_metadata=metadata
+            processing_metadata=metadata,
         )
 
     def _generate_chunks(
-        self,
-        text: str,
-        chunk_size: int,
-        overlap: int
+        self, text: str, chunk_size: int, overlap: int
     ) -> List[ChunkData]:
         """
         Generate text chunks for embeddings.
@@ -527,7 +516,7 @@ class MinerUService:
                     start_char=start,
                     end_char=end,
                     page=1,  # Simplified for now
-                    token_count=self._estimate_token_count(chunk_text)
+                    token_count=self._estimate_token_count(chunk_text),
                 )
                 chunks.append(chunk)
                 chunk_index += 1
@@ -568,7 +557,7 @@ class MinerUService:
         hash_sha256 = hashlib.sha256()
 
         # Use memory-safe chunk size for large files
-        with open(file_path, 'rb') as f:
+        with open(file_path, "rb") as f:
             for chunk in iter(lambda: f.read(HASH_CHUNK_SIZE), b""):
                 hash_sha256.update(chunk)
 
@@ -587,8 +576,14 @@ class MinerUService:
             "max_file_size_mb": MAX_FILE_SIZE_BYTES // (1024 * 1024),
             "timeout_seconds": PROCESSING_TIMEOUT_SECONDS,
             "supported_languages": [
-                "eng", "chi_sim", "chi_tra", "fra", "deu",
-                "spa", "jpn", "kor"
+                "eng",
+                "chi_sim",
+                "chi_tra",
+                "fra",
+                "deu",
+                "spa",
+                "jpn",
+                "kor",
             ],
             "features": [
                 "layout_aware_extraction",
@@ -596,8 +591,8 @@ class MinerUService:
                 "formula_recognition",
                 "built_in_ocr",
                 "automatic_chunking",
-                "multi_language_support"
-            ]
+                "multi_language_support",
+            ],
         }
 
     def __str__(self) -> str:
@@ -611,7 +606,7 @@ class MinerUService:
     async def _validate_pdf_file_streaming(
         self,
         pdf_path: Path,
-        progress_tracker: Optional[StreamingProgressTracker] = None
+        progress_tracker: Optional[StreamingProgressTracker] = None,
     ) -> bool:
         """
         Validate PDF file using streaming for large files.
@@ -629,25 +624,21 @@ class MinerUService:
         # Check if file exists
         if not pdf_path.exists():
             raise validation_error(
-                f"File not found: {pdf_path}",
-                "pdf_path",
-                str(pdf_path)
+                f"File not found: {pdf_path}", "pdf_path", str(pdf_path)
             )
 
         # Check if it's a file (not directory)
         if not pdf_path.is_file():
             raise validation_error(
-                f"Path is not a file: {pdf_path}",
-                "pdf_path",
-                str(pdf_path)
+                f"Path is not a file: {pdf_path}", "pdf_path", str(pdf_path)
             )
 
         # Check file extension
-        if pdf_path.suffix.lower() != '.pdf':
+        if pdf_path.suffix.lower() != ".pdf":
             raise validation_error(
                 f"Invalid file type. Expected PDF, got: {pdf_path.suffix}",
                 "file_type",
-                pdf_path.suffix
+                pdf_path.suffix,
             )
 
         # Check file size
@@ -656,7 +647,7 @@ class MinerUService:
             raise validation_error(
                 f"File too large: {file_size / 1024 / 1024:.1f}MB. Maximum allowed: {MAX_FILE_SIZE_BYTES / 1024 / 1024:.1f}MB",
                 "file_size",
-                file_size
+                file_size,
             )
 
         # Stream validation of PDF header for large files
@@ -668,14 +659,14 @@ class MinerUService:
                 if progress_tracker:
                     await progress_tracker.update_progress(
                         bytes_processed=len(header_chunk),
-                        current_step="Validating PDF header"
+                        current_step="Validating PDF header",
                     )
 
-                if not header_chunk.startswith(b'%PDF-'):
+                if not header_chunk.startswith(b"%PDF-"):
                     raise validation_error(
                         "File does not appear to be a valid PDF",
                         "pdf_header",
-                        header_chunk.decode('ascii', errors='ignore')
+                        header_chunk.decode("ascii", errors="ignore"),
                     )
 
                 # For very large files, do additional integrity checks
@@ -688,20 +679,18 @@ class MinerUService:
                     if progress_tracker:
                         await progress_tracker.update_progress(
                             bytes_processed=len(end_chunk),
-                            current_step="Validating PDF footer"
+                            current_step="Validating PDF footer",
                         )
 
                     # Look for PDF end marker
-                    if b'%%EOF' not in end_chunk:
+                    if b"%%EOF" not in end_chunk:
                         self.logger.warning(
                             f"PDF {pdf_path} may be incomplete (no EOF marker found)"
                         )
 
         except IOError as e:
             raise validation_error(
-                f"Cannot read PDF file: {str(e)}",
-                "file_access",
-                str(e)
+                f"Cannot read PDF file: {str(e)}", "file_access", str(e)
             )
 
         return True
@@ -711,7 +700,7 @@ class MinerUService:
         pdf_path: Path,
         config: Any,
         output_dir: Optional[Path] = None,
-        progress_tracker: Optional[StreamingProgressTracker] = None
+        progress_tracker: Optional[StreamingProgressTracker] = None,
     ) -> ProcessingResult:
         """
         Internal method to process PDF with MinerU using streaming.
@@ -731,7 +720,7 @@ class MinerUService:
                 raise processing_error(
                     "MinerU library not available in production environment",
                     "dependency_validation",
-                    "DEPENDENCY_MISSING"
+                    "DEPENDENCY_MISSING",
                 )
             # Use mock processing with streaming simulation for development only
             return await self._mock_mineru_processing_streaming(
@@ -743,8 +732,7 @@ class MinerUService:
 
         if progress_tracker:
             await progress_tracker.update_progress(
-                bytes_processed=0,
-                current_step="Initializing MinerU processing"
+                bytes_processed=0, current_step="Initializing MinerU processing"
             )
 
         # Process the PDF with progress tracking
@@ -757,7 +745,7 @@ class MinerUService:
         self,
         pdf_path: Path,
         config: Any,
-        progress_tracker: Optional[StreamingProgressTracker] = None
+        progress_tracker: Optional[StreamingProgressTracker] = None,
     ) -> ProcessingResult:
         """
         Mock MinerU processing with streaming simulation.
@@ -774,7 +762,7 @@ class MinerUService:
             "Using mock MinerU processing with streaming simulation "
             "(MinerU library not available) - Environment: %s, Mock Services: %s",
             settings.environment,
-            settings.mock_services
+            settings.mock_services,
         )
 
         file_size = pdf_path.stat().st_size
@@ -787,7 +775,7 @@ class MinerUService:
             "Processing formulas",
             "Extracting images",
             "Generating chunks",
-            "Finalizing output"
+            "Finalizing output",
         ]
 
         bytes_per_step = file_size // len(processing_steps)
@@ -795,8 +783,7 @@ class MinerUService:
         for i, step in enumerate(processing_steps):
             if progress_tracker:
                 await progress_tracker.update_progress(
-                    bytes_processed=bytes_per_step,
-                    current_step=step
+                    bytes_processed=bytes_per_step, current_step=step
                 )
 
             # Simulate processing time
@@ -809,10 +796,11 @@ class MinerUService:
         async for chunk in stream_large_file(
             file_path=pdf_path,
             operation_id=operation_id,
-            chunk_size=64 * 1024  # 64KB chunks for hashing
+            chunk_size=64 * 1024,  # 64KB chunks for hashing
         ):
             if file_hash is None:
                 import hashlib
+
                 file_hash = hashlib.sha256()
             file_hash.update(chunk)
 
@@ -839,8 +827,8 @@ class MinerUService:
                 "extract_tables": config.extract_tables,
                 "extract_formulas": config.extract_formulas,
                 "extract_images": config.extract_images,
-                "streaming_enabled": True
-            }
+                "streaming_enabled": True,
+            },
         )
 
         # Mock content based on file size
@@ -870,7 +858,7 @@ class MinerUService:
             extracted_formulas=[],
             extracted_images=[],
             chunk_data=[],
-            processing_metadata=metadata
+            processing_metadata=metadata,
         )
 
     def get_streaming_capabilities(self) -> Dict[str, Any]:
@@ -885,7 +873,7 @@ class MinerUService:
             "chunk_sizes": {
                 "small_files": "64KB",
                 "large_files": "1MB",
-                "hash_calculation": "64KB"
+                "hash_calculation": "64KB",
             },
-            "mineru_library_available": self.MinerUAPI is not None
+            "mineru_library_available": self.MinerUAPI is not None,
         }

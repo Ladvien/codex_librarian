@@ -15,6 +15,7 @@ You are helping develop a PDF to Markdown MCP (Model Context Protocol) server th
 - **Development OS**: Manjaro Linux
 
 ## Rules
+- DO NOT maintain legacy, deprecated, or backwards compatibility code.  This is a prototype.
 - Use PDFs found in these folders recursively: `/mnt/codex_fs/research/`
 - Save all test outpout to `/mnt/codex_fs/research/librarian_output/`
 

@@ -16,7 +16,7 @@ from ..services.database import VectorDatabaseService
 
 
 def get_database_service(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ) -> Generator[VectorDatabaseService, None, None]:
     """
     Dependency injection for VectorDatabaseService.
@@ -44,6 +44,6 @@ DatabaseServiceDep = Depends(get_database_service)
 
 # Export dependencies
 __all__ = [
-    'get_database_service',
-    'DatabaseServiceDep',
+    "get_database_service",
+    "DatabaseServiceDep",
 ]

@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 class ChunkBoundary(Enum):
     """Types of text boundaries for chunking."""
+
     PARAGRAPH = "paragraph"
     SENTENCE = "sentence"
     WORD = "word"
@@ -50,7 +51,7 @@ class TextChunker:
         self,
         chunk_size: int = 1000,
         chunk_overlap: int = 200,
-        boundary_preference: ChunkBoundary = ChunkBoundary.SENTENCE
+        boundary_preference: ChunkBoundary = ChunkBoundary.SENTENCE,
     ):
         """
         Initialize text chunker.
@@ -73,8 +74,8 @@ class TextChunker:
             extra={
                 "chunk_size": chunk_size,
                 "chunk_overlap": chunk_overlap,
-                "boundary_preference": boundary_preference.value
-            }
+                "boundary_preference": boundary_preference.value,
+            },
         )
 
     async def create_chunks(
@@ -83,7 +84,7 @@ class TextChunker:
         chunk_size: Optional[int] = None,
         chunk_overlap: Optional[int] = None,
         metadata: Optional[Dict[str, Any]] = None,
-        preserve_formatting: bool = True
+        preserve_formatting: bool = True,
     ) -> List[TextChunk]:
         """
         Create text chunks from input text.
@@ -110,8 +111,8 @@ class TextChunker:
             extra={
                 "text_length": len(text),
                 "chunk_size": effective_chunk_size,
-                "chunk_overlap": effective_overlap
-            }
+                "chunk_overlap": effective_overlap,
+            },
         )
 
         # Preprocess text
@@ -122,7 +123,7 @@ class TextChunker:
             text=processed_text,
             chunk_size=effective_chunk_size,
             overlap=effective_overlap,
-            boundary_type=self.boundary_preference
+            boundary_type=self.boundary_preference,
         )
 
         # Add metadata to chunks
@@ -132,11 +133,13 @@ class TextChunker:
                 chunk.metadata.update(metadata)
 
             # Add chunk statistics
-            chunk.metadata.update({
-                "char_count": chunk.char_count,
-                "word_count": chunk.word_count,
-                "boundary_type": self.boundary_preference.value
-            })
+            chunk.metadata.update(
+                {
+                    "char_count": chunk.char_count,
+                    "word_count": chunk.word_count,
+                    "boundary_type": self.boundary_preference.value,
+                }
+            )
 
         logger.info(f"Created {len(chunks)} text chunks")
         return chunks
@@ -153,25 +156,21 @@ class TextChunker:
             Preprocessed text
         """
         # Normalize whitespace
-        text = re.sub(r'\s+', ' ', text.strip())
+        text = re.sub(r"\s+", " ", text.strip())
 
         if preserve_formatting:
             # Preserve markdown headers, lists, and other formatting
             # but normalize excessive whitespace
-            text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)
+            text = re.sub(r"\n\s*\n\s*\n+", "\n\n", text)
         else:
             # Remove all formatting for plain text chunking
-            text = re.sub(r'[#*_`\[\]()]', '', text)
-            text = re.sub(r'\n+', ' ', text)
+            text = re.sub(r"[#*_`\[\]()]", "", text)
+            text = re.sub(r"\n+", " ", text)
 
         return text
 
     async def _create_chunks_with_boundaries(
-        self,
-        text: str,
-        chunk_size: int,
-        overlap: int,
-        boundary_type: ChunkBoundary
+        self, text: str, chunk_size: int, overlap: int, boundary_type: ChunkBoundary
     ) -> List[TextChunk]:
         """
         Create chunks respecting text boundaries.
@@ -186,12 +185,9 @@ class TextChunker:
             List of text chunks
         """
         if len(text) <= chunk_size:
-            return [TextChunk(
-                text=text,
-                start_index=0,
-                end_index=len(text),
-                chunk_index=0
-            )]
+            return [
+                TextChunk(text=text, start_index=0, end_index=len(text), chunk_index=0)
+            ]
 
         # Get boundary positions
         boundaries = self._find_boundaries(text, boundary_type)
@@ -217,12 +213,14 @@ class TextChunker:
             chunk_text = text[start_pos:end_pos].strip()
 
             if chunk_text:  # Only add non-empty chunks
-                chunks.append(TextChunk(
-                    text=chunk_text,
-                    start_index=start_pos,
-                    end_index=end_pos,
-                    chunk_index=chunk_index
-                ))
+                chunks.append(
+                    TextChunk(
+                        text=chunk_text,
+                        start_index=start_pos,
+                        end_index=end_pos,
+                        chunk_index=chunk_index,
+                    )
+                )
                 chunk_index += 1
 
             # Calculate next start position with overlap
@@ -250,18 +248,18 @@ class TextChunker:
 
         if boundary_type == ChunkBoundary.PARAGRAPH:
             # Find paragraph breaks (double newlines)
-            for match in re.finditer(r'\n\s*\n', text):
+            for match in re.finditer(r"\n\s*\n", text):
                 boundaries.append(match.end())
 
         elif boundary_type == ChunkBoundary.SENTENCE:
             # Find sentence endings
-            sentence_pattern = r'[.!?]+\s+'
+            sentence_pattern = r"[.!?]+\s+"
             for match in re.finditer(sentence_pattern, text):
                 boundaries.append(match.end())
 
         elif boundary_type == ChunkBoundary.WORD:
             # Find word boundaries
-            for match in re.finditer(r'\s+', text):
+            for match in re.finditer(r"\s+", text):
                 boundaries.append(match.end())
 
         elif boundary_type == ChunkBoundary.CHARACTER:
@@ -272,11 +270,7 @@ class TextChunker:
         return sorted(set(boundaries))
 
     def _find_best_boundary(
-        self,
-        boundaries: List[int],
-        target_pos: int,
-        min_pos: int,
-        max_chunk_size: int
+        self, boundaries: List[int], target_pos: int, min_pos: int, max_chunk_size: int
     ) -> int:
         """
         Find the best boundary near target position.
@@ -292,7 +286,8 @@ class TextChunker:
         """
         # Find boundaries within acceptable range
         acceptable_boundaries = [
-            pos for pos in boundaries
+            pos
+            for pos in boundaries
             if min_pos + (max_chunk_size // 2) <= pos <= min_pos + max_chunk_size * 1.2
         ]
 
@@ -305,10 +300,7 @@ class TextChunker:
         return best_boundary
 
     def _find_overlap_boundary(
-        self,
-        boundaries: List[int],
-        overlap_start: int,
-        chunk_end: int
+        self, boundaries: List[int], overlap_start: int, chunk_end: int
     ) -> int:
         """
         Find appropriate boundary for overlap start position.
@@ -323,8 +315,7 @@ class TextChunker:
         """
         # Find boundaries in overlap region
         overlap_boundaries = [
-            pos for pos in boundaries
-            if overlap_start <= pos < chunk_end
+            pos for pos in boundaries if overlap_start <= pos < chunk_end
         ]
 
         if not overlap_boundaries:
@@ -334,9 +325,7 @@ class TextChunker:
         return overlap_boundaries[0]
 
     async def merge_chunks(
-        self,
-        chunks: List[TextChunk],
-        max_merged_size: int = 2000
+        self, chunks: List[TextChunk], max_merged_size: int = 2000
     ) -> List[TextChunk]:
         """
         Merge small adjacent chunks if they would fit within size limit.
@@ -369,8 +358,11 @@ class TextChunker:
                     metadata={
                         **(current_chunk.metadata or {}),
                         "merged": True,
-                        "original_chunks": [current_chunk.chunk_index, next_chunk.chunk_index]
-                    }
+                        "original_chunks": [
+                            current_chunk.chunk_index,
+                            next_chunk.chunk_index,
+                        ],
+                    },
                 )
             else:
                 # Can't merge - add current chunk and move to next
@@ -400,7 +392,7 @@ class TextChunker:
                 "total_words": 0,
                 "avg_chunk_size": 0,
                 "min_chunk_size": 0,
-                "max_chunk_size": 0
+                "max_chunk_size": 0,
             }
 
         char_counts = [chunk.char_count for chunk in chunks]
@@ -414,7 +406,7 @@ class TextChunker:
             "min_chunk_size": min(char_counts),
             "max_chunk_size": max(char_counts),
             "avg_word_count": sum(word_counts) / len(chunks),
-            "chunk_size_std": self._calculate_std_dev(char_counts)
+            "chunk_size_std": self._calculate_std_dev(char_counts),
         }
 
     def _calculate_std_dev(self, values: List[int]) -> float:
@@ -424,4 +416,4 @@ class TextChunker:
 
         mean = sum(values) / len(values)
         variance = sum((x - mean) ** 2 for x in values) / (len(values) - 1)
-        return variance ** 0.5
+        return variance**0.5

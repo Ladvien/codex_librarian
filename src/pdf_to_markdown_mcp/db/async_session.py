@@ -44,12 +44,14 @@ ASYNC_SQL_ECHO = os.environ.get("ASYNC_SQL_ECHO", "false").lower() == "true"
 # Connection retry configuration
 ASYNC_MAX_RETRIES = int(os.environ.get("ASYNC_DB_MAX_RETRIES", "3"))
 ASYNC_RETRY_DELAY = float(os.environ.get("ASYNC_DB_RETRY_DELAY", "1.0"))
-ASYNC_RETRY_BACKOFF_FACTOR = float(os.environ.get("ASYNC_DB_RETRY_BACKOFF_FACTOR", "2.0"))
+ASYNC_RETRY_BACKOFF_FACTOR = float(
+    os.environ.get("ASYNC_DB_RETRY_BACKOFF_FACTOR", "2.0")
+)
 
 # Create async engine with optimized configuration
 async_engine = create_async_engine(
     ASYNC_DATABASE_URL,
-    poolclass=QueuePool,
+    # poolclass removed - async engines use AsyncPool by default
     pool_size=ASYNC_POOL_SIZE,
     max_overflow=ASYNC_MAX_OVERFLOW,
     pool_pre_ping=ASYNC_POOL_PRE_PING,
@@ -91,14 +93,20 @@ class AsyncDatabaseManager:
         """Set up async event listeners for performance monitoring."""
 
         @event.listens_for(self.engine.sync_engine, "before_cursor_execute")
-        def before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+        def before_cursor_execute(
+            conn, cursor, statement, parameters, context, executemany
+        ):
             context._query_start_time = asyncio.get_event_loop().time()
             context._statement = statement
 
         @event.listens_for(self.engine.sync_engine, "after_cursor_execute")
-        def after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
-            if hasattr(context, '_query_start_time'):
-                execution_time = (asyncio.get_event_loop().time() - context._query_start_time) * 1000
+        def after_cursor_execute(
+            conn, cursor, statement, parameters, context, executemany
+        ):
+            if hasattr(context, "_query_start_time"):
+                execution_time = (
+                    asyncio.get_event_loop().time() - context._query_start_time
+                ) * 1000
 
                 if execution_time > 500:  # Log slow queries (> 500ms)
                     logger.warning(
@@ -134,7 +142,7 @@ class AsyncDatabaseManager:
         self,
         query: str,
         parameters: Optional[Dict[str, Any]] = None,
-        fetch_results: bool = True
+        fetch_results: bool = True,
     ) -> Any:
         """
         Execute an async query with performance monitoring.
@@ -148,7 +156,9 @@ class AsyncDatabaseManager:
             Query results if fetch_results=True, else None
         """
         async with self.get_async_session() as session:
-            async with self.performance_monitor.measure_performance("async_query_execution"):
+            async with self.performance_monitor.measure_performance(
+                "async_query_execution"
+            ):
                 try:
                     result = await session.execute(text(query), parameters or {})
 
@@ -189,11 +199,15 @@ class AsyncDatabaseManager:
         try:
             async with self.get_async_session() as session:
                 # Check if PGVector extension is available
-                result = await session.execute(text("""
+                result = await session.execute(
+                    text(
+                        """
                     SELECT EXISTS(
                         SELECT 1 FROM pg_extension WHERE extname = 'vector'
                     )
-                """))
+                """
+                    )
+                )
 
                 pgvector_exists = result.scalar()
 
@@ -202,9 +216,13 @@ class AsyncDatabaseManager:
                     return False
 
                 # Verify vector operations work
-                await session.execute(text("""
+                await session.execute(
+                    text(
+                        """
                     SELECT '[1,2,3]'::vector <-> '[1,2,4]'::vector as distance
-                """))
+                """
+                    )
+                )
 
                 logger.info("PGVector extension verified and working (async)")
                 return True
@@ -231,7 +249,10 @@ class AsyncDatabaseManager:
             "pool_timeout": ASYNC_POOL_TIMEOUT,
             "max_overflow": ASYNC_MAX_OVERFLOW,
             "total_capacity": ASYNC_POOL_SIZE + ASYNC_MAX_OVERFLOW,
-            "utilization_percent": (pool.checkedout() / (ASYNC_POOL_SIZE + ASYNC_MAX_OVERFLOW)) * 100
+            "utilization_percent": (
+                pool.checkedout() / (ASYNC_POOL_SIZE + ASYNC_MAX_OVERFLOW)
+            )
+            * 100,
         }
 
     async def close_async_engine(self):
@@ -269,7 +290,7 @@ class AsyncVectorSearchResult:
         similarity_score: float,
         page_number: Optional[int] = None,
         chunk_index: Optional[int] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ):
         self.document_id = document_id
         self.chunk_id = chunk_id
@@ -292,7 +313,7 @@ class AsyncVectorSearchResult:
             "similarity_score": self.similarity_score,
             "page_number": self.page_number,
             "chunk_index": self.chunk_index,
-            "metadata": self.metadata
+            "metadata": self.metadata,
         }
 
 
@@ -306,7 +327,7 @@ async def health_check_async() -> Dict[str, Any]:
     health_status = {
         "database": "unknown",
         "pgvector": "unknown",
-        "connection_pool": {}
+        "connection_pool": {},
     }
 
     try:
@@ -316,11 +337,17 @@ async def health_check_async() -> Dict[str, Any]:
 
         # Check PGVector extension
         if connection_healthy:
-            pgvector_available = await async_db_manager.ensure_pgvector_extension_async()
-            health_status["pgvector"] = "available" if pgvector_available else "unavailable"
+            pgvector_available = (
+                await async_db_manager.ensure_pgvector_extension_async()
+            )
+            health_status["pgvector"] = (
+                "available" if pgvector_available else "unavailable"
+            )
 
         # Get connection pool stats
-        health_status["connection_pool"] = await async_db_manager.get_async_connection_stats()
+        health_status["connection_pool"] = (
+            await async_db_manager.get_async_connection_stats()
+        )
 
     except Exception as e:
         logger.error(f"Async health check failed: {e}")
@@ -334,7 +361,7 @@ async def async_vector_similarity_search(
     query_embedding: list,
     limit: int = 10,
     similarity_threshold: float = 0.7,
-    distance_metric: str = "cosine"
+    distance_metric: str = "cosine",
 ) -> list:
     """
     Perform async vector similarity search with optimized performance.
@@ -349,17 +376,14 @@ async def async_vector_similarity_search(
         List of AsyncVectorSearchResult objects
     """
     # Distance operators for different metrics
-    distance_ops = {
-        "cosine": "<=>",
-        "euclidean": "<->",
-        "inner_product": "<#>"
-    }
+    distance_ops = {"cosine": "<=>", "euclidean": "<->", "inner_product": "<#>"}
 
     distance_op = distance_ops.get(distance_metric, "<=>")
 
     async with async_db_manager.get_async_session() as db:
         # Optimized async vector search query
-        query = text(f"""
+        query = text(
+            f"""
             SELECT
                 de.document_id,
                 de.id as embedding_id,
@@ -394,14 +418,18 @@ async def async_vector_similarity_search(
                 END
                 {"DESC" if distance_metric == "inner_product" else "ASC"}
             LIMIT :limit
-        """)
+        """
+        )
 
-        result = await db.execute(query, {
-            "query_embedding": query_embedding,
-            "threshold": similarity_threshold,
-            "limit": limit,
-            "distance_metric": distance_metric
-        })
+        result = await db.execute(
+            query,
+            {
+                "query_embedding": query_embedding,
+                "threshold": similarity_threshold,
+                "limit": limit,
+                "distance_metric": distance_metric,
+            },
+        )
 
         results = []
         for row in result:
@@ -411,16 +439,18 @@ async def async_vector_similarity_search(
             if row.doc_metadata:
                 metadata.update(row.doc_metadata)
 
-            results.append(AsyncVectorSearchResult(
-                document_id=row.document_id,
-                chunk_id=row.embedding_id,
-                filename=row.filename,
-                source_path=row.source_path,
-                content=row.chunk_text,
-                similarity_score=float(row.similarity_score),
-                page_number=row.page_number,
-                chunk_index=row.chunk_index,
-                metadata=metadata
-            ))
+            results.append(
+                AsyncVectorSearchResult(
+                    document_id=row.document_id,
+                    chunk_id=row.embedding_id,
+                    filename=row.filename,
+                    source_path=row.source_path,
+                    content=row.chunk_text,
+                    similarity_score=float(row.similarity_score),
+                    page_number=row.page_number,
+                    chunk_index=row.chunk_index,
+                    metadata=metadata,
+                )
+            )
 
         return results

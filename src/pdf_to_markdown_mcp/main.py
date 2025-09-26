@@ -20,12 +20,19 @@ from starlette.exceptions import HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from pdf_to_markdown_mcp.config import settings, configure_logging
-from pdf_to_markdown_mcp.api import convert, search, status, config as config_api, health
+from pdf_to_markdown_mcp.api import (
+    convert,
+    search,
+    status,
+    config as config_api,
+    health,
+)
+
 # Database connection imports removed for basic startup
 from pdf_to_markdown_mcp.core.monitoring import (
     metrics_collector,
     health_monitor,
-    TracingManager
+    TracingManager,
 )
 from pdf_to_markdown_mcp.middleware.security import create_security_middleware
 
@@ -55,7 +62,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                 "method": request.method,
                 "url": str(request.url),
                 "client": request.client.host if request.client else None,
-            }
+            },
         )
 
         try:
@@ -67,8 +74,8 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                 extra={
                     "correlation_id": correlation_id,
                     "status_code": response.status_code,
-                    "process_time": f"{process_time:.3f}s"
-                }
+                    "process_time": f"{process_time:.3f}s",
+                },
             )
 
             # Collect metrics for request
@@ -85,13 +92,15 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                 extra={
                     "correlation_id": correlation_id,
                     "error": str(e),
-                    "process_time": f"{process_time:.3f}s"
+                    "process_time": f"{process_time:.3f}s",
                 },
-                exc_info=True
+                exc_info=True,
             )
             raise
 
-    def _collect_request_metrics(self, request: Request, response: Response, process_time: float):
+    def _collect_request_metrics(
+        self, request: Request, response: Response, process_time: float
+    ):
         """Collect metrics for the request."""
         try:
             # Record API endpoint metrics
@@ -100,26 +109,30 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             status_code = response.status_code
 
             # Skip metrics collection for health endpoints to avoid noise
-            if path.startswith('/health') or path.startswith('/ready') or path.startswith('/metrics'):
+            if (
+                path.startswith("/health")
+                or path.startswith("/ready")
+                or path.startswith("/metrics")
+            ):
                 return
 
             # Record search queries if this is a search endpoint
-            if '/search' in path:
+            if "/search" in path:
                 # This would normally extract result count from response
                 # For now, we'll record the query without result count
                 metrics_collector.record_search_query(
                     search_type="api_request",
                     result_count=0,  # Would need to extract from response
-                    response_time_ms=process_time * 1000
+                    response_time_ms=process_time * 1000,
                 )
 
             # Record API response times
-            if hasattr(metrics_collector, 'record_api_request'):
+            if hasattr(metrics_collector, "record_api_request"):
                 metrics_collector.record_api_request(
                     method=method,
                     path=path,
                     status_code=status_code,
-                    response_time_ms=process_time * 1000
+                    response_time_ms=process_time * 1000,
                 )
 
         except Exception as e:
@@ -169,10 +182,8 @@ app = FastAPI(
     redoc_url="/redoc" if settings.debug else None,
 )
 
-# Add security middleware (order matters - security headers should be added last)
-max_request_size = getattr(settings.processing, 'max_file_size_mb', 100) * 1024 * 1024
-app.add_middleware(RequestSizeMiddleware, max_request_size=max_request_size)
-app.add_middleware(SecurityHeadersMiddleware)
+# Configure comprehensive security middleware (headers, rate limiting, request validation)
+create_security_middleware(app)
 
 # Add other middleware
 app.add_middleware(GZipMiddleware, minimum_size=1000)
@@ -193,7 +204,7 @@ if settings.cors_origins:
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     """Handle HTTP exceptions with structured error response."""
-    correlation_id = getattr(request.state, 'correlation_id', None)
+    correlation_id = getattr(request.state, "correlation_id", None)
 
     logger.warning(
         "HTTP exception",
@@ -201,7 +212,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
             "correlation_id": correlation_id,
             "status_code": exc.status_code,
             "detail": exc.detail,
-        }
+        },
     )
 
     return JSONResponse(
@@ -210,21 +221,21 @@ async def http_exception_handler(request: Request, exc: HTTPException):
             "error": "http_error",
             "message": exc.detail,
             "correlation_id": correlation_id,
-        }
+        },
     )
 
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """Handle request validation errors."""
-    correlation_id = getattr(request.state, 'correlation_id', None)
+    correlation_id = getattr(request.state, "correlation_id", None)
 
     logger.warning(
         "Validation error",
         extra={
             "correlation_id": correlation_id,
             "errors": exc.errors(),
-        }
+        },
     )
 
     return JSONResponse(
@@ -234,14 +245,14 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             "message": "Invalid request data",
             "details": exc.errors(),
             "correlation_id": correlation_id,
-        }
+        },
     )
 
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
     """Handle unexpected exceptions."""
-    correlation_id = getattr(request.state, 'correlation_id', None)
+    correlation_id = getattr(request.state, "correlation_id", None)
 
     logger.error(
         "Unhandled exception",
@@ -249,7 +260,7 @@ async def general_exception_handler(request: Request, exc: Exception):
             "correlation_id": correlation_id,
             "exception": str(exc),
         },
-        exc_info=True
+        exc_info=True,
     )
 
     return JSONResponse(
@@ -258,12 +269,13 @@ async def general_exception_handler(request: Request, exc: Exception):
             "error": "internal_error",
             "message": "Internal server error",
             "correlation_id": correlation_id,
-        }
+        },
     )
 
 
 # Legacy health endpoints are now handled by the health router
 # These are kept for backward compatibility but deprecated
+
 
 @app.get("/health-legacy")
 async def health_check_legacy() -> Dict[str, Any]:
@@ -271,6 +283,7 @@ async def health_check_legacy() -> Dict[str, Any]:
     logger.warning("Legacy /health-legacy endpoint used, consider migrating to /health")
 
     from pdf_to_markdown_mcp.api.health import get_health
+
     return await get_health()
 
 

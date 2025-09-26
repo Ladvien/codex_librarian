@@ -15,6 +15,7 @@ from pdf_to_markdown_mcp.models.document import ProcessingStatus
 
 class ErrorType(str, Enum):
     """Types of errors that can occur."""
+
     VALIDATION = "validation_error"
     PROCESSING = "processing_error"
     EMBEDDING = "embedding_error"
@@ -30,7 +31,9 @@ class ErrorResponse(BaseModel):
 
     error: ErrorType = Field(..., description="Error type")
     message: str = Field(..., description="Human-readable error message")
-    details: Optional[Dict[str, Any]] = Field(None, description="Additional error details")
+    details: Optional[Dict[str, Any]] = Field(
+        None, description="Additional error details"
+    )
     correlation_id: Optional[str] = Field(None, description="Request correlation ID")
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
@@ -40,9 +43,12 @@ class ErrorResponse(BaseModel):
             "example": {
                 "error": "processing_error",
                 "message": "Failed to extract text from PDF",
-                "details": {"file_path": "/path/to/file.pdf", "error_code": "CORRUPT_PDF"},
+                "details": {
+                    "file_path": "/path/to/file.pdf",
+                    "error_code": "CORRUPT_PDF",
+                },
                 "correlation_id": "req_123456789",
-                "timestamp": "2025-09-25T10:30:00Z"
+                "timestamp": "2025-09-25T10:30:00Z",
             }
         }
 
@@ -51,8 +57,12 @@ class ConvertSingleResponse(BaseModel):
     """Response model for single PDF conversion."""
 
     success: bool = Field(..., description="Whether conversion was successful")
-    document_id: Optional[int] = Field(None, description="Database ID of processed document")
-    job_id: Optional[str] = Field(None, description="Background job ID for status tracking")
+    document_id: Optional[int] = Field(
+        None, description="Database ID of processed document"
+    )
+    job_id: Optional[str] = Field(
+        None, description="Background job ID for status tracking"
+    )
 
     message: str = Field(..., description="Status message")
 
@@ -61,15 +71,25 @@ class ConvertSingleResponse(BaseModel):
     output_path: Optional[Path] = Field(None, description="Output markdown file path")
 
     # Processing results
-    processing_time_ms: Optional[int] = Field(None, description="Processing time in milliseconds")
+    processing_time_ms: Optional[int] = Field(
+        None, description="Processing time in milliseconds"
+    )
     page_count: Optional[int] = Field(None, description="Number of pages processed")
-    chunk_count: Optional[int] = Field(None, description="Number of text chunks created")
-    embedding_count: Optional[int] = Field(None, description="Number of embeddings generated")
+    chunk_count: Optional[int] = Field(
+        None, description="Number of text chunks created"
+    )
+    embedding_count: Optional[int] = Field(
+        None, description="Number of embeddings generated"
+    )
 
     # Statistics
     file_size_bytes: int = Field(..., description="Original file size")
-    has_images: Optional[bool] = Field(None, description="Whether document contains images")
-    has_tables: Optional[bool] = Field(None, description="Whether document contains tables")
+    has_images: Optional[bool] = Field(
+        None, description="Whether document contains images"
+    )
+    has_tables: Optional[bool] = Field(
+        None, description="Whether document contains tables"
+    )
 
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
@@ -96,7 +116,9 @@ class ConvertSingleResponse(BaseModel):
 class BatchConvertResponse(BaseModel):
     """Response model for batch PDF conversion."""
 
-    success: bool = Field(..., description="Whether batch operation was initiated successfully")
+    success: bool = Field(
+        ..., description="Whether batch operation was initiated successfully"
+    )
     batch_id: str = Field(..., description="Batch operation ID")
 
     message: str = Field(..., description="Status message")
@@ -104,15 +126,25 @@ class BatchConvertResponse(BaseModel):
     # File counts
     files_found: int = Field(..., ge=0, description="Total PDF files found")
     files_queued: int = Field(..., ge=0, description="Files added to processing queue")
-    files_skipped: int = Field(..., ge=0, description="Files skipped (duplicates, errors)")
+    files_skipped: int = Field(
+        ..., ge=0, description="Files skipped (duplicates, errors)"
+    )
 
     # Processing information
-    estimated_time_minutes: Optional[int] = Field(None, description="Estimated processing time")
-    queue_position: Optional[int] = Field(None, description="Position in processing queue")
+    estimated_time_minutes: Optional[int] = Field(
+        None, description="Estimated processing time"
+    )
+    queue_position: Optional[int] = Field(
+        None, description="Position in processing queue"
+    )
 
     # File details
-    queued_files: List[str] = Field(default_factory=list, description="List of files queued for processing")
-    skipped_files: List[Dict[str, str]] = Field(default_factory=list, description="Files skipped with reasons")
+    queued_files: List[str] = Field(
+        default_factory=list, description="List of files queued for processing"
+    )
+    skipped_files: List[Dict[str, str]] = Field(
+        default_factory=list, description="Files skipped with reasons"
+    )
 
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
@@ -130,8 +162,8 @@ class BatchConvertResponse(BaseModel):
                 "queued_files": ["doc1.pdf", "doc2.pdf", "doc3.pdf"],
                 "skipped_files": [
                     {"file": "corrupted.pdf", "reason": "File is corrupted"},
-                    {"file": "duplicate.pdf", "reason": "Already processed"}
-                ]
+                    {"file": "duplicate.pdf", "reason": "Already processed"},
+                ],
             }
         }
 
@@ -155,7 +187,9 @@ class SearchResult(BaseModel):
     rank: int = Field(..., ge=1, description="Result rank (1-based)")
 
     # Context
-    page_number: Optional[int] = Field(None, description="Page number where content was found")
+    page_number: Optional[int] = Field(
+        None, description="Page number where content was found"
+    )
     chunk_index: Optional[int] = Field(None, description="Chunk index within page")
 
     # Metadata
@@ -174,7 +208,7 @@ class SearchResult(BaseModel):
                 "rank": 1,
                 "page_number": 15,
                 "chunk_index": 3,
-                "metadata": {"has_formulas": True, "word_count": 247}
+                "metadata": {"has_formulas": True, "word_count": 247},
             }
         }
 
@@ -186,7 +220,9 @@ class SearchResponse(BaseModel):
     query: str = Field(..., description="Original search query")
 
     # Results
-    results: List[SearchResult] = Field(default_factory=list, description="Search results")
+    results: List[SearchResult] = Field(
+        default_factory=list, description="Search results"
+    )
     total_results: int = Field(..., ge=0, description="Total number of results found")
 
     # Performance
@@ -197,7 +233,9 @@ class SearchResponse(BaseModel):
     threshold: Optional[float] = Field(None, description="Similarity threshold used")
 
     # Filters applied
-    filters: Optional[Dict[str, Any]] = Field(None, description="Filters that were applied")
+    filters: Optional[Dict[str, Any]] = Field(
+        None, description="Filters that were applied"
+    )
 
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
@@ -212,7 +250,7 @@ class SearchResponse(BaseModel):
                         "filename": "ml_guide.pdf",
                         "content": "Various machine learning algorithms...",
                         "similarity_score": 0.92,
-                        "rank": 1
+                        "rank": 1,
                     }
                 ],
                 "total_results": 15,
@@ -225,6 +263,7 @@ class SearchResponse(BaseModel):
 
 class JobStatus(str, Enum):
     """Background job status."""
+
     QUEUED = "queued"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -240,12 +279,16 @@ class StatusResponse(BaseModel):
     status: Optional[JobStatus] = Field(None, description="Job status")
 
     # Progress information
-    progress_percent: Optional[float] = Field(None, ge=0.0, le=100.0, description="Completion percentage")
+    progress_percent: Optional[float] = Field(
+        None, ge=0.0, le=100.0, description="Completion percentage"
+    )
     current_step: Optional[str] = Field(None, description="Current processing step")
 
     # Timing
     started_at: Optional[datetime] = Field(None, description="Job start time")
-    estimated_completion: Optional[datetime] = Field(None, description="Estimated completion time")
+    estimated_completion: Optional[datetime] = Field(
+        None, description="Estimated completion time"
+    )
     completed_at: Optional[datetime] = Field(None, description="Job completion time")
 
     # Queue statistics
@@ -254,10 +297,14 @@ class StatusResponse(BaseModel):
 
     # System statistics
     total_documents: int = Field(..., ge=0, description="Total documents in database")
-    processing_rate_per_hour: Optional[float] = Field(None, description="Average processing rate")
+    processing_rate_per_hour: Optional[float] = Field(
+        None, description="Average processing rate"
+    )
 
     # Error information
-    error_message: Optional[str] = Field(None, description="Error message if job failed")
+    error_message: Optional[str] = Field(
+        None, description="Error message if job failed"
+    )
     retry_count: Optional[int] = Field(None, description="Number of retry attempts")
 
     timestamp: datetime = Field(default_factory=datetime.utcnow)
@@ -275,7 +322,7 @@ class StatusResponse(BaseModel):
                 "queue_depth": 5,
                 "active_jobs": 3,
                 "total_documents": 1247,
-                "processing_rate_per_hour": 12.5
+                "processing_rate_per_hour": 12.5,
             }
         }
 
@@ -283,18 +330,28 @@ class StatusResponse(BaseModel):
 class ConfigurationResponse(BaseModel):
     """Response model for configuration operations."""
 
-    success: bool = Field(..., description="Whether configuration update was successful")
+    success: bool = Field(
+        ..., description="Whether configuration update was successful"
+    )
     message: str = Field(..., description="Status message")
 
     # Updated configuration
-    watch_directories: Optional[List[str]] = Field(None, description="Active watch directories")
-    embedding_provider: Optional[str] = Field(None, description="Current embedding provider")
+    watch_directories: Optional[List[str]] = Field(
+        None, description="Active watch directories"
+    )
+    embedding_provider: Optional[str] = Field(
+        None, description="Current embedding provider"
+    )
 
     # Service status
-    services_restarted: List[str] = Field(default_factory=list, description="Services that were restarted")
+    services_restarted: List[str] = Field(
+        default_factory=list, description="Services that were restarted"
+    )
 
     # Validation results
-    validation_errors: List[str] = Field(default_factory=list, description="Configuration validation errors")
+    validation_errors: List[str] = Field(
+        default_factory=list, description="Configuration validation errors"
+    )
 
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
@@ -306,7 +363,7 @@ class ConfigurationResponse(BaseModel):
                 "watch_directories": ["/home/user/Documents", "/shared/pdfs"],
                 "embedding_provider": "ollama",
                 "services_restarted": ["file_watcher"],
-                "validation_errors": []
+                "validation_errors": [],
             }
         }
 
@@ -319,7 +376,9 @@ class HealthResponse(BaseModel):
     version: str = Field(..., description="Service version")
 
     # Component health
-    checks: Dict[str, str] = Field(..., description="Individual component health status")
+    checks: Dict[str, str] = Field(
+        ..., description="Individual component health status"
+    )
 
     # System information
     uptime_seconds: Optional[int] = Field(None, description="Service uptime")
@@ -338,10 +397,10 @@ class HealthResponse(BaseModel):
                     "database": "healthy",
                     "celery": "healthy",
                     "embeddings": "healthy",
-                    "storage": "healthy"
+                    "storage": "healthy",
                 },
                 "uptime_seconds": 3600,
                 "memory_usage_mb": 256.5,
-                "cpu_percent": 12.3
+                "cpu_percent": 12.3,
             }
         }

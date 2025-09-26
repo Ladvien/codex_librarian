@@ -9,7 +9,7 @@ import asyncio
 from pdf_to_markdown_mcp.services.embeddings import (
     create_embedding_service,
     EmbeddingProvider,
-    EmbeddingConfig
+    EmbeddingConfig,
 )
 
 
@@ -30,9 +30,7 @@ async def main():
     print("\n1. Using Ollama (Local) Provider:")
     try:
         ollama_service = await create_embedding_service(
-            provider=EmbeddingProvider.OLLAMA,
-            batch_size=2,
-            max_retries=1
+            provider=EmbeddingProvider.OLLAMA, batch_size=2, max_retries=1
         )
 
         print(f"✅ Service initialized with {ollama_service.config.provider}")
@@ -59,9 +57,7 @@ async def main():
     print("\n2. Using OpenAI Provider:")
     try:
         openai_service = await create_embedding_service(
-            provider=EmbeddingProvider.OPENAI,
-            batch_size=10,
-            embedding_dimensions=1536
+            provider=EmbeddingProvider.OPENAI, batch_size=10, embedding_dimensions=1536
         )
 
         print(f"✅ Service initialized with {openai_service.config.provider}")
@@ -79,10 +75,10 @@ async def main():
 
     # Create sample embeddings for demo
     sample_embeddings = [
-        [1.0, 0.0, 0.0],    # Document 1
-        [0.0, 1.0, 0.0],    # Document 2
-        [0.7, 0.7, 0.0],    # Document 3 (similar to both)
-        [0.0, 0.0, 1.0],    # Document 4
+        [1.0, 0.0, 0.0],  # Document 1
+        [0.0, 1.0, 0.0],  # Document 2
+        [0.7, 0.7, 0.0],  # Document 3 (similar to both)
+        [0.0, 0.0, 1.0],  # Document 4
     ]
 
     query_vector = [0.8, 0.6, 0.0]  # Query similar to documents 1 and 3
@@ -93,10 +89,7 @@ async def main():
 
     # Perform similarity search
     search_results = await service.similarity_search(
-        query_vector,
-        sample_embeddings,
-        top_k=3,
-        metric="cosine"
+        query_vector, sample_embeddings, top_k=3, metric="cosine"
     )
 
     print("   Query vector: [0.8, 0.6, 0.0]")
@@ -108,16 +101,16 @@ async def main():
     print("\n4. Embedding Normalization Demo:")
 
     unnormalized = [
-        [3.0, 4.0],         # Magnitude = 5
-        [5.0, 12.0],        # Magnitude = 13
-        [0.0, 0.0],         # Zero vector
+        [3.0, 4.0],  # Magnitude = 5
+        [5.0, 12.0],  # Magnitude = 13
+        [0.0, 0.0],  # Zero vector
     ]
 
     normalized = await service.normalize_embeddings(unnormalized)
 
     print("   Original vectors -> Normalized vectors:")
     for orig, norm in zip(unnormalized, normalized):
-        magnitude = (sum(x**2 for x in norm))**0.5 if norm != [0.0, 0.0] else 0.0
+        magnitude = (sum(x**2 for x in norm)) ** 0.5 if norm != [0.0, 0.0] else 0.0
         print(f"     {orig} -> {norm} (magnitude: {magnitude:.4f})")
 
     print("\n✅ Embedding service demo completed!")

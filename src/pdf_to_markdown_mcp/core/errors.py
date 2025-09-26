@@ -36,7 +36,7 @@ import threading
 from collections import defaultdict, deque
 
 # Type variables for generic retry mechanisms
-T = TypeVar('T')
+T = TypeVar("T")
 
 logger = logging.getLogger(__name__)
 
@@ -44,18 +44,20 @@ logger = logging.getLogger(__name__)
 # Error Categories and Classification
 # =============================================================================
 
+
 class ErrorCategory(Enum):
     """Security-focused error categorization for retry and handling strategies."""
-    VALIDATION = auto()      # Input validation failures - never retry
-    SECURITY = auto()        # Security violations - never retry, log for monitoring
+
+    VALIDATION = auto()  # Input validation failures - never retry
+    SECURITY = auto()  # Security violations - never retry, log for monitoring
     AUTHENTICATION = auto()  # Auth failures - never retry, monitor for attacks
-    AUTHORIZATION = auto()   # Permission failures - never retry
-    RATE_LIMIT = auto()      # Rate limiting - temporary, suggest retry after
-    TRANSIENT = auto()       # Temporary failures - safe to retry
-    RESOURCE = auto()        # Resource exhaustion - retry with backoff
-    PERMANENT = auto()       # Permanent failures - never retry
-    CONFIGURATION = auto()   # Config errors - never retry until fixed
-    EXTERNAL = auto()        # External service failures - retry with circuit breaker
+    AUTHORIZATION = auto()  # Permission failures - never retry
+    RATE_LIMIT = auto()  # Rate limiting - temporary, suggest retry after
+    TRANSIENT = auto()  # Temporary failures - safe to retry
+    RESOURCE = auto()  # Resource exhaustion - retry with backoff
+    PERMANENT = auto()  # Permanent failures - never retry
+    CONFIGURATION = auto()  # Config errors - never retry until fixed
+    EXTERNAL = auto()  # External service failures - retry with circuit breaker
 
 
 def create_correlation_id() -> str:
@@ -63,7 +65,7 @@ def create_correlation_id() -> str:
     return f"{uuid.uuid4().hex[:8]}-{int(time.time())}"
 
 
-def sanitize_error_for_user(error: 'PDFToMarkdownError') -> str:
+def sanitize_error_for_user(error: "PDFToMarkdownError") -> str:
     """
     Sanitize error message for external user consumption.
 
@@ -85,7 +87,7 @@ def sanitize_error_for_user(error: 'PDFToMarkdownError') -> str:
         # Only show safe validation messages
         safe_message = error.message
         # Remove any potential sensitive information
-        for sensitive_term in ['password', 'token', 'key', 'secret', 'credential']:
+        for sensitive_term in ["password", "token", "key", "secret", "credential"]:
             if sensitive_term.lower() in safe_message.lower():
                 return "Invalid input provided. Please check your request."
         return safe_message
@@ -103,6 +105,7 @@ def sanitize_error_for_user(error: 'PDFToMarkdownError') -> str:
 # =============================================================================
 # Base Error Hierarchy
 # =============================================================================
+
 
 class PDFToMarkdownError(Exception):
     """
@@ -122,7 +125,7 @@ class PDFToMarkdownError(Exception):
         correlation_id: Optional[str] = None,
         internal_details: Optional[str] = None,
         user_message: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ):
         super().__init__(message)
         self.message = message
@@ -141,12 +144,12 @@ class PDFToMarkdownError(Exception):
     def to_structured_log(self) -> Dict[str, Any]:
         """Convert to structured log format with sensitive data removed."""
         log_data = {
-            'error_type': self.__class__.__name__,
-            'message': self.message,
-            'error_code': self.error_code,
-            'correlation_id': self.correlation_id,
-            'timestamp': self.timestamp.isoformat(),
-            'metadata': self._sanitize_metadata(self.metadata)
+            "error_type": self.__class__.__name__,
+            "message": self.message,
+            "error_code": self.error_code,
+            "correlation_id": self.correlation_id,
+            "timestamp": self.timestamp.isoformat(),
+            "metadata": self._sanitize_metadata(self.metadata),
         }
 
         # Never include internal_details in logs
@@ -156,16 +159,23 @@ class PDFToMarkdownError(Exception):
         """Remove sensitive information from metadata."""
         sanitized = {}
         sensitive_keys = {
-            'password', 'token', 'secret', 'key', 'credential',
-            'auth', 'session', 'cookie', 'connection_string'
+            "password",
+            "token",
+            "secret",
+            "key",
+            "credential",
+            "auth",
+            "session",
+            "cookie",
+            "connection_string",
         }
 
         for key, value in metadata.items():
             if any(sensitive_key in key.lower() for sensitive_key in sensitive_keys):
-                sanitized[key] = '[REDACTED]'
+                sanitized[key] = "[REDACTED]"
             elif isinstance(value, str) and len(value) > 100:
                 # Truncate long strings that might contain sensitive data
-                sanitized[key] = value[:97] + '...'
+                sanitized[key] = value[:97] + "..."
             else:
                 sanitized[key] = value
 
@@ -175,6 +185,7 @@ class PDFToMarkdownError(Exception):
 # =============================================================================
 # Security-Focused Error Types
 # =============================================================================
+
 
 class SecurityError(PDFToMarkdownError):
     """Base class for all security-related errors. Never retried."""
@@ -186,11 +197,11 @@ class SecurityError(PDFToMarkdownError):
         logger.warning(
             f"Security event: {security_event_type}",
             extra={
-                'security_event': True,
-                'event_type': security_event_type,
-                'correlation_id': self.correlation_id,
-                'timestamp': self.timestamp.isoformat()
-            }
+                "security_event": True,
+                "event_type": security_event_type,
+                "correlation_id": self.correlation_id,
+                "timestamp": self.timestamp.isoformat(),
+            },
         )
 
 
@@ -198,7 +209,9 @@ class AuthenticationError(SecurityError):
     """Authentication failures. Monitor for potential attacks."""
 
     def __init__(self, message: str, user_identifier: Optional[str] = None, **kwargs):
-        super().__init__(message, security_event_type="authentication_failure", **kwargs)
+        super().__init__(
+            message, security_event_type="authentication_failure", **kwargs
+        )
         self.user_identifier = user_identifier
         # Don't include user_identifier in metadata to prevent leaks
 
@@ -219,7 +232,7 @@ class InputValidationError(SecurityError):
         message: str,
         input_value: Optional[str] = None,
         validation_rule: Optional[str] = None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(message, security_event_type="validation_failure", **kwargs)
         self.input_value = input_value  # Never exposed in logs
@@ -230,20 +243,31 @@ class InputValidationError(SecurityError):
             logger.error(
                 f"Potential injection attempt detected",
                 extra={
-                    'security_alert': True,
-                    'validation_rule': validation_rule,
-                    'correlation_id': self.correlation_id
-                }
+                    "security_alert": True,
+                    "validation_rule": validation_rule,
+                    "correlation_id": self.correlation_id,
+                },
             )
 
     def _detect_injection_attempt(self, input_value: str) -> bool:
         """Detect potential injection patterns."""
         injection_patterns = [
-            "DROP TABLE", "DELETE FROM", "INSERT INTO", "UPDATE SET",
-            "<script>", "javascript:", "eval(", "exec(",
-            "../", "..\\", "/etc/passwd", "cmd.exe"
+            "DROP TABLE",
+            "DELETE FROM",
+            "INSERT INTO",
+            "UPDATE SET",
+            "<script>",
+            "javascript:",
+            "eval(",
+            "exec(",
+            "../",
+            "..\\",
+            "/etc/passwd",
+            "cmd.exe",
         ]
-        return any(pattern.lower() in input_value.lower() for pattern in injection_patterns)
+        return any(
+            pattern.lower() in input_value.lower() for pattern in injection_patterns
+        )
 
 
 class RateLimitError(SecurityError):
@@ -254,7 +278,7 @@ class RateLimitError(SecurityError):
         message: str,
         user_id: Optional[str] = None,
         retry_after: int = 60,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(message, security_event_type="rate_limit_exceeded", **kwargs)
         self.user_id = user_id
@@ -265,7 +289,7 @@ class RateLimitError(SecurityError):
         return {
             "Retry-After": str(self.retry_after),
             "X-RateLimit-Remaining": "0",
-            "X-RateLimit-Reset": str(int(time.time()) + self.retry_after)
+            "X-RateLimit-Reset": str(int(time.time()) + self.retry_after),
         }
 
 
@@ -273,8 +297,10 @@ class RateLimitError(SecurityError):
 # Operational Error Types
 # =============================================================================
 
+
 class ValidationError(PDFToMarkdownError):
     """Input validation errors. Never retried."""
+
     pass
 
 
@@ -288,6 +314,7 @@ class TransientError(PDFToMarkdownError):
 
 class PermanentError(PDFToMarkdownError):
     """Permanent errors that should never be retried."""
+
     pass
 
 
@@ -315,7 +342,7 @@ class EmbeddingError(TransientError):
         message: str,
         provider: Optional[str] = None,
         model: Optional[str] = None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(message, **kwargs)
         self.provider = provider
@@ -340,18 +367,26 @@ class ResourceError(TransientError):
 
 class ConfigurationError(PermanentError):
     """Configuration errors. Not retryable until config is fixed."""
+
     pass
 
 
 class TimeoutError(TransientError):
     """Operation timeout errors. Usually retryable."""
+
     pass
 
 
 class CircuitBreakerError(TransientError):
     """Circuit breaker is open. Temporary restriction."""
 
-    def __init__(self, message: str, service_name: str, estimated_recovery_time: int = 60, **kwargs):
+    def __init__(
+        self,
+        message: str,
+        service_name: str,
+        estimated_recovery_time: int = 60,
+        **kwargs,
+    ):
         super().__init__(message, **kwargs)
         self.service_name = service_name
         self.estimated_recovery_time = estimated_recovery_time
@@ -360,6 +395,7 @@ class CircuitBreakerError(TransientError):
 # =============================================================================
 # Error Categorization and Strategy Selection
 # =============================================================================
+
 
 def categorize_error(error: Exception) -> ErrorCategory:
     """Categorize errors for appropriate handling strategies."""
@@ -394,7 +430,7 @@ def is_retryable_error(error: Exception) -> bool:
         ErrorCategory.AUTHENTICATION,
         ErrorCategory.AUTHORIZATION,
         ErrorCategory.PERMANENT,
-        ErrorCategory.CONFIGURATION
+        ErrorCategory.CONFIGURATION,
     }
 
     return category not in non_retryable
@@ -404,9 +440,11 @@ def is_retryable_error(error: Exception) -> bool:
 # Retry Configuration and Strategies
 # =============================================================================
 
+
 @dataclass
 class RetryConfig:
     """Configuration for retry mechanisms."""
+
     max_retries: int = 3
     base_delay: float = 1.0
     max_delay: float = 60.0
@@ -426,12 +464,13 @@ class ExponentialBackoffRetry:
         if attempt >= self.config.max_retries:
             return 0
 
-        delay = self.config.base_delay * (self.config.backoff_multiplier ** attempt)
+        delay = self.config.base_delay * (self.config.backoff_multiplier**attempt)
         delay = min(delay, self.config.max_delay)
 
         if self.config.jitter:
             # Add ±25% jitter to prevent thundering herd
             import random
+
             jitter_factor = 0.75 + (random.random() * 0.5)
             delay *= jitter_factor
 
@@ -454,9 +493,7 @@ def get_retry_strategy(error: Exception) -> RetryConfig:
         # Special handling for rate limits
         if isinstance(error, RateLimitError):
             return RetryConfig(
-                max_retries=1,
-                base_delay=error.retry_after,
-                max_delay=error.retry_after
+                max_retries=1, base_delay=error.retry_after, max_delay=error.retry_after
             )
         return RetryConfig(max_retries=1, base_delay=60)
     elif category == ErrorCategory.TRANSIENT:
@@ -473,9 +510,10 @@ def get_retry_strategy(error: Exception) -> RetryConfig:
 # Circuit Breaker Implementation
 # =============================================================================
 
+
 class CircuitBreakerState(Enum):
-    CLOSED = "CLOSED"    # Normal operation
-    OPEN = "OPEN"        # Failing, reject requests
+    CLOSED = "CLOSED"  # Normal operation
+    OPEN = "OPEN"  # Failing, reject requests
     HALF_OPEN = "HALF_OPEN"  # Testing recovery
 
 
@@ -487,7 +525,7 @@ class CircuitBreaker:
         failure_threshold: int = 5,
         recovery_timeout: int = 60,
         success_threshold: int = 2,
-        name: str = "default"
+        name: str = "default",
     ):
         self.failure_threshold = failure_threshold
         self.recovery_timeout = recovery_timeout
@@ -515,7 +553,7 @@ class CircuitBreaker:
                     raise CircuitBreakerError(
                         f"Circuit breaker {self.name} is OPEN",
                         service_name=self.name,
-                        estimated_recovery_time=self.recovery_timeout
+                        estimated_recovery_time=self.recovery_timeout,
                     )
 
         try:
@@ -564,6 +602,7 @@ class CircuitBreaker:
 # Retry Manager and Execution
 # =============================================================================
 
+
 class RetryManager:
     """Manages retry logic with circuit breakers and error tracking."""
 
@@ -582,7 +621,7 @@ class RetryManager:
         operation: Callable[[], T],
         operation_name: str,
         service_name: Optional[str] = None,
-        retry_config: Optional[RetryConfig] = None
+        retry_config: Optional[RetryConfig] = None,
     ) -> T:
         """Execute operation with retry logic and circuit breaker protection."""
         last_error = None
@@ -608,9 +647,7 @@ class RetryManager:
                 # Track error for monitoring
                 if self.error_tracker:
                     self.error_tracker.record_error(
-                        error=e,
-                        operation=operation_name,
-                        component="retry_manager"
+                        error=e, operation=operation_name, component="retry_manager"
                     )
 
                 # Determine if we should retry
@@ -622,7 +659,7 @@ class RetryManager:
                 if not retry_mechanism.should_retry(attempt, e):
                     logger.error(
                         f"Operation {operation_name} failed permanently after {attempt} attempts",
-                        extra={'correlation_id': getattr(e, 'correlation_id', None)}
+                        extra={"correlation_id": getattr(e, "correlation_id", None)},
                     )
                     raise e
 
@@ -642,9 +679,11 @@ class RetryManager:
 # Error Tracking and Metrics
 # =============================================================================
 
+
 @dataclass
 class ErrorMetrics:
     """Error metrics for monitoring and alerting."""
+
     total_errors: int = 0
     errors_by_type: Dict[str, int] = field(default_factory=dict)
     errors_by_category: Dict[str, int] = field(default_factory=dict)
@@ -674,19 +713,19 @@ class ErrorTracker:
         error: Exception,
         operation: str,
         component: str = "unknown",
-        user_context: Optional[Dict[str, Any]] = None
+        user_context: Optional[Dict[str, Any]] = None,
     ):
         """Record error for tracking and metrics."""
         now = time.time()
 
         error_record = {
-            'timestamp': now,
-            'error_type': error.__class__.__name__,
-            'error_category': categorize_error(error).name,
-            'operation': operation,
-            'component': component,
-            'correlation_id': getattr(error, 'correlation_id', None),
-            'user_id': user_context.get('user_id') if user_context else None
+            "timestamp": now,
+            "error_type": error.__class__.__name__,
+            "error_category": categorize_error(error).name,
+            "operation": operation,
+            "component": component,
+            "correlation_id": getattr(error, "correlation_id", None),
+            "user_id": user_context.get("user_id") if user_context else None,
         }
 
         with self._lock:
@@ -697,8 +736,8 @@ class ErrorTracker:
             self.errors.append(error_record)
 
             # Track user-specific errors for rate limiting
-            if user_context and 'user_id' in user_context:
-                user_id = user_context['user_id']
+            if user_context and "user_id" in user_context:
+                user_id = user_context["user_id"]
                 self.user_errors[user_id].append(error_record)
 
     def get_metrics(self) -> ErrorMetrics:
@@ -711,19 +750,27 @@ class ErrorTracker:
 
             # Aggregate by type, category, operation
             for error_record in self.errors:
-                error_type = error_record['error_type']
-                error_category = error_record['error_category']
-                operation = error_record['operation']
+                error_type = error_record["error_type"]
+                error_category = error_record["error_category"]
+                operation = error_record["operation"]
 
-                metrics.errors_by_type[error_type] = metrics.errors_by_type.get(error_type, 0) + 1
-                metrics.errors_by_category[error_category] = metrics.errors_by_category.get(error_category, 0) + 1
-                metrics.errors_by_operation[operation] = metrics.errors_by_operation.get(operation, 0) + 1
+                metrics.errors_by_type[error_type] = (
+                    metrics.errors_by_type.get(error_type, 0) + 1
+                )
+                metrics.errors_by_category[error_category] = (
+                    metrics.errors_by_category.get(error_category, 0) + 1
+                )
+                metrics.errors_by_operation[operation] = (
+                    metrics.errors_by_operation.get(operation, 0) + 1
+                )
 
             # Calculate user error rates
             for user_id, user_error_list in self.user_errors.items():
                 error_count = len(user_error_list)
                 # Simple error rate: errors per minute
-                metrics.error_rate_by_user[user_id] = error_count / (self.window_size / 60)
+                metrics.error_rate_by_user[user_id] = error_count / (
+                    self.window_size / 60
+                )
 
             return metrics
 
@@ -732,13 +779,13 @@ class ErrorTracker:
         cutoff_time = time.time() - self.window_size
 
         # Clean main error list
-        while self.errors and self.errors[0]['timestamp'] < cutoff_time:
+        while self.errors and self.errors[0]["timestamp"] < cutoff_time:
             self.errors.popleft()
 
         # Clean user error lists
         for user_id in list(self.user_errors.keys()):
             user_error_list = self.user_errors[user_id]
-            while user_error_list and user_error_list[0]['timestamp'] < cutoff_time:
+            while user_error_list and user_error_list[0]["timestamp"] < cutoff_time:
                 user_error_list.popleft()
 
             # Remove empty user lists
@@ -750,6 +797,7 @@ class ErrorTracker:
 # Graceful Degradation Support
 # =============================================================================
 
+
 class GracefulDegradationManager:
     """Manages graceful degradation when services fail."""
 
@@ -757,7 +805,7 @@ class GracefulDegradationManager:
         self,
         primary_operation: Callable[[], T],
         fallback_operation: Callable[[], T],
-        operation_name: str
+        operation_name: str,
     ) -> T:
         """Execute primary operation with fallback on failure."""
         try:
@@ -789,17 +837,17 @@ class TimeoutManager:
         self.timeout_seconds = timeout_seconds
 
     def execute_with_timeout(
-        self,
-        operation: Callable[[], T],
-        resource_manager: Optional[Any] = None
+        self, operation: Callable[[], T], resource_manager: Optional[Any] = None
     ) -> T:
         """Execute operation with timeout and resource cleanup."""
         import signal
 
         def timeout_handler(signum, frame):
-            if resource_manager and hasattr(resource_manager, 'cleanup'):
+            if resource_manager and hasattr(resource_manager, "cleanup"):
                 resource_manager.cleanup()
-            raise TimeoutError(f"Operation timed out after {self.timeout_seconds} seconds")
+            raise TimeoutError(
+                f"Operation timed out after {self.timeout_seconds} seconds"
+            )
 
         # Set up timeout
         signal.signal(signal.SIGALRM, timeout_handler)
@@ -811,7 +859,7 @@ class TimeoutManager:
             return result
         except Exception as e:
             signal.alarm(0)  # Cancel timeout
-            if resource_manager and hasattr(resource_manager, 'cleanup'):
+            if resource_manager and hasattr(resource_manager, "cleanup"):
                 resource_manager.cleanup()
             raise
 
@@ -819,6 +867,7 @@ class TimeoutManager:
 @dataclass
 class PartialSuccessResult:
     """Result of batch operations with partial success."""
+
     successful_items: List[Any]
     failed_items: List[Any]
     errors: List[Exception]
@@ -834,11 +883,11 @@ class PartialSuccessHandler:
         self,
         items: List[Any],
         processor: Callable[[List[Any]], tuple[List[Any], List[Exception]]],
-        min_success_rate: float = 0.5
+        min_success_rate: float = 0.5,
     ) -> PartialSuccessResult:
         """Handle batch operation with partial success support."""
         successful_items, errors = processor(items)
-        failed_items = items[len(successful_items):]
+        failed_items = items[len(successful_items) :]
 
         success_count = len(successful_items)
         error_count = len(errors)
@@ -851,7 +900,7 @@ class PartialSuccessHandler:
             errors=errors,
             success_count=success_count,
             error_count=error_count,
-            success_rate=success_rate
+            success_rate=success_rate,
         )
 
         if success_rate < min_success_rate:
@@ -866,6 +915,7 @@ class PartialSuccessHandler:
 # Dead Letter Queue and Recovery
 # =============================================================================
 
+
 class DeadLetterQueueManager:
     """Manages failed tasks for later recovery."""
 
@@ -876,7 +926,7 @@ class DeadLetterQueueManager:
     def add_failed_task(self, task_data: Dict[str, Any]):
         """Add failed task to dead letter queue."""
         with self._lock:
-            task_data['dlq_timestamp'] = datetime.utcnow().isoformat()
+            task_data["dlq_timestamp"] = datetime.utcnow().isoformat()
             self.failed_tasks.append(task_data)
 
     def get_failed_tasks(self) -> List[Dict[str, Any]]:
@@ -888,7 +938,7 @@ class DeadLetterQueueManager:
         """Remove task from dead letter queue."""
         with self._lock:
             for i, task in enumerate(self.failed_tasks):
-                if task.get('task_id') == task_id:
+                if task.get("task_id") == task_id:
                     del self.failed_tasks[i]
                     return True
             return False
@@ -897,6 +947,7 @@ class DeadLetterQueueManager:
 @dataclass
 class RecoveryStrategy:
     """Recovery strategy for different error types."""
+
     strategy_type: str
     retry_delay: int = 0
     max_attempts: int = 0
@@ -916,20 +967,18 @@ class RecoveryStrategyManager:
                     strategy_type="reconnect_and_retry",
                     retry_delay=5,
                     max_attempts=3,
-                    recovery_action="reconnect_database"
+                    recovery_action="reconnect_database",
                 )
             else:
                 return RecoveryStrategy(
-                    strategy_type="simple_retry",
-                    retry_delay=2,
-                    max_attempts=3
+                    strategy_type="simple_retry", retry_delay=2, max_attempts=3
                 )
         elif category == ErrorCategory.RESOURCE:
             return RecoveryStrategy(
                 strategy_type="wait_and_retry",
                 retry_delay=30,
                 max_attempts=5,
-                recovery_action="wait_for_resources"
+                recovery_action="wait_for_resources",
             )
         else:
             return RecoveryStrategy(strategy_type="no_recovery")
@@ -951,11 +1000,12 @@ global_retry_manager.error_tracker = global_error_tracker
 # Convenience Functions
 # =============================================================================
 
+
 def track_error(
     error: Exception,
     operation: str,
     component: str = "unknown",
-    user_context: Optional[Dict[str, Any]] = None
+    user_context: Optional[Dict[str, Any]] = None,
 ):
     """Convenience function to track errors globally."""
     global_error_tracker.record_error(error, operation, component, user_context)
@@ -965,7 +1015,7 @@ async def retry_async_operation(
     operation: Callable[[], T],
     operation_name: str,
     service_name: Optional[str] = None,
-    retry_config: Optional[RetryConfig] = None
+    retry_config: Optional[RetryConfig] = None,
 ) -> T:
     """Convenience function for retrying async operations."""
     return await global_retry_manager.execute_with_retry(
@@ -977,6 +1027,7 @@ async def retry_async_operation(
 # Security Validation Helpers
 # =============================================================================
 
+
 def validate_file_path(file_path: str) -> str:
     """Validate and sanitize file path to prevent directory traversal."""
     import os
@@ -984,27 +1035,25 @@ def validate_file_path(file_path: str) -> str:
 
     if not file_path:
         raise InputValidationError(
-            "File path cannot be empty",
-            validation_rule="path_not_empty"
+            "File path cannot be empty", validation_rule="path_not_empty"
         )
 
     # Check for directory traversal
-    if '..' in file_path or file_path.startswith('/'):
+    if ".." in file_path or file_path.startswith("/"):
         raise InputValidationError(
-            "Invalid file path detected",
-            validation_rule="directory_traversal_check"
+            "Invalid file path detected", validation_rule="directory_traversal_check"
         )
 
     # Normalize path
     normalized = os.path.normpath(file_path)
 
     # Additional security checks
-    dangerous_patterns = ['../', '..\\', '/etc/', 'C:\\']
+    dangerous_patterns = ["../", "..\\", "/etc/", "C:\\"]
     for pattern in dangerous_patterns:
         if pattern in normalized:
             raise InputValidationError(
                 "Potentially dangerous file path",
-                validation_rule="dangerous_path_check"
+                validation_rule="dangerous_path_check",
             )
 
     return normalized
@@ -1015,7 +1064,7 @@ def validate_input_size(input_data: str, max_size: int = 10000) -> str:
     if len(input_data) > max_size:
         raise InputValidationError(
             f"Input size exceeds maximum allowed ({max_size} characters)",
-            validation_rule="input_size_limit"
+            validation_rule="input_size_limit",
         )
     return input_data
 
@@ -1023,17 +1072,18 @@ def validate_input_size(input_data: str, max_size: int = 10000) -> str:
 def sanitize_log_message(message: str) -> str:
     """Sanitize log message to remove sensitive information."""
     sensitive_patterns = [
-        r'password[=:]\s*\S+',
-        r'token[=:]\s*\S+',
-        r'key[=:]\s*\S+',
-        r'secret[=:]\s*\S+',
-        r'credential[=:]\s*\S+'
+        r"password[=:]\s*\S+",
+        r"token[=:]\s*\S+",
+        r"key[=:]\s*\S+",
+        r"secret[=:]\s*\S+",
+        r"credential[=:]\s*\S+",
     ]
 
     import re
+
     sanitized = message
     for pattern in sensitive_patterns:
-        sanitized = re.sub(pattern, '[REDACTED]', sanitized, flags=re.IGNORECASE)
+        sanitized = re.sub(pattern, "[REDACTED]", sanitized, flags=re.IGNORECASE)
 
     return sanitized
 

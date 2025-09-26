@@ -54,7 +54,6 @@ __all__ = [
     "DocumentEmbedding",
     "DocumentImage",
     "ProcessingStatus",
-
     # Request models
     "ConvertSingleRequest",
     "BatchConvertRequest",
@@ -63,7 +62,6 @@ __all__ = [
     "FindSimilarRequest",
     "ConfigurationRequest",
     "ProcessingOptions",
-
     # Response models
     "ConvertSingleResponse",
     "BatchConvertResponse",
@@ -73,7 +71,6 @@ __all__ = [
     "ConfigurationResponse",
     "ErrorResponse",
     "HealthResponse",
-
     # Processing models
     "TableData",
     "FormulaData",
@@ -81,7 +78,6 @@ __all__ = [
     "ChunkData",
     "ProcessingMetadata",
     "ProcessingResult",
-
     # DTO models
     "ProcessingStatusType",
     "DocumentDTO",

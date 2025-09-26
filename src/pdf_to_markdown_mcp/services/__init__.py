@@ -23,12 +23,14 @@ _available_services = []
 
 try:
     from .mineru import MinerUService
+
     _available_services.append("MinerUService")
 except ImportError:
     MinerUService = None
 
 try:
     from .database import DatabaseService
+
     _available_services.append("DatabaseService")
 except ImportError:
     DatabaseService = None

@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field, validator
 
 class ProcessingStatus(str, Enum):
     """Document processing status."""
+
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETED = "completed"
@@ -76,10 +77,16 @@ class DocumentContent(BaseModel):
     plain_text: str = Field(..., description="Plain text for full-text search")
 
     page_count: int = Field(..., ge=1, description="Number of pages processed")
-    has_images: bool = Field(default=False, description="Whether document contains images")
-    has_tables: bool = Field(default=False, description="Whether document contains tables")
+    has_images: bool = Field(
+        default=False, description="Whether document contains images"
+    )
+    has_tables: bool = Field(
+        default=False, description="Whether document contains tables"
+    )
 
-    processing_time_ms: int = Field(..., ge=0, description="Processing time in milliseconds")
+    processing_time_ms: int = Field(
+        ..., ge=0, description="Processing time in milliseconds"
+    )
     created_at: Optional[datetime] = None
 
     @validator("markdown_content", "plain_text")
@@ -176,7 +183,12 @@ class DocumentStats(BaseModel):
     total_size_mb: float = Field(..., ge=0.0)
     avg_processing_time_ms: Optional[float] = None
 
-    @validator("pending_documents", "processing_documents", "completed_documents", "failed_documents")
+    @validator(
+        "pending_documents",
+        "processing_documents",
+        "completed_documents",
+        "failed_documents",
+    )
     def validate_status_counts(cls, v, values):
         """Ensure status counts are consistent with total."""
         if "total_documents" in values:

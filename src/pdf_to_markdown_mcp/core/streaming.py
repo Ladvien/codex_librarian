@@ -22,7 +22,7 @@ from typing import (
     Union,
     Protocol,
     TypeVar,
-    Generic
+    Generic,
 )
 from dataclasses import dataclass, field
 from contextlib import asynccontextmanager
@@ -35,13 +35,13 @@ import gc
 from pdf_to_markdown_mcp.core.exceptions import (
     ResourceError,
     ProcessingError,
-    ValidationError
+    ValidationError,
 )
 
 logger = logging.getLogger(__name__)
 
 # Type definitions
-T = TypeVar('T')
+T = TypeVar("T")
 ChunkType = bytes
 ProgressCallback = Callable[[int, int, Optional[str]], None]
 
@@ -136,7 +136,7 @@ class StreamingMetrics:
             "backpressure_events": self.backpressure_events,
             "error_count": self.error_count,
             "elapsed_time": time.time() - self.start_time,
-            "estimated_completion": self.estimated_completion_time
+            "estimated_completion": self.estimated_completion_time,
         }
 
 
@@ -179,9 +179,9 @@ class MemoryMonitor:
 
         return {
             "system_memory_percent": memory.percent,
-            "system_available_gb": memory.available / (1024 ** 3),
-            "process_memory_mb": process.memory_info().rss / (1024 ** 2),
-            "max_memory_percent": self.max_memory_percent
+            "system_available_gb": memory.available / (1024**3),
+            "process_memory_mb": process.memory_info().rss / (1024**2),
+            "max_memory_percent": self.max_memory_percent,
         }
 
 
@@ -240,10 +240,7 @@ class MemoryMappedFileReader:
     """Memory-mapped file reader for efficient large file processing."""
 
     def __init__(
-        self,
-        file_path: Path,
-        chunk_size: Optional[int] = None,
-        read_ahead: bool = True
+        self, file_path: Path, chunk_size: Optional[int] = None, read_ahead: bool = True
     ):
         self.file_path = file_path
         self.file_size = file_path.stat().st_size
@@ -251,7 +248,8 @@ class MemoryMappedFileReader:
         # Choose optimal chunk size based on file size
         if chunk_size is None:
             self.chunk_size = (
-                LARGE_FILE_CHUNK_SIZE if self.file_size > 10 * 1024 * 1024
+                LARGE_FILE_CHUNK_SIZE
+                if self.file_size > 10 * 1024 * 1024
                 else DEFAULT_CHUNK_SIZE
             )
         else:
@@ -278,18 +276,14 @@ class MemoryMappedFileReader:
             return
 
         try:
-            self._file = open(self.file_path, 'rb')
+            self._file = open(self.file_path, "rb")
 
             # Use memory mapping for large files
             if self.file_size > DEFAULT_CHUNK_SIZE:
-                self._mmap = mmap.mmap(
-                    self._file.fileno(),
-                    0,
-                    access=mmap.ACCESS_READ
-                )
+                self._mmap = mmap.mmap(self._file.fileno(), 0, access=mmap.ACCESS_READ)
 
                 # Advise the kernel about our access pattern
-                if hasattr(mmap, 'MADV_SEQUENTIAL') and self.read_ahead:
+                if hasattr(mmap, "MADV_SEQUENTIAL") and self.read_ahead:
                     self._mmap.madvise(mmap.MADV_SEQUENTIAL)
 
             logger.debug(
@@ -327,7 +321,7 @@ class MemoryMappedFileReader:
             raise ValueError("File is closed")
 
         if self._current_position >= self.file_size:
-            return b''
+            return b""
 
         read_size = size or self.chunk_size
         remaining = self.file_size - self._current_position
@@ -336,7 +330,9 @@ class MemoryMappedFileReader:
         try:
             if self._mmap:
                 # Read from memory map
-                data = self._mmap[self._current_position:self._current_position + read_size]
+                data = self._mmap[
+                    self._current_position : self._current_position + read_size
+                ]
             else:
                 # Read from file directly for small files
                 self._file.seek(self._current_position)
@@ -393,7 +389,7 @@ class StreamingProgressTracker:
         self,
         operation_id: str,
         total_size: int,
-        callback: Optional[ProgressCallback] = None
+        callback: Optional[ProgressCallback] = None,
     ):
         self.operation_id = operation_id
         self.total_size = total_size
@@ -414,9 +410,7 @@ class StreamingProgressTracker:
                 self._subscribers.remove(callback)
 
     async def update_progress(
-        self,
-        bytes_processed: int,
-        current_step: Optional[str] = None
+        self, bytes_processed: int, current_step: Optional[str] = None
     ) -> None:
         """Update processing progress."""
         # Update metrics
@@ -427,29 +421,31 @@ class StreamingProgressTracker:
             "operation_id": self.operation_id,
             "current_step": current_step,
             "timestamp": time.time(),
-            **self.metrics.to_dict()
+            **self.metrics.to_dict(),
         }
 
         # Call callback if provided
         if self.callback:
             try:
                 self.callback(
-                    self.metrics.bytes_processed,
-                    self.metrics.total_bytes,
-                    current_step
+                    self.metrics.bytes_processed, self.metrics.total_bytes, current_step
                 )
             except Exception as e:
                 logger.warning(f"Progress callback error: {e}")
 
         # Notify subscribers
         with self._lock:
-            for subscriber in self._subscribers[:]:  # Copy to avoid modification during iteration
+            for subscriber in self._subscribers[
+                :
+            ]:  # Copy to avoid modification during iteration
                 try:
                     subscriber(progress_data)
                 except Exception as e:
                     logger.warning(f"Progress subscriber error: {e}")
 
-    async def set_completion(self, success: bool = True, error: Optional[str] = None) -> None:
+    async def set_completion(
+        self, success: bool = True, error: Optional[str] = None
+    ) -> None:
         """Mark operation as completed."""
         completion_data = {
             "operation_id": self.operation_id,
@@ -457,7 +453,7 @@ class StreamingProgressTracker:
             "success": success,
             "error": error,
             "timestamp": time.time(),
-            **self.metrics.to_dict()
+            **self.metrics.to_dict(),
         }
 
         # Notify subscribers
@@ -505,7 +501,7 @@ class ConcurrencyLimiter:
             return {
                 "max_concurrent": self.max_concurrent,
                 "active_count": len(self._active_operations),
-                "available_slots": self.max_concurrent - len(self._active_operations)
+                "available_slots": self.max_concurrent - len(self._active_operations),
             }
 
 
@@ -518,7 +514,7 @@ async def stream_large_file(
     operation_id: str,
     progress_callback: Optional[ProgressCallback] = None,
     chunk_size: Optional[int] = None,
-    memory_limit_percent: float = MAX_MEMORY_USAGE_PERCENT
+    memory_limit_percent: float = MAX_MEMORY_USAGE_PERCENT,
 ) -> AsyncIterator[bytes]:
     """
     Stream a large file with memory management and progress tracking.
@@ -549,9 +545,7 @@ async def stream_large_file(
 
     # Create progress tracker
     progress_tracker = StreamingProgressTracker(
-        operation_id=operation_id,
-        total_size=file_size,
-        callback=progress_callback
+        operation_id=operation_id, total_size=file_size, callback=progress_callback
     )
 
     # Create memory monitor
@@ -572,7 +566,7 @@ async def stream_large_file(
                     # Update progress
                     await progress_tracker.update_progress(
                         bytes_processed=len(chunk),
-                        current_step=f"Reading chunk {chunk_count + 1}"
+                        current_step=f"Reading chunk {chunk_count + 1}",
                     )
 
                     chunk_count += 1
@@ -596,7 +590,7 @@ async def stream_processing_with_backpressure(
     input_stream: AsyncIterator[T],
     processor: Callable[[T], Any],
     max_concurrent: int = 5,
-    buffer_size: int = 10
+    buffer_size: int = 10,
 ) -> AsyncIterator[Any]:
     """
     Process streaming data with backpressure and concurrency control.
@@ -673,15 +667,15 @@ def get_streaming_stats() -> Dict[str, Any]:
         "active_operations": _global_limiter.get_active_operations(),
         "memory": {
             "system_memory_percent": memory_stats.percent,
-            "system_available_gb": memory_stats.available / (1024 ** 3),
-            "process_memory_mb": psutil.Process().memory_info().rss / (1024 ** 2)
+            "system_available_gb": memory_stats.available / (1024**3),
+            "process_memory_mb": psutil.Process().memory_info().rss / (1024**2),
         },
         "configuration": {
             "default_chunk_size": DEFAULT_CHUNK_SIZE,
             "large_file_chunk_size": LARGE_FILE_CHUNK_SIZE,
             "max_memory_usage_percent": MAX_MEMORY_USAGE_PERCENT,
-            "max_concurrent_streams": MAX_CONCURRENT_STREAMS
-        }
+            "max_concurrent_streams": MAX_CONCURRENT_STREAMS,
+        },
     }
 
 

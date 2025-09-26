@@ -11,8 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 def create_watcher_service(
-    config: WatcherConfig,
-    task_queue: Optional[TaskQueue] = None
+    config: WatcherConfig, task_queue: Optional[TaskQueue] = None
 ) -> DirectoryWatcher:
     """Create a properly configured DirectoryWatcher with TaskQueue.
 
@@ -29,7 +28,9 @@ def create_watcher_service(
         logger.info("Created default TaskQueue for watcher service")
 
     watcher = DirectoryWatcher(task_queue, config)
-    logger.info(f"Created DirectoryWatcher for {len(config.watch_directories)} directories")
+    logger.info(
+        f"Created DirectoryWatcher for {len(config.watch_directories)} directories"
+    )
 
     return watcher
 
@@ -48,17 +49,17 @@ def create_default_watcher_config(watch_directories: list[str]) -> WatcherConfig
         recursive=True,
         patterns=["*.pdf", "*.PDF"],
         ignore_patterns=[
-            "**/.*",           # Hidden files/directories
-            "**/tmp/*",        # Temporary directories
-            "**/temp/*",       # Temporary directories
-            "**/cache/*",      # Cache directories
-            "**/__pycache__/*", # Python cache
-            "**/node_modules/*", # Node.js modules
-            "**/.git/*",       # Git directories
+            "**/.*",  # Hidden files/directories
+            "**/tmp/*",  # Temporary directories
+            "**/temp/*",  # Temporary directories
+            "**/cache/*",  # Cache directories
+            "**/__pycache__/*",  # Python cache
+            "**/node_modules/*",  # Node.js modules
+            "**/.git/*",  # Git directories
         ],
         stability_timeout=5.0,  # 5 seconds for file stability
-        max_file_size_mb=500,   # 500MB maximum
-        enable_deduplication=True
+        max_file_size_mb=500,  # 500MB maximum
+        enable_deduplication=True,
     )
 
 
@@ -94,13 +95,11 @@ class WatcherManager:
             raise ValueError(f"Watcher '{name}' already exists")
 
         watcher = create_watcher_service(config, self.get_task_queue())
-        self.watchers[name] = {
-            'instance': watcher,
-            'config': config,
-            'started': False
-        }
+        self.watchers[name] = {"instance": watcher, "config": config, "started": False}
 
-        logger.info(f"Added watcher '{name}' with {len(config.watch_directories)} directories")
+        logger.info(
+            f"Added watcher '{name}' with {len(config.watch_directories)} directories"
+        )
         return watcher
 
     def start_watcher(self, name: str) -> None:
@@ -117,11 +116,11 @@ class WatcherManager:
             raise KeyError(f"Watcher '{name}' not found")
 
         watcher_info = self.watchers[name]
-        if watcher_info['started']:
+        if watcher_info["started"]:
             raise RuntimeError(f"Watcher '{name}' is already running")
 
-        watcher_info['instance'].start()
-        watcher_info['started'] = True
+        watcher_info["instance"].start()
+        watcher_info["started"] = True
         logger.info(f"Started watcher '{name}'")
 
     def stop_watcher(self, name: str) -> None:
@@ -137,18 +136,18 @@ class WatcherManager:
             raise KeyError(f"Watcher '{name}' not found")
 
         watcher_info = self.watchers[name]
-        if watcher_info['started']:
-            watcher_info['instance'].stop()
-            watcher_info['started'] = False
+        if watcher_info["started"]:
+            watcher_info["instance"].stop()
+            watcher_info["started"] = False
             logger.info(f"Stopped watcher '{name}'")
 
     def start_all(self) -> None:
         """Start all registered watchers."""
         for name, watcher_info in self.watchers.items():
-            if not watcher_info['started']:
+            if not watcher_info["started"]:
                 try:
-                    watcher_info['instance'].start()
-                    watcher_info['started'] = True
+                    watcher_info["instance"].start()
+                    watcher_info["started"] = True
                     logger.info(f"Started watcher '{name}'")
                 except Exception as e:
                     logger.error(f"Failed to start watcher '{name}': {e}")
@@ -156,10 +155,10 @@ class WatcherManager:
     def stop_all(self) -> None:
         """Stop all running watchers."""
         for name, watcher_info in self.watchers.items():
-            if watcher_info['started']:
+            if watcher_info["started"]:
                 try:
-                    watcher_info['instance'].stop()
-                    watcher_info['started'] = False
+                    watcher_info["instance"].stop()
+                    watcher_info["started"] = False
                     logger.info(f"Stopped watcher '{name}'")
                 except Exception as e:
                     logger.error(f"Failed to stop watcher '{name}': {e}")
@@ -190,18 +189,18 @@ class WatcherManager:
             Dictionary with watcher status information
         """
         status = {
-            'total_watchers': len(self.watchers),
-            'running_watchers': 0,
-            'watchers': {}
+            "total_watchers": len(self.watchers),
+            "running_watchers": 0,
+            "watchers": {},
         }
 
         for name, watcher_info in self.watchers.items():
-            watcher_status = watcher_info['instance'].get_status()
-            watcher_status['started'] = watcher_info['started']
-            status['watchers'][name] = watcher_status
+            watcher_status = watcher_info["instance"].get_status()
+            watcher_status["started"] = watcher_info["started"]
+            status["watchers"][name] = watcher_status
 
-            if watcher_info['started']:
-                status['running_watchers'] += 1
+            if watcher_info["started"]:
+                status["running_watchers"] += 1
 
         return status
 
@@ -219,8 +218,8 @@ class WatcherManager:
             raise KeyError(f"Watcher '{name}' not found")
 
         watcher_info = self.watchers[name]
-        watcher_info['instance'].update_config(new_config)
-        watcher_info['config'] = new_config
+        watcher_info["instance"].update_config(new_config)
+        watcher_info["config"] = new_config
 
         logger.info(f"Updated configuration for watcher '{name}'")
 

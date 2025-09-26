@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 class SSEEventType(str, Enum):
     """Types of Server-Sent Events."""
+
     PROGRESS = "progress"
     STATUS = "status"
     COMPLETE = "complete"
@@ -37,6 +38,7 @@ class SSEEventType(str, Enum):
 @dataclass
 class SSEEvent:
     """Server-Sent Event data structure."""
+
     event: str
     data: Dict[str, Any]
     event_id: Optional[str] = None
@@ -56,7 +58,7 @@ class SSEEvent:
 
         # Handle multiline data
         data_json = json.dumps(self.data)
-        for line in data_json.split('\n'):
+        for line in data_json.split("\n"):
             lines.append(f"data: {line}")
 
         lines.append("")  # Empty line to end event
@@ -65,17 +67,24 @@ class SSEEvent:
 
 class SSEProgress(BaseModel):
     """Progress update data for SSE streaming."""
+
     job_id: str = Field(..., description="Job identifier")
-    progress_percent: float = Field(..., ge=0.0, le=100.0, description="Progress percentage")
+    progress_percent: float = Field(
+        ..., ge=0.0, le=100.0, description="Progress percentage"
+    )
     current_step: str = Field(..., description="Current processing step")
     status: JobStatus = Field(..., description="Job status")
 
     # Timing information
     started_at: Optional[datetime] = Field(None, description="Job start time")
-    estimated_completion: Optional[datetime] = Field(None, description="Estimated completion")
+    estimated_completion: Optional[datetime] = Field(
+        None, description="Estimated completion"
+    )
 
     # Additional metadata
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional progress metadata")
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict, description="Additional progress metadata"
+    )
 
     class Config:
         use_enum_values = True
@@ -100,7 +109,7 @@ class ProgressTracker:
         progress_percent: float,
         current_step: str,
         status: JobStatus = JobStatus.RUNNING,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ):
         """Update job progress and generate SSE event."""
         self.progress_percent = min(100.0, max(0.0, progress_percent))
@@ -130,11 +139,13 @@ class ProgressTracker:
                 "current_step": self.current_step,
                 "status": status.value,
                 "started_at": self.started_at.isoformat() if self.started_at else None,
-                "estimated_completion": estimated_completion.isoformat() if estimated_completion else None,
+                "estimated_completion": (
+                    estimated_completion.isoformat() if estimated_completion else None
+                ),
                 "metadata": self.metadata.copy(),
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.utcnow().isoformat(),
             },
-            event_id=str(uuid.uuid4())
+            event_id=str(uuid.uuid4()),
         )
 
         self.events.append(event)
@@ -154,11 +165,15 @@ class ProgressTracker:
                 "status": JobStatus.COMPLETED.value,
                 "message": message,
                 "completed_at": self.completed_at.isoformat(),
-                "total_time_seconds": (self.completed_at - self.started_at).total_seconds() if self.started_at else None,
+                "total_time_seconds": (
+                    (self.completed_at - self.started_at).total_seconds()
+                    if self.started_at
+                    else None
+                ),
                 "metadata": self.metadata.copy(),
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.utcnow().isoformat(),
             },
-            event_id=str(uuid.uuid4())
+            event_id=str(uuid.uuid4()),
         )
 
         self.events.append(event)
@@ -177,9 +192,9 @@ class ProgressTracker:
                 "status": JobStatus.FAILED.value,
                 "error_message": error_message,
                 "metadata": self.metadata.copy(),
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.utcnow().isoformat(),
             },
-            event_id=str(uuid.uuid4())
+            event_id=str(uuid.uuid4()),
         )
 
         self.events.append(event)
@@ -195,9 +210,9 @@ class ProgressTracker:
             data={
                 "job_id": self.job_id,
                 "metadata": self.metadata.copy(),
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.utcnow().isoformat(),
             },
-            event_id=str(uuid.uuid4())
+            event_id=str(uuid.uuid4()),
         )
 
         self.events.append(event)
@@ -211,7 +226,7 @@ class ProgressTracker:
             current_step=self.current_step,
             status=self.status,
             started_at=self.started_at,
-            metadata=self.metadata.copy()
+            metadata=self.metadata.copy(),
         )
 
 
@@ -233,8 +248,11 @@ class ProgressStream:
             # Send initial heartbeat
             heartbeat_event = SSEEvent(
                 event=SSEEventType.HEARTBEAT,
-                data={"job_id": self.job_id, "timestamp": datetime.utcnow().isoformat()},
-                event_id=str(uuid.uuid4())
+                data={
+                    "job_id": self.job_id,
+                    "timestamp": datetime.utcnow().isoformat(),
+                },
+                event_id=str(uuid.uuid4()),
             )
             yield heartbeat_event.to_sse_format()
 
@@ -253,8 +271,11 @@ class ProgressStream:
                     # Send heartbeat to keep connection alive
                     heartbeat = SSEEvent(
                         event=SSEEventType.HEARTBEAT,
-                        data={"job_id": self.job_id, "timestamp": datetime.utcnow().isoformat()},
-                        retry=30000  # 30 seconds
+                        data={
+                            "job_id": self.job_id,
+                            "timestamp": datetime.utcnow().isoformat(),
+                        },
+                        retry=30000,  # 30 seconds
                     )
                     yield heartbeat.to_sse_format()
 
@@ -266,8 +287,8 @@ class ProgressStream:
                     "job_id": self.job_id,
                     "error": "Stream error",
                     "message": str(e),
-                    "timestamp": datetime.utcnow().isoformat()
-                }
+                    "timestamp": datetime.utcnow().isoformat(),
+                },
             )
             yield error_event.to_sse_format()
 
@@ -284,7 +305,7 @@ class ProgressStream:
         progress_percent: float,
         current_step: str,
         status: JobStatus = JobStatus.RUNNING,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ):
         """Emit a progress event to all subscribers."""
         if self._closed:
@@ -298,9 +319,9 @@ class ProgressStream:
                 "current_step": current_step,
                 "status": status.value,
                 "metadata": metadata or {},
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.utcnow().isoformat(),
             },
-            event_id=str(uuid.uuid4())
+            event_id=str(uuid.uuid4()),
         )
 
         await self.event_queue.put(event)
@@ -316,9 +337,9 @@ class ProgressStream:
                 "job_id": self.job_id,
                 "status": JobStatus.COMPLETED.value,
                 "message": message,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.utcnow().isoformat(),
             },
-            event_id=str(uuid.uuid4())
+            event_id=str(uuid.uuid4()),
         )
 
         await self.event_queue.put(event)
@@ -336,9 +357,9 @@ class ProgressStream:
                 "job_id": self.job_id,
                 "status": JobStatus.FAILED.value,
                 "error_message": error_message,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.utcnow().isoformat(),
             },
-            event_id=str(uuid.uuid4())
+            event_id=str(uuid.uuid4()),
         )
 
         await self.event_queue.put(event)
@@ -371,7 +392,7 @@ class JobProgressMonitor:
         progress_percent: float,
         current_step: str,
         status: JobStatus = JobStatus.RUNNING,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ):
         """Broadcast progress update to job stream."""
         stream = self.get_or_create_stream(job_id)
@@ -390,7 +411,8 @@ class JobProgressMonitor:
     async def cleanup_completed_streams(self):
         """Remove completed streams to free memory."""
         to_remove = [
-            job_id for job_id, stream in self.active_streams.items()
+            job_id
+            for job_id, stream in self.active_streams.items()
             if stream.is_complete and stream.subscribers == 0
         ]
 
@@ -416,7 +438,7 @@ def format_sse_data(
     data: Dict[str, Any],
     event_type: Optional[str] = None,
     event_id: Optional[str] = None,
-    retry_ms: Optional[int] = None
+    retry_ms: Optional[int] = None,
 ) -> str:
     """Format data as Server-Sent Event string."""
     lines = []
@@ -432,14 +454,16 @@ def format_sse_data(
 
     # Handle multiline JSON data
     data_json = json.dumps(data)
-    for line in data_json.split('\n'):
+    for line in data_json.split("\n"):
         lines.append(f"data: {line}")
 
     lines.append("")  # Empty line to end event
     return "\n".join(lines) + "\n"
 
 
-def create_sse_response(event_generator: AsyncGenerator[str, None]) -> StreamingResponse:
+def create_sse_response(
+    event_generator: AsyncGenerator[str, None],
+) -> StreamingResponse:
     """Create a StreamingResponse for Server-Sent Events."""
     return StreamingResponse(
         event_generator,
@@ -450,7 +474,7 @@ def create_sse_response(event_generator: AsyncGenerator[str, None]) -> Streaming
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Headers": "Cache-Control",
             "X-Accel-Buffering": "no",  # Disable nginx buffering
-        }
+        },
     )
 
 

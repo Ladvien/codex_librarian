@@ -19,7 +19,7 @@ from pdf_to_markdown_mcp.db.queries import SearchQueries
 from pdf_to_markdown_mcp.core.exceptions import (
     SearchError,
     ValidationError,
-    EmbeddingError
+    EmbeddingError,
 )
 
 logger = logging.getLogger(__name__)
@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 class SearchType(Enum):
     """Types of search operations."""
+
     SEMANTIC = "semantic"
     KEYWORD = "keyword"
     HYBRID = "hybrid"
@@ -64,6 +65,7 @@ class SearchEngine:
         self.db = db_session
         # Import here to avoid circular imports
         from pdf_to_markdown_mcp.services.embeddings import create_embedding_service
+
         self.embedding_service = create_embedding_service()
         self.search_queries = SearchQueries()
 
@@ -74,7 +76,7 @@ class SearchEngine:
         threshold: float = 0.7,
         filters: Optional[Dict[str, Any]] = None,
         include_content: bool = True,
-        options: Optional[SearchOptions] = None
+        options: Optional[SearchOptions] = None,
     ) -> SearchResults:
         """
         Perform semantic search using vector similarity.
@@ -105,8 +107,8 @@ class SearchEngine:
                 "query_length": len(query),
                 "top_k": top_k,
                 "threshold": threshold,
-                "filters": filters
-            }
+                "filters": filters,
+            },
         )
 
         try:
@@ -123,7 +125,7 @@ class SearchEngine:
                 limit=top_k,
                 threshold=threshold,
                 filters=filters,
-                include_content=options.include_content
+                include_content=options.include_content,
             )
 
             # Convert to SearchResult objects
@@ -134,13 +136,21 @@ class SearchEngine:
                     chunk_id=result.chunk_id,
                     filename=result.filename,
                     source_path=result.source_path,
-                    title=self._extract_title(result.content) if result.content else None,
-                    content=self._truncate_content(result.content, options.max_content_length) if options.include_content else None,
+                    title=(
+                        self._extract_title(result.content) if result.content else None
+                    ),
+                    content=(
+                        self._truncate_content(
+                            result.content, options.max_content_length
+                        )
+                        if options.include_content
+                        else None
+                    ),
                     similarity_score=result.similarity,
                     rank=idx + 1,
                     page_number=result.page_number,
                     chunk_index=result.chunk_index,
-                    metadata=result.metadata if options.include_metadata else None
+                    metadata=result.metadata if options.include_metadata else None,
                 )
 
                 if options.highlight_matches and search_result.content:
@@ -156,8 +166,8 @@ class SearchEngine:
                 "Semantic search completed",
                 extra={
                     "results_count": len(search_results),
-                    "search_time_ms": search_time_ms
-                }
+                    "search_time_ms": search_time_ms,
+                },
             )
 
             return SearchResults(
@@ -165,7 +175,7 @@ class SearchEngine:
                 total_count=len(search_results),
                 search_time_ms=search_time_ms,
                 search_type=SearchType.SEMANTIC,
-                query_embedding=query_embedding
+                query_embedding=query_embedding,
             )
 
         except EmbeddingError:
@@ -182,7 +192,7 @@ class SearchEngine:
         top_k: int = 10,
         filters: Optional[Dict[str, Any]] = None,
         include_content: bool = True,
-        options: Optional[SearchOptions] = None
+        options: Optional[SearchOptions] = None,
     ) -> SearchResults:
         """
         Perform hybrid search combining semantic and keyword search.
@@ -217,8 +227,8 @@ class SearchEngine:
                 "query": query,
                 "semantic_weight": semantic_weight,
                 "keyword_weight": keyword_weight,
-                "top_k": top_k
-            }
+                "top_k": top_k,
+            },
         )
 
         try:
@@ -226,10 +236,10 @@ class SearchEngine:
             semantic_results = await self.semantic_search(
                 query=query,
                 top_k=top_k * 2,  # Get extra results for reranking
-                threshold=0.5,    # Lower threshold for hybrid
+                threshold=0.5,  # Lower threshold for hybrid
                 filters=filters,
                 include_content=include_content,
-                options=options
+                options=options,
             )
 
             # Perform keyword search
@@ -238,7 +248,7 @@ class SearchEngine:
                 top_k=top_k * 2,  # Get extra results for reranking
                 filters=filters,
                 include_content=include_content,
-                options=options
+                options=options,
             )
 
             # Combine and rerank results
@@ -246,7 +256,7 @@ class SearchEngine:
                 semantic_results=semantic_results.results,
                 keyword_results=keyword_results.results,
                 semantic_weight=semantic_weight,
-                keyword_weight=keyword_weight
+                keyword_weight=keyword_weight,
             )
 
             # Take top K results
@@ -262,8 +272,8 @@ class SearchEngine:
                 "Hybrid search completed",
                 extra={
                     "results_count": len(final_results),
-                    "search_time_ms": search_time_ms
-                }
+                    "search_time_ms": search_time_ms,
+                },
             )
 
             return SearchResults(
@@ -271,7 +281,7 @@ class SearchEngine:
                 total_count=len(final_results),
                 search_time_ms=search_time_ms,
                 search_type=SearchType.HYBRID,
-                query_embedding=semantic_results.query_embedding
+                query_embedding=semantic_results.query_embedding,
             )
 
         except Exception as e:
@@ -284,7 +294,7 @@ class SearchEngine:
         top_k: int = 10,
         filters: Optional[Dict[str, Any]] = None,
         include_content: bool = True,
-        options: Optional[SearchOptions] = None
+        options: Optional[SearchOptions] = None,
     ) -> SearchResults:
         """
         Perform full-text keyword search.
@@ -304,10 +314,7 @@ class SearchEngine:
         if options is None:
             options = SearchOptions(include_content=include_content)
 
-        logger.info(
-            "Keyword search requested",
-            extra={"query": query, "top_k": top_k}
-        )
+        logger.info("Keyword search requested", extra={"query": query, "top_k": top_k})
 
         try:
             # Perform full-text search
@@ -316,7 +323,7 @@ class SearchEngine:
                 query=query,
                 limit=top_k,
                 filters=filters,
-                include_content=options.include_content
+                include_content=options.include_content,
             )
 
             # Convert to SearchResult objects
@@ -327,13 +334,21 @@ class SearchEngine:
                     chunk_id=result.chunk_id,
                     filename=result.filename,
                     source_path=result.source_path,
-                    title=self._extract_title(result.content) if result.content else None,
-                    content=self._truncate_content(result.content, options.max_content_length) if options.include_content else None,
+                    title=(
+                        self._extract_title(result.content) if result.content else None
+                    ),
+                    content=(
+                        self._truncate_content(
+                            result.content, options.max_content_length
+                        )
+                        if options.include_content
+                        else None
+                    ),
                     similarity_score=result.score,  # Text search score
                     rank=idx + 1,
                     page_number=result.page_number,
                     chunk_index=result.chunk_index,
-                    metadata=result.metadata if options.include_metadata else None
+                    metadata=result.metadata if options.include_metadata else None,
                 )
 
                 if options.highlight_matches and search_result.content:
@@ -349,7 +364,7 @@ class SearchEngine:
                 results=search_results,
                 total_count=len(search_results),
                 search_time_ms=search_time_ms,
-                search_type=SearchType.KEYWORD
+                search_type=SearchType.KEYWORD,
             )
 
         except Exception as e:
@@ -362,7 +377,7 @@ class SearchEngine:
         top_k: int = 5,
         min_similarity: float = 0.6,
         include_self: bool = False,
-        options: Optional[SearchOptions] = None
+        options: Optional[SearchOptions] = None,
     ) -> SearchResults:
         """
         Find documents similar to a reference document.
@@ -387,16 +402,20 @@ class SearchEngine:
             extra={
                 "document_id": document_id,
                 "top_k": top_k,
-                "min_similarity": min_similarity
-            }
+                "min_similarity": min_similarity,
+            },
         )
 
         try:
             # Get document embedding
-            doc_embeddings = self.search_queries.get_document_embeddings(self.db, document_id)
+            doc_embeddings = self.search_queries.get_document_embeddings(
+                self.db, document_id
+            )
 
             if not doc_embeddings:
-                raise ValidationError(f"Document not found or has no embeddings: {document_id}")
+                raise ValidationError(
+                    f"Document not found or has no embeddings: {document_id}"
+                )
 
             # Use the first embedding as reference (could be averaged)
             reference_embedding = doc_embeddings[0].embedding
@@ -407,7 +426,7 @@ class SearchEngine:
                 reference_embedding=reference_embedding,
                 reference_doc_id=document_id if not include_self else None,
                 top_k=top_k,
-                threshold=min_similarity
+                threshold=min_similarity,
             )
 
             # Convert to SearchResult objects
@@ -419,12 +438,12 @@ class SearchEngine:
                     filename=result.filename,
                     source_path=result.source_path,
                     title=result.title,
-                    content=None,   # Not applicable for document similarity
+                    content=None,  # Not applicable for document similarity
                     similarity_score=result.similarity,
                     rank=idx + 1,
                     page_number=None,  # Not applicable for document similarity
                     chunk_index=None,  # Not applicable for document similarity
-                    metadata=result.metadata if options.include_metadata else None
+                    metadata=result.metadata if options.include_metadata else None,
                 )
 
                 search_results.append(search_result)
@@ -435,7 +454,7 @@ class SearchEngine:
                 results=search_results,
                 total_count=len(search_results),
                 search_time_ms=search_time_ms,
-                search_type=SearchType.SIMILAR
+                search_type=SearchType.SIMILAR,
             )
 
         except ValidationError:
@@ -449,7 +468,7 @@ class SearchEngine:
         semantic_results: List[SearchResult],
         keyword_results: List[SearchResult],
         semantic_weight: float,
-        keyword_weight: float
+        keyword_weight: float,
     ) -> List[SearchResult]:
         """
         Combine and rerank semantic and keyword search results.
@@ -465,14 +484,12 @@ class SearchEngine:
         """
         # Create lookup for semantic scores
         semantic_scores = {
-            (r.document_id, r.chunk_id): r.similarity_score
-            for r in semantic_results
+            (r.document_id, r.chunk_id): r.similarity_score for r in semantic_results
         }
 
         # Create lookup for keyword scores
         keyword_scores = {
-            (r.document_id, r.chunk_id): r.similarity_score
-            for r in keyword_results
+            (r.document_id, r.chunk_id): r.similarity_score for r in keyword_results
         }
 
         # Get all unique document-chunk pairs
@@ -485,8 +502,9 @@ class SearchEngine:
             keyword_score = keyword_scores.get((doc_id, chunk_id), 0.0)
 
             # Calculate combined score
-            combined_score = (semantic_score * semantic_weight +
-                            keyword_score * keyword_weight)
+            combined_score = (
+                semantic_score * semantic_weight + keyword_score * keyword_weight
+            )
 
             # Find the result object (prefer semantic result)
             result_obj = None
@@ -516,11 +534,11 @@ class SearchEngine:
         if not content:
             return None
 
-        lines = content.strip().split('\n')
+        lines = content.strip().split("\n")
         first_line = lines[0].strip()
 
         # Check if first line looks like a title
-        if len(first_line) < 100 and not first_line.endswith('.'):
+        if len(first_line) < 100 and not first_line.endswith("."):
             return first_line
 
         return None
@@ -532,7 +550,7 @@ class SearchEngine:
 
         # Find last complete word within limit
         truncated = content[:max_length]
-        last_space = truncated.rfind(' ')
+        last_space = truncated.rfind(" ")
 
         if last_space > 0:
             truncated = truncated[:last_space]
@@ -554,16 +572,12 @@ class SearchEngine:
         for word in query_words:
             if len(word) > 2:  # Only highlight meaningful words
                 pattern = re.compile(re.escape(word), re.IGNORECASE)
-                highlighted_content = pattern.sub(
-                    f"**{word}**", highlighted_content
-                )
+                highlighted_content = pattern.sub(f"**{word}**", highlighted_content)
 
         return highlighted_content
 
     async def get_search_suggestions(
-        self,
-        partial_query: str,
-        limit: int = 5
+        self, partial_query: str, limit: int = 5
     ) -> List[str]:
         """
         Get search query suggestions based on content.
@@ -589,7 +603,7 @@ class SearchEngine:
                 f"{partial_query} method",
                 f"{partial_query} analysis",
                 f"{partial_query} implementation",
-                f"{partial_query} theory"
+                f"{partial_query} theory",
             ]
 
             return suggestions[:limit]

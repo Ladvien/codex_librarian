@@ -17,7 +17,7 @@ from ..core.errors import (
     CircuitBreakerError,
     TransientError,
     track_error,
-    create_correlation_id
+    create_correlation_id,
 )
 
 logger = logging.getLogger(__name__)
@@ -25,8 +25,9 @@ logger = logging.getLogger(__name__)
 
 class CircuitBreakerState(Enum):
     """Circuit breaker states."""
-    CLOSED = "closed"      # Normal operation
-    OPEN = "open"          # Circuit is open, rejecting calls
+
+    CLOSED = "closed"  # Normal operation
+    OPEN = "open"  # Circuit is open, rejecting calls
     HALF_OPEN = "half_open"  # Testing if service has recovered
 
 
@@ -43,7 +44,7 @@ class CircuitBreaker:
         failure_threshold: int = 5,
         recovery_timeout: int = 60,
         expected_exception: tuple = (Exception,),
-        name: str = "redis_circuit_breaker"
+        name: str = "redis_circuit_breaker",
     ):
         """
         Initialize circuit breaker.
@@ -77,11 +78,11 @@ class CircuitBreaker:
         logger.info(
             f"Circuit breaker '{self.name}' initialized",
             extra={
-                'circuit_breaker': self.name,
-                'failure_threshold': self.failure_threshold,
-                'recovery_timeout': self.recovery_timeout,
-                'correlation_id': self.correlation_id
-            }
+                "circuit_breaker": self.name,
+                "failure_threshold": self.failure_threshold,
+                "recovery_timeout": self.recovery_timeout,
+                "correlation_id": self.correlation_id,
+            },
         )
 
     def _should_allow_request(self) -> bool:
@@ -97,7 +98,10 @@ class CircuitBreaker:
                 self.state = CircuitBreakerState.HALF_OPEN
                 logger.info(
                     f"Circuit breaker '{self.name}' transitioning to HALF_OPEN",
-                    extra={'circuit_breaker': self.name, 'correlation_id': self.correlation_id}
+                    extra={
+                        "circuit_breaker": self.name,
+                        "correlation_id": self.correlation_id,
+                    },
                 )
                 return True
             return False
@@ -122,11 +126,11 @@ class CircuitBreaker:
             logger.info(
                 f"Circuit breaker '{self.name}' recovered, closing circuit",
                 extra={
-                    'circuit_breaker': self.name,
-                    'correlation_id': self.correlation_id,
-                    'total_calls': self.total_calls,
-                    'success_rate': self.successful_calls / max(self.total_calls, 1)
-                }
+                    "circuit_breaker": self.name,
+                    "correlation_id": self.correlation_id,
+                    "total_calls": self.total_calls,
+                    "success_rate": self.successful_calls / max(self.total_calls, 1),
+                },
             )
 
     def _record_failure(self, exception: Exception):
@@ -136,33 +140,40 @@ class CircuitBreaker:
         self.last_failure_time = datetime.utcnow()
 
         # Track error for monitoring
-        track_error(exception, {
-            'circuit_breaker': self.name,
-            'failure_count': self.failure_count,
-            'state': self.state.value,
-            'correlation_id': self.correlation_id
-        })
+        track_error(
+            exception,
+            {
+                "circuit_breaker": self.name,
+                "failure_count": self.failure_count,
+                "state": self.state.value,
+                "correlation_id": self.correlation_id,
+            },
+        )
 
         if self.state == CircuitBreakerState.HALF_OPEN:
             # Failed during recovery attempt, reopen circuit
             self.state = CircuitBreakerState.OPEN
-            self.next_attempt_time = datetime.utcnow() + timedelta(seconds=self.recovery_timeout)
+            self.next_attempt_time = datetime.utcnow() + timedelta(
+                seconds=self.recovery_timeout
+            )
 
         elif self.failure_count >= self.failure_threshold:
             # Open circuit
             self.state = CircuitBreakerState.OPEN
             self.circuit_opened_count += 1
-            self.next_attempt_time = datetime.utcnow() + timedelta(seconds=self.recovery_timeout)
+            self.next_attempt_time = datetime.utcnow() + timedelta(
+                seconds=self.recovery_timeout
+            )
 
             logger.warning(
                 f"Circuit breaker '{self.name}' OPENED after {self.failure_count} failures",
                 extra={
-                    'circuit_breaker': self.name,
-                    'failure_count': self.failure_count,
-                    'last_failure': str(exception),
-                    'next_attempt_time': self.next_attempt_time.isoformat(),
-                    'correlation_id': self.correlation_id
-                }
+                    "circuit_breaker": self.name,
+                    "failure_count": self.failure_count,
+                    "last_failure": str(exception),
+                    "next_attempt_time": self.next_attempt_time.isoformat(),
+                    "correlation_id": self.correlation_id,
+                },
             )
 
     @contextmanager
@@ -190,11 +201,11 @@ class CircuitBreaker:
             logger.debug(
                 f"Circuit breaker '{self.name}' allowing {operation_name}",
                 extra={
-                    'circuit_breaker': self.name,
-                    'operation': operation_name,
-                    'state': self.state.value,
-                    'correlation_id': self.correlation_id
-                }
+                    "circuit_breaker": self.name,
+                    "operation": operation_name,
+                    "state": self.state.value,
+                    "correlation_id": self.correlation_id,
+                },
             )
 
             yield
@@ -206,11 +217,11 @@ class CircuitBreaker:
             logger.debug(
                 f"Circuit breaker '{self.name}' operation '{operation_name}' succeeded",
                 extra={
-                    'circuit_breaker': self.name,
-                    'operation': operation_name,
-                    'duration_seconds': round(operation_duration, 3),
-                    'correlation_id': self.correlation_id
-                }
+                    "circuit_breaker": self.name,
+                    "operation": operation_name,
+                    "duration_seconds": round(operation_duration, 3),
+                    "correlation_id": self.correlation_id,
+                },
             )
 
         except self.expected_exception as e:
@@ -221,13 +232,13 @@ class CircuitBreaker:
             logger.warning(
                 f"Circuit breaker '{self.name}' operation '{operation_name}' failed",
                 extra={
-                    'circuit_breaker': self.name,
-                    'operation': operation_name,
-                    'duration_seconds': round(operation_duration, 3),
-                    'error': str(e),
-                    'failure_count': self.failure_count,
-                    'correlation_id': self.correlation_id
-                }
+                    "circuit_breaker": self.name,
+                    "operation": operation_name,
+                    "duration_seconds": round(operation_duration, 3),
+                    "error": str(e),
+                    "failure_count": self.failure_count,
+                    "correlation_id": self.correlation_id,
+                },
             )
 
             raise
@@ -257,11 +268,11 @@ class CircuitBreaker:
             logger.debug(
                 f"Circuit breaker '{self.name}' allowing async {operation_name}",
                 extra={
-                    'circuit_breaker': self.name,
-                    'operation': operation_name,
-                    'state': self.state.value,
-                    'correlation_id': self.correlation_id
-                }
+                    "circuit_breaker": self.name,
+                    "operation": operation_name,
+                    "state": self.state.value,
+                    "correlation_id": self.correlation_id,
+                },
             )
 
             yield
@@ -273,11 +284,11 @@ class CircuitBreaker:
             logger.debug(
                 f"Circuit breaker '{self.name}' async operation '{operation_name}' succeeded",
                 extra={
-                    'circuit_breaker': self.name,
-                    'operation': operation_name,
-                    'duration_seconds': round(operation_duration, 3),
-                    'correlation_id': self.correlation_id
-                }
+                    "circuit_breaker": self.name,
+                    "operation": operation_name,
+                    "duration_seconds": round(operation_duration, 3),
+                    "correlation_id": self.correlation_id,
+                },
             )
 
         except self.expected_exception as e:
@@ -288,13 +299,13 @@ class CircuitBreaker:
             logger.warning(
                 f"Circuit breaker '{self.name}' async operation '{operation_name}' failed",
                 extra={
-                    'circuit_breaker': self.name,
-                    'operation': operation_name,
-                    'duration_seconds': round(operation_duration, 3),
-                    'error': str(e),
-                    'failure_count': self.failure_count,
-                    'correlation_id': self.correlation_id
-                }
+                    "circuit_breaker": self.name,
+                    "operation": operation_name,
+                    "duration_seconds": round(operation_duration, 3),
+                    "error": str(e),
+                    "failure_count": self.failure_count,
+                    "correlation_id": self.correlation_id,
+                },
             )
 
             raise
@@ -304,26 +315,30 @@ class CircuitBreaker:
         success_rate = self.successful_calls / max(self.total_calls, 1)
 
         return {
-            'name': self.name,
-            'state': self.state.value,
-            'failure_threshold': self.failure_threshold,
-            'recovery_timeout': self.recovery_timeout,
-            'failure_count': self.failure_count,
-            'total_calls': self.total_calls,
-            'successful_calls': self.successful_calls,
-            'failed_calls': self.failed_calls,
-            'success_rate': round(success_rate, 4),
-            'circuit_opened_count': self.circuit_opened_count,
-            'last_failure_time': self.last_failure_time.isoformat() if self.last_failure_time else None,
-            'next_attempt_time': self.next_attempt_time.isoformat() if self.next_attempt_time else None,
-            'correlation_id': self.correlation_id
+            "name": self.name,
+            "state": self.state.value,
+            "failure_threshold": self.failure_threshold,
+            "recovery_timeout": self.recovery_timeout,
+            "failure_count": self.failure_count,
+            "total_calls": self.total_calls,
+            "successful_calls": self.successful_calls,
+            "failed_calls": self.failed_calls,
+            "success_rate": round(success_rate, 4),
+            "circuit_opened_count": self.circuit_opened_count,
+            "last_failure_time": (
+                self.last_failure_time.isoformat() if self.last_failure_time else None
+            ),
+            "next_attempt_time": (
+                self.next_attempt_time.isoformat() if self.next_attempt_time else None
+            ),
+            "correlation_id": self.correlation_id,
         }
 
     def reset(self):
         """Reset circuit breaker to initial state."""
         logger.info(
             f"Resetting circuit breaker '{self.name}'",
-            extra={'circuit_breaker': self.name, 'correlation_id': self.correlation_id}
+            extra={"circuit_breaker": self.name, "correlation_id": self.correlation_id},
         )
 
         self.state = CircuitBreakerState.CLOSED
@@ -339,10 +354,7 @@ class RedisCircuitBreakerManager:
         self.circuit_breakers: Dict[str, CircuitBreaker] = {}
 
     def get_circuit_breaker(
-        self,
-        name: str,
-        failure_threshold: int = 5,
-        recovery_timeout: int = 60
+        self, name: str, failure_threshold: int = 5, recovery_timeout: int = 60
     ) -> CircuitBreaker:
         """
         Get or create a circuit breaker for Redis operations.
@@ -367,17 +379,14 @@ class RedisCircuitBreakerManager:
                 failure_threshold=failure_threshold,
                 recovery_timeout=recovery_timeout,
                 expected_exception=redis_exceptions,
-                name=name
+                name=name,
             )
 
         return self.circuit_breakers[name]
 
     def get_all_stats(self) -> Dict[str, Dict[str, Any]]:
         """Get statistics for all circuit breakers."""
-        return {
-            name: cb.get_stats()
-            for name, cb in self.circuit_breakers.items()
-        }
+        return {name: cb.get_stats() for name, cb in self.circuit_breakers.items()}
 
     def reset_all(self):
         """Reset all circuit breakers."""
@@ -395,7 +404,7 @@ def get_redis_broker_circuit_breaker() -> CircuitBreaker:
     return redis_circuit_breaker_manager.get_circuit_breaker(
         name="redis_broker",
         failure_threshold=3,  # Fail fast for broker
-        recovery_timeout=30   # Quick recovery attempts
+        recovery_timeout=30,  # Quick recovery attempts
     )
 
 
@@ -404,7 +413,7 @@ def get_redis_result_backend_circuit_breaker() -> CircuitBreaker:
     return redis_circuit_breaker_manager.get_circuit_breaker(
         name="redis_result_backend",
         failure_threshold=5,  # More tolerant for results
-        recovery_timeout=60   # Longer recovery time
+        recovery_timeout=60,  # Longer recovery time
     )
 
 
@@ -412,6 +421,6 @@ def get_redis_cache_circuit_breaker() -> CircuitBreaker:
     """Get circuit breaker for Redis cache operations."""
     return redis_circuit_breaker_manager.get_circuit_breaker(
         name="redis_cache",
-        failure_threshold=10, # Very tolerant for cache
-        recovery_timeout=30   # Quick recovery for cache
+        failure_threshold=10,  # Very tolerant for cache
+        recovery_timeout=30,  # Quick recovery for cache
     )

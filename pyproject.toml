@@ -260,3 +260,9 @@ skips = ["B101", "B601"]
 
 [tool.bandit.assert_used]
 skips = ["*_test.py", "*test_*.py"]
+
+[dependency-groups]
+dev = [
+    "pytest-asyncio>=0.24.0",
+    "pytest-mock>=3.14.1",
+]

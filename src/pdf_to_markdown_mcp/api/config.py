@@ -11,7 +11,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from pdf_to_markdown_mcp.models.request import ConfigurationRequest
-from pdf_to_markdown_mcp.models.response import ConfigurationResponse, ErrorResponse, ErrorType
+from pdf_to_markdown_mcp.models.response import (
+    ConfigurationResponse,
+    ErrorResponse,
+    ErrorType,
+)
 from pdf_to_markdown_mcp.db.session import get_db
 from pdf_to_markdown_mcp.config import settings
 from pdf_to_markdown_mcp.core.watcher_service import WatcherManager
@@ -22,8 +26,7 @@ router = APIRouter()
 
 @router.post("/configure", response_model=ConfigurationResponse)
 async def update_configuration(
-    request: ConfigurationRequest,
-    db: Session = Depends(get_db)
+    request: ConfigurationRequest, db: Session = Depends(get_db)
 ) -> ConfigurationResponse:
     """
     Update server configuration dynamically.
@@ -42,14 +45,20 @@ async def update_configuration(
                 # Validate all directories exist and are accessible
                 for directory in request.watch_directories:
                     if not directory.exists():
-                        validation_errors.append(f"Directory does not exist: {directory}")
+                        validation_errors.append(
+                            f"Directory does not exist: {directory}"
+                        )
                     elif not directory.is_dir():
-                        validation_errors.append(f"Path is not a directory: {directory}")
+                        validation_errors.append(
+                            f"Path is not a directory: {directory}"
+                        )
 
                 if not validation_errors:
                     # Update settings
                     old_directories = settings.watcher.watch_directories.copy()
-                    settings.watcher.watch_directories = [str(d) for d in request.watch_directories]
+                    settings.watcher.watch_directories = [
+                        str(d) for d in request.watch_directories
+                    ]
 
                     # Restart file watcher if requested
                     if request.restart_watcher:
@@ -71,7 +80,7 @@ async def update_configuration(
                                 }
                                 watcher_manager.start_watcher(
                                     name=f"watcher_{new_dir.name}",
-                                    config=watcher_config
+                                    config=watcher_config,
                                 )
 
                             services_restarted.append("file_watcher")
@@ -79,12 +88,16 @@ async def update_configuration(
                                 "File watcher restarted with new directories",
                                 extra={
                                     "old_directories": old_directories,
-                                    "new_directories": [str(d) for d in request.watch_directories]
-                                }
+                                    "new_directories": [
+                                        str(d) for d in request.watch_directories
+                                    ],
+                                },
                             )
 
                         except Exception as e:
-                            validation_errors.append(f"Failed to restart file watcher: {str(e)}")
+                            validation_errors.append(
+                                f"Failed to restart file watcher: {str(e)}"
+                            )
                             logger.error(f"Failed to restart file watcher: {e}")
 
             except Exception as e:
@@ -97,7 +110,9 @@ async def update_configuration(
                 if "provider" in request.embedding_config:
                     provider = request.embedding_config["provider"]
                     if provider not in ["ollama", "openai"]:
-                        validation_errors.append(f"Invalid embedding provider: {provider}")
+                        validation_errors.append(
+                            f"Invalid embedding provider: {provider}"
+                        )
                     else:
                         settings.embedding.provider = provider
 
@@ -107,21 +122,27 @@ async def update_configuration(
                 if "batch_size" in request.embedding_config:
                     batch_size = request.embedding_config["batch_size"]
                     if not isinstance(batch_size, int) or batch_size < 1:
-                        validation_errors.append("Batch size must be a positive integer")
+                        validation_errors.append(
+                            "Batch size must be a positive integer"
+                        )
                     else:
                         settings.embedding.batch_size = batch_size
 
                 if "dimensions" in request.embedding_config:
                     dimensions = request.embedding_config["dimensions"]
                     if not isinstance(dimensions, int) or dimensions < 1:
-                        validation_errors.append("Embedding dimensions must be a positive integer")
+                        validation_errors.append(
+                            "Embedding dimensions must be a positive integer"
+                        )
                     else:
                         settings.embedding.dimensions = dimensions
 
                 logger.info("Embedding configuration updated")
 
             except Exception as e:
-                validation_errors.append(f"Error updating embedding configuration: {str(e)}")
+                validation_errors.append(
+                    f"Error updating embedding configuration: {str(e)}"
+                )
 
         # Update OCR settings
         if request.ocr_settings is not None:
@@ -135,7 +156,9 @@ async def update_configuration(
                         validation_errors.append("DPI must be at least 72")
 
                 if "preserve_layout" in request.ocr_settings:
-                    settings.processing.preserve_layout = bool(request.ocr_settings["preserve_layout"])
+                    settings.processing.preserve_layout = bool(
+                        request.ocr_settings["preserve_layout"]
+                    )
 
                 logger.info("OCR settings updated")
 
@@ -171,7 +194,9 @@ async def update_configuration(
                     if not isinstance(chunk_overlap, int) or chunk_overlap < 0:
                         validation_errors.append("Chunk overlap must be non-negative")
                     elif chunk_overlap >= settings.processing.chunk_size:
-                        validation_errors.append("Chunk overlap must be less than chunk size")
+                        validation_errors.append(
+                            "Chunk overlap must be less than chunk size"
+                        )
                     else:
                         settings.processing.chunk_overlap = chunk_overlap
 
@@ -188,7 +213,9 @@ async def update_configuration(
             if services_restarted:
                 message += f". Services restarted: {', '.join(services_restarted)}"
         else:
-            message = f"Configuration update completed with {len(validation_errors)} errors"
+            message = (
+                f"Configuration update completed with {len(validation_errors)} errors"
+            )
 
         return ConfigurationResponse(
             success=success,
@@ -205,8 +232,8 @@ async def update_configuration(
             status_code=500,
             detail=ErrorResponse(
                 error=ErrorType.SYSTEM,
-                message=f"Failed to update configuration: {str(e)}"
-            ).dict()
+                message=f"Failed to update configuration: {str(e)}",
+            ).dict(),
         )
 
 
@@ -245,7 +272,7 @@ async def get_current_configuration() -> Dict[str, Any]:
                 "name": settings.database.name,
                 "pool_size": settings.database.pool_size,
                 "max_overflow": settings.database.max_overflow,
-            }
+            },
         }
 
     except Exception as e:
@@ -254,35 +281,34 @@ async def get_current_configuration() -> Dict[str, Any]:
             status_code=500,
             detail=ErrorResponse(
                 error=ErrorType.SYSTEM,
-                message=f"Failed to retrieve configuration: {str(e)}"
-            ).dict()
+                message=f"Failed to retrieve configuration: {str(e)}",
+            ).dict(),
         )
 
 
 @router.post("/configuration/validate")
-async def validate_configuration(
-    config_data: Dict[str, Any]
-) -> Dict[str, Any]:
+async def validate_configuration(config_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Validate configuration without applying changes.
     """
     try:
-        validation_results = {
-            "valid": True,
-            "errors": [],
-            "warnings": []
-        }
+        validation_results = {"valid": True, "errors": [], "warnings": []}
 
         # Validate watch directories
         if "watch_directories" in config_data:
             for directory in config_data["watch_directories"]:
                 from pathlib import Path
+
                 path = Path(directory)
                 if not path.exists():
-                    validation_results["errors"].append(f"Directory does not exist: {directory}")
+                    validation_results["errors"].append(
+                        f"Directory does not exist: {directory}"
+                    )
                     validation_results["valid"] = False
                 elif not path.is_dir():
-                    validation_results["errors"].append(f"Path is not a directory: {directory}")
+                    validation_results["errors"].append(
+                        f"Path is not a directory: {directory}"
+                    )
                     validation_results["valid"] = False
 
         # Validate embedding configuration
@@ -290,13 +316,17 @@ async def validate_configuration(
             embedding_config = config_data["embedding_config"]
             if "provider" in embedding_config:
                 if embedding_config["provider"] not in ["ollama", "openai"]:
-                    validation_results["errors"].append("Provider must be 'ollama' or 'openai'")
+                    validation_results["errors"].append(
+                        "Provider must be 'ollama' or 'openai'"
+                    )
                     validation_results["valid"] = False
 
             if "batch_size" in embedding_config:
                 batch_size = embedding_config["batch_size"]
                 if not isinstance(batch_size, int) or batch_size < 1:
-                    validation_results["errors"].append("Batch size must be a positive integer")
+                    validation_results["errors"].append(
+                        "Batch size must be a positive integer"
+                    )
                     validation_results["valid"] = False
 
         # Validate processing limits
@@ -305,10 +335,14 @@ async def validate_configuration(
             if "max_file_size_mb" in limits:
                 max_size = limits["max_file_size_mb"]
                 if not isinstance(max_size, (int, float)) or max_size <= 0:
-                    validation_results["errors"].append("Max file size must be positive")
+                    validation_results["errors"].append(
+                        "Max file size must be positive"
+                    )
                     validation_results["valid"] = False
                 elif max_size > 1000:
-                    validation_results["warnings"].append("Large max file size may impact performance")
+                    validation_results["warnings"].append(
+                        "Large max file size may impact performance"
+                    )
 
         return validation_results
 
@@ -318,8 +352,8 @@ async def validate_configuration(
             status_code=500,
             detail=ErrorResponse(
                 error=ErrorType.SYSTEM,
-                message=f"Configuration validation failed: {str(e)}"
-            ).dict()
+                message=f"Configuration validation failed: {str(e)}",
+            ).dict(),
         )
 
 
@@ -345,12 +379,18 @@ async def reset_configuration() -> ConfigurationResponse:
         settings.embedding.model = default_settings.embedding.model
         settings.embedding.batch_size = default_settings.embedding.batch_size
         settings.embedding.dimensions = default_settings.embedding.dimensions
-        settings.processing.max_file_size_mb = default_settings.processing.max_file_size_mb
-        settings.processing.processing_timeout_seconds = default_settings.processing.processing_timeout_seconds
+        settings.processing.max_file_size_mb = (
+            default_settings.processing.max_file_size_mb
+        )
+        settings.processing.processing_timeout_seconds = (
+            default_settings.processing.processing_timeout_seconds
+        )
         settings.processing.chunk_size = default_settings.processing.chunk_size
         settings.processing.chunk_overlap = default_settings.processing.chunk_overlap
         settings.processing.ocr_language = default_settings.processing.ocr_language
-        settings.processing.preserve_layout = default_settings.processing.preserve_layout
+        settings.processing.preserve_layout = (
+            default_settings.processing.preserve_layout
+        )
 
         # Restart file watcher if directories changed
         if old_watch_dirs != settings.watcher.watch_directories:
@@ -371,7 +411,7 @@ async def reset_configuration() -> ConfigurationResponse:
                     }
                     watcher_manager.start_watcher(
                         name=f"default_watcher_{Path(new_dir).name}",
-                        config=watcher_config
+                        config=watcher_config,
                     )
 
                 services_restarted.append("file_watcher")
@@ -384,7 +424,7 @@ async def reset_configuration() -> ConfigurationResponse:
 
         logger.info(
             "Configuration reset to defaults",
-            extra={"services_restarted": services_restarted}
+            extra={"services_restarted": services_restarted},
         )
 
         return ConfigurationResponse(
@@ -402,6 +442,6 @@ async def reset_configuration() -> ConfigurationResponse:
             status_code=500,
             detail=ErrorResponse(
                 error=ErrorType.SYSTEM,
-                message=f"Failed to reset configuration: {str(e)}"
-            ).dict()
+                message=f"Failed to reset configuration: {str(e)}",
+            ).dict(),
         )

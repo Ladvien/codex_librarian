@@ -23,10 +23,13 @@ try:
         TaskQueue,
         create_task_queue,
     )
-    __all__.extend([
-        "TaskQueue",
-        "create_task_queue",
-    ])
+
+    __all__.extend(
+        [
+            "TaskQueue",
+            "create_task_queue",
+        ]
+    )
 except ImportError:
     # TaskQueue requires sqlalchemy - not available in this environment
     TaskQueue = None
@@ -39,12 +42,15 @@ try:
         create_default_watcher_config,
         get_watcher_manager,
     )
-    __all__.extend([
-        "WatcherManager",
-        "create_watcher_service",
-        "create_default_watcher_config",
-        "get_watcher_manager",
-    ])
+
+    __all__.extend(
+        [
+            "WatcherManager",
+            "create_watcher_service",
+            "create_default_watcher_config",
+            "get_watcher_manager",
+        ]
+    )
 except ImportError:
     # WatcherService requires TaskQueue - not available in this environment
     WatcherManager = None
@@ -69,21 +75,24 @@ try:
         alerting_engine,
         create_standard_alerts,
     )
-    __all__.extend([
-        "MetricsCollector",
-        "HealthMonitor",
-        "ComponentHealth",
-        "HealthStatus",
-        "SystemHealth",
-        "AlertingEngine",
-        "AlertRule",
-        "AlertSeverity",
-        "TracingManager",
-        "metrics_collector",
-        "health_monitor",
-        "alerting_engine",
-        "create_standard_alerts",
-    ])
+
+    __all__.extend(
+        [
+            "MetricsCollector",
+            "HealthMonitor",
+            "ComponentHealth",
+            "HealthStatus",
+            "SystemHealth",
+            "AlertingEngine",
+            "AlertRule",
+            "AlertSeverity",
+            "TracingManager",
+            "metrics_collector",
+            "health_monitor",
+            "alerting_engine",
+            "create_standard_alerts",
+        ]
+    )
 except ImportError:
     # Monitoring components may not be available if dependencies are missing
     MetricsCollector = None

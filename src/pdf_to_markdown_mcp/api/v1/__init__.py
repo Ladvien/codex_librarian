@@ -26,27 +26,15 @@ def create_v1_router() -> APIRouter:
 
     # Include all endpoint routers
     v1_router.include_router(
-        convert.router,
-        prefix="/convert",
-        tags=["conversion", "v1"]
+        convert.router, prefix="/convert", tags=["conversion", "v1"]
     )
 
-    v1_router.include_router(
-        search.router,
-        prefix="/search",
-        tags=["search", "v1"]
-    )
+    v1_router.include_router(search.router, prefix="/search", tags=["search", "v1"])
+
+    v1_router.include_router(status.router, prefix="/status", tags=["monitoring", "v1"])
 
     v1_router.include_router(
-        status.router,
-        prefix="/status",
-        tags=["monitoring", "v1"]
-    )
-
-    v1_router.include_router(
-        config.router,
-        prefix="/config",
-        tags=["configuration", "v1"]
+        config.router, prefix="/config", tags=["configuration", "v1"]
     )
 
     return v1_router

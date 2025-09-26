@@ -14,6 +14,7 @@ from watchdog.events import FileSystemEventHandler, FileSystemEvent
 # Try to import magic, fall back to basic validation if not available
 try:
     import magic
+
     MAGIC_AVAILABLE = True
 except ImportError:
     magic = None
@@ -29,7 +30,9 @@ class WatcherConfig:
     watch_directories: List[str] = field(default_factory=list)
     recursive: bool = True
     patterns: List[str] = field(default_factory=lambda: ["*.pdf", "*.PDF"])
-    ignore_patterns: List[str] = field(default_factory=lambda: ["**/.*", "**/tmp/*", "**/temp/*"])
+    ignore_patterns: List[str] = field(
+        default_factory=lambda: ["**/.*", "**/tmp/*", "**/temp/*"]
+    )
     stability_timeout: float = 5.0
     max_file_size_mb: int = 500
     enable_deduplication: bool = True
@@ -55,44 +58,44 @@ class FileValidator:
             Dictionary with validation results and metadata
         """
         result = {
-            'valid': False,
-            'mime_type': None,
-            'size_bytes': 0,
-            'hash': None,
-            'error': None
+            "valid": False,
+            "mime_type": None,
+            "size_bytes": 0,
+            "hash": None,
+            "error": None,
         }
 
         try:
             # MIME type validation
             if self.mime is not None:
                 mime_type = self.mime.from_file(str(file_path))
-                result['mime_type'] = mime_type
+                result["mime_type"] = mime_type
 
-                if mime_type != 'application/pdf':
-                    result['error'] = f'Invalid MIME type: {mime_type}'
+                if mime_type != "application/pdf":
+                    result["error"] = f"Invalid MIME type: {mime_type}"
                     return result
             else:
                 # Fallback validation - check file extension and basic PDF header
-                if not file_path.suffix.lower() in ['.pdf']:
-                    result['error'] = f'Invalid file extension: {file_path.suffix}'
+                if not file_path.suffix.lower() in [".pdf"]:
+                    result["error"] = f"Invalid file extension: {file_path.suffix}"
                     return result
 
                 # Check for PDF magic bytes
-                with open(file_path, 'rb') as f:
+                with open(file_path, "rb") as f:
                     header = f.read(4)
-                    if header != b'%PDF':
-                        result['error'] = 'File does not start with PDF magic bytes'
+                    if header != b"%PDF":
+                        result["error"] = "File does not start with PDF magic bytes"
                         return result
 
-                result['mime_type'] = 'application/pdf'  # Assumed based on validation
+                result["mime_type"] = "application/pdf"  # Assumed based on validation
 
             # File size and hash calculation
-            result['size_bytes'] = file_path.stat().st_size
-            result['hash'] = self.calculate_file_hash(file_path)
-            result['valid'] = True
+            result["size_bytes"] = file_path.stat().st_size
+            result["hash"] = self.calculate_file_hash(file_path)
+            result["valid"] = True
 
         except Exception as e:
-            result['error'] = str(e)
+            result["error"] = str(e)
 
         return result
 
@@ -106,7 +109,7 @@ class FileValidator:
             SHA256 hash string
         """
         hash_obj = hashlib.sha256()
-        with open(file_path, 'rb') as f:
+        with open(file_path, "rb") as f:
             for chunk in iter(lambda: f.read(4096), b""):
                 hash_obj.update(chunk)
         return hash_obj.hexdigest()
@@ -179,7 +182,9 @@ class PDFFileHandler(FileSystemEventHandler):
             True if file matches PDF patterns
         """
         filename = Path(file_path).name
-        return any(fnmatch.fnmatch(filename, pattern) for pattern in self.config.patterns)
+        return any(
+            fnmatch.fnmatch(filename, pattern) for pattern in self.config.patterns
+        )
 
     def _should_ignore_file(self, file_path: str) -> bool:
         """Check if file should be ignored based on ignore patterns.
@@ -190,7 +195,10 @@ class PDFFileHandler(FileSystemEventHandler):
         Returns:
             True if file should be ignored
         """
-        return any(fnmatch.fnmatch(file_path, pattern) for pattern in self.config.ignore_patterns)
+        return any(
+            fnmatch.fnmatch(file_path, pattern)
+            for pattern in self.config.ignore_patterns
+        )
 
     def process_new_file(self, file_path: str) -> None:
         """Process a newly detected PDF file.
@@ -203,27 +211,35 @@ class PDFFileHandler(FileSystemEventHandler):
 
             # Check if file is stable (finished being written)
             if not self.detector.is_file_stable(path_obj):
-                logger.debug(f"File not yet stable, will check again later: {file_path}")
+                logger.debug(
+                    f"File not yet stable, will check again later: {file_path}"
+                )
                 return
 
             # Validate the PDF file
             validation_result = self.validator.validate_pdf(path_obj)
 
-            if not validation_result['valid']:
-                logger.warning(f"Invalid PDF file detected: {file_path} - {validation_result['error']}")
+            if not validation_result["valid"]:
+                logger.warning(
+                    f"Invalid PDF file detected: {file_path} - {validation_result['error']}"
+                )
                 return
 
             # Check file size limits
-            size_mb = validation_result['size_bytes'] / (1024 * 1024)
+            size_mb = validation_result["size_bytes"] / (1024 * 1024)
             if size_mb > self.config.max_file_size_mb:
-                logger.warning(f"PDF file too large ({size_mb:.1f}MB > {self.config.max_file_size_mb}MB): {file_path}")
+                logger.warning(
+                    f"PDF file too large ({size_mb:.1f}MB > {self.config.max_file_size_mb}MB): {file_path}"
+                )
                 return
 
             # Check for duplicates if deduplication is enabled
             if self.config.enable_deduplication:
-                file_hash = validation_result['hash']
+                file_hash = validation_result["hash"]
                 if file_hash in self.processed_files:
-                    logger.info(f"Duplicate PDF file detected (hash: {file_hash[:8]}...): {file_path}")
+                    logger.info(
+                        f"Duplicate PDF file detected (hash: {file_hash[:8]}...): {file_path}"
+                    )
                     return
                 self.processed_files.add(file_hash)
 
@@ -280,7 +296,7 @@ class PDFFileHandler(FileSystemEventHandler):
         if event.is_directory:
             return
 
-        if hasattr(event, 'dest_path') and self.is_pdf_file(event.dest_path):
+        if hasattr(event, "dest_path") and self.is_pdf_file(event.dest_path):
             if not self._should_ignore_file(event.dest_path):
                 logger.debug(f"PDF file moved to: {event.dest_path}")
                 self.process_new_file(event.dest_path)
@@ -321,11 +337,11 @@ class DirectoryWatcher:
                     continue
 
                 self.observer.schedule(
-                    self.handler,
-                    str(watch_path),
-                    recursive=self.config.recursive
+                    self.handler, str(watch_path), recursive=self.config.recursive
                 )
-                logger.info(f"Started watching directory: {directory} (recursive={self.config.recursive})")
+                logger.info(
+                    f"Started watching directory: {directory} (recursive={self.config.recursive})"
+                )
 
             except Exception as e:
                 logger.error(f"Failed to start watching directory {directory}: {e}")
@@ -368,11 +384,13 @@ class DirectoryWatcher:
                         self.observer.schedule(
                             self.handler,
                             str(watch_path),
-                            recursive=self.config.recursive
+                            recursive=self.config.recursive,
                         )
                         logger.info(f"Added new watch directory: {directory}")
                     else:
-                        logger.warning(f"Cannot add non-existent directory: {directory}")
+                        logger.warning(
+                            f"Cannot add non-existent directory: {directory}"
+                        )
 
                 except Exception as e:
                     logger.error(f"Failed to add watch directory {directory}: {e}")
@@ -414,14 +432,14 @@ class DirectoryWatcher:
             Dictionary with watcher status information
         """
         return {
-            'is_running': self.is_running(),
-            'watch_directories': self.config.watch_directories,
-            'recursive': self.config.recursive,
-            'patterns': self.config.patterns,
-            'ignore_patterns': self.config.ignore_patterns,
-            'stability_timeout': self.config.stability_timeout,
-            'max_file_size_mb': self.config.max_file_size_mb,
-            'enable_deduplication': self.config.enable_deduplication,
-            'processed_files_count': len(self.handler.processed_files),
-            'stable_files_tracked': len(self.handler.detector.stable_files)
+            "is_running": self.is_running(),
+            "watch_directories": self.config.watch_directories,
+            "recursive": self.config.recursive,
+            "patterns": self.config.patterns,
+            "ignore_patterns": self.config.ignore_patterns,
+            "stability_timeout": self.config.stability_timeout,
+            "max_file_size_mb": self.config.max_file_size_mb,
+            "enable_deduplication": self.config.enable_deduplication,
+            "processed_files_count": len(self.handler.processed_files),
+            "stable_files_tracked": len(self.handler.detector.stable_files),
         }

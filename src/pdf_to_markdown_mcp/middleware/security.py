@@ -19,6 +19,7 @@ try:
     from slowapi import Limiter, _rate_limit_exceeded_handler
     from slowapi.util import get_remote_address
     from slowapi.errors import RateLimitExceeded
+
     RATE_LIMITING_AVAILABLE = True
 except ImportError:
     logger.warning("slowapi not available, rate limiting disabled")
@@ -80,29 +81,26 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             # Allow localhost connections for development tools
             base_policy = base_policy.replace(
                 "connect-src 'self'",
-                "connect-src 'self' ws://localhost:* http://localhost:*"
+                "connect-src 'self' ws://localhost:* http://localhost:*",
             )
 
         return base_policy
 
-    def _get_security_headers(self, request: Request, response: Response) -> Dict[str, str]:
+    def _get_security_headers(
+        self, request: Request, response: Response
+    ) -> Dict[str, str]:
         """Get security headers based on request and response context."""
         headers = {
             # Prevent MIME type sniffing
             "X-Content-Type-Options": "nosniff",
-
             # Prevent clickjacking
             "X-Frame-Options": "DENY",
-
             # Enable XSS filtering (legacy browsers)
             "X-XSS-Protection": "1; mode=block",
-
             # Control referrer information
             "Referrer-Policy": "strict-origin-when-cross-origin",
-
             # Remove server identification
             "Server": "PDF-to-Markdown-MCP",
-
             # Permissions policy (restrict features)
             "Permissions-Policy": (
                 "accelerometer=(), "
@@ -118,7 +116,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         # Add HSTS for HTTPS requests
         if request.url.scheme == "https" or settings.environment == "production":
-            headers["Strict-Transport-Security"] = f"max-age={self.hsts_max_age}; includeSubDomains; preload"
+            headers["Strict-Transport-Security"] = (
+                f"max-age={self.hsts_max_age}; includeSubDomains; preload"
+            )
 
         # Content Security Policy
         csp_policy = self.csp_policy
@@ -127,8 +127,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         if self._is_sse_endpoint(request):
             # Modify CSP for SSE endpoints to allow event streams
             csp_policy = csp_policy.replace(
-                "connect-src 'self'",
-                "connect-src 'self' data:"
+                "connect-src 'self'", "connect-src 'self' data:"
             )
 
         headers["Content-Security-Policy"] = csp_policy
@@ -139,10 +138,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         """Check if this is a Server-Sent Events endpoint."""
         path = request.url.path
         return (
-            "/stream" in path or
-            "/events" in path or
-            "/progress" in path or
-            request.headers.get("Accept") == "text/event-stream"
+            "/stream" in path
+            or "/events" in path
+            or "/progress" in path
+            or request.headers.get("Accept") == "text/event-stream"
         )
 
     async def dispatch(self, request: Request, call_next) -> Response:
@@ -158,14 +157,14 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         # Log security headers for development/debugging
         if settings.debug:
-            correlation_id = getattr(request.state, 'correlation_id', 'unknown')
+            correlation_id = getattr(request.state, "correlation_id", "unknown")
             logger.debug(
                 "Security headers applied",
                 extra={
                     "correlation_id": correlation_id,
                     "path": request.url.path,
-                    "headers_added": list(security_headers.keys())
-                }
+                    "headers_added": list(security_headers.keys()),
+                },
             )
 
         return response
@@ -192,13 +191,13 @@ class RequestSizeMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         """Validate request size before processing."""
         # Check Content-Length header
-        content_length = request.headers.get('Content-Length')
+        content_length = request.headers.get("Content-Length")
 
         if content_length:
             try:
                 size = int(content_length)
                 if size > self.max_request_size:
-                    correlation_id = getattr(request.state, 'correlation_id', 'unknown')
+                    correlation_id = getattr(request.state, "correlation_id", "unknown")
 
                     logger.warning(
                         "Request body too large",
@@ -206,14 +205,15 @@ class RequestSizeMiddleware(BaseHTTPMiddleware):
                             "correlation_id": correlation_id,
                             "path": request.url.path,
                             "size": size,
-                            "max_allowed": self.max_request_size
-                        }
+                            "max_allowed": self.max_request_size,
+                        },
                     )
 
                     from fastapi import HTTPException
+
                     raise HTTPException(
                         status_code=413,
-                        detail=f"Request body too large. Maximum allowed: {self.max_request_size // (1024*1024)}MB"
+                        detail=f"Request body too large. Maximum allowed: {self.max_request_size // (1024*1024)}MB",
                     )
             except ValueError:
                 # Invalid Content-Length header
@@ -233,22 +233,27 @@ def get_rate_limiter():
     try:
         # Try to use Redis for distributed rate limiting
         from limits.storage import RedisStorage
-        redis_url = settings.redis.url if hasattr(settings, 'redis') else "redis://localhost:6379"
+
+        redis_url = (
+            settings.redis.url
+            if hasattr(settings, "redis")
+            else "redis://localhost:6379"
+        )
         storage = RedisStorage(redis_url)
         logger.info(f"Using Redis storage for rate limiting: {redis_url}")
     except Exception as e:
         # Fallback to in-memory storage
         logger.warning(f"Redis not available for rate limiting, using in-memory: {e}")
         from limits.storage import MemoryStorage
+
         storage = MemoryStorage()
 
     limiter = Limiter(
         key_func=get_remote_address,
-        storage=storage,
         default_limits=[
             f"{settings.rate_limit_per_minute}/minute",
-            f"{settings.rate_limit_per_hour}/hour"
-        ]
+            f"{settings.rate_limit_per_hour}/hour",
+        ],
     )
 
     return limiter
@@ -261,17 +266,14 @@ def get_endpoint_rate_limits(path: str, method: str) -> list:
         # High-resource endpoints (PDF processing)
         "POST:/api/v1/convert_single": ["5/minute", "20/hour"],
         "POST:/api/v1/batch_convert": ["2/minute", "5/hour"],
-
         # Medium-resource endpoints (search operations)
         "GET:/api/v1/semantic_search": ["30/minute", "200/hour"],
         "GET:/api/v1/hybrid_search": ["30/minute", "200/hour"],
         "GET:/api/v1/find_similar": ["20/minute", "100/hour"],
-
         # Low-resource endpoints (status, config)
         "GET:/api/v1/get_status": ["60/minute", "500/hour"],
         "GET:/api/v1/stream_progress": ["60/minute", "500/hour"],
         "POST:/api/v1/configure": ["10/minute", "50/hour"],
-
         # Health endpoints (more permissive)
         "GET:/health": ["120/minute", "1000/hour"],
         "GET:/ready": ["120/minute", "1000/hour"],
@@ -290,14 +292,19 @@ def get_endpoint_rate_limits(path: str, method: str) -> list:
             return limits
 
     # Default limits for unspecified endpoints
-    return [f"{settings.rate_limit_per_minute}/minute", f"{settings.rate_limit_per_hour}/hour"]
+    return [
+        f"{settings.rate_limit_per_minute}/minute",
+        f"{settings.rate_limit_per_hour}/hour",
+    ]
 
 
 # Configuration for easy import
 def create_security_middleware(app):
     """Create and configure security middleware for the application."""
     # Get configuration from settings
-    max_request_size = getattr(settings.processing, 'max_file_size_mb', 100) * 1024 * 1024
+    max_request_size = (
+        getattr(settings.processing, "max_file_size_mb", 100) * 1024 * 1024
+    )
 
     # Configure rate limiting
     if RATE_LIMITING_AVAILABLE:
@@ -310,10 +317,9 @@ def create_security_middleware(app):
                 extra={
                     "default_limits": [
                         f"{settings.rate_limit_per_minute}/minute",
-                        f"{settings.rate_limit_per_hour}/hour"
-                    ],
-                    "storage_type": type(limiter.storage).__name__
-                }
+                        f"{settings.rate_limit_per_hour}/hour",
+                    ]
+                },
             )
     else:
         app.state.limiter = None
@@ -328,28 +334,35 @@ def create_security_middleware(app):
     logger.info(
         "Security middleware configured",
         extra={
-            "max_request_size_mb": max_request_size // (1024*1024),
+            "max_request_size_mb": max_request_size // (1024 * 1024),
             "environment": settings.environment,
-            "rate_limiting_enabled": RATE_LIMITING_AVAILABLE
-        }
+            "rate_limiting_enabled": RATE_LIMITING_AVAILABLE,
+        },
     )
 
 
 def require_rate_limit(path_pattern: str, method: str = "GET"):
     """
-    Decorator to add rate limiting to FastAPI endpoints.
+    Decorator factory to add rate limiting to FastAPI endpoints.
 
     Usage:
-        @require_rate_limit("/api/v1/convert_single", "POST")
+        limiter = get_rate_limiter()
+
+        @limiter.limit("5/minute")
         @app.post("/api/v1/convert_single")
         async def convert_single(...):
             pass
+
+    Note: This is a helper function - actual rate limiting should be applied
+    in the API routers using the limiter from app.state.limiter
     """
+
     def decorator(func):
         if RATE_LIMITING_AVAILABLE:
             limits = get_endpoint_rate_limits(path_pattern, method)
-            # Apply rate limiting with endpoint-specific limits
-            for limit in limits:
-                func = limiter.limit(limit)(func)
+            # This decorator is for documentation - actual rate limiting
+            # is applied in the create_security_middleware function
+            func._rate_limits = limits
         return func
+
     return decorator

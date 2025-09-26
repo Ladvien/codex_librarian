@@ -27,7 +27,7 @@ def upgrade() -> None:
     # Create HNSW index for document embeddings (better performance than IVFFlat for high-recall scenarios)
     # HNSW is generally better for smaller datasets or when query performance is more important than index size
     op.execute("""
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_embeddings_hnsw_cosine
+        CREATE INDEX IF NOT EXISTS idx_embeddings_hnsw_cosine
         ON document_embeddings
         USING hnsw (embedding vector_cosine_ops)
         WITH (m = 16, ef_construction = 64);
@@ -36,7 +36,7 @@ def upgrade() -> None:
     # Create additional distance metric indexes for different similarity search needs
     # Euclidean distance index
     op.execute("""
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_embeddings_euclidean
+        CREATE INDEX IF NOT EXISTS idx_embeddings_euclidean
         ON document_embeddings
         USING ivfflat (embedding vector_l2_ops)
         WITH (lists = 100);
@@ -44,7 +44,7 @@ def upgrade() -> None:
 
     # Inner product index (for normalized vectors)
     op.execute("""
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_embeddings_inner_product
+        CREATE INDEX IF NOT EXISTS idx_embeddings_inner_product
         ON document_embeddings
         USING ivfflat (embedding vector_ip_ops)
         WITH (lists = 100);
@@ -52,24 +52,26 @@ def upgrade() -> None:
 
     # HNSW index for image embeddings
     op.execute("""
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_images_hnsw_cosine
+        CREATE INDEX IF NOT EXISTS idx_images_hnsw_cosine
         ON document_images
         USING hnsw (image_embedding vector_cosine_ops)
         WITH (m = 16, ef_construction = 64);
     """)
 
     # Partial index for completed documents only (most common query pattern)
-    op.execute("""
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_embeddings_completed_docs
-        ON document_embeddings
-        USING ivfflat (embedding vector_cosine_ops)
-        WITH (lists = 100)
-        WHERE EXISTS (
-            SELECT 1 FROM documents d
-            WHERE d.id = document_embeddings.document_id
-            AND d.conversion_status = 'completed'
-        );
-    """)
+    # Note: Commented out as PostgreSQL doesn't support subqueries in partial index WHERE clause
+    # Would need to be created as a materialized view or use a simpler condition
+    # op.execute("""
+    #     CREATE INDEX IF NOT EXISTS idx_embeddings_completed_docs
+    #     ON document_embeddings
+    #     USING ivfflat (embedding vector_cosine_ops)
+    #     WITH (lists = 100)
+    #     WHERE EXISTS (
+    #         SELECT 1 FROM documents d
+    #         WHERE d.id = document_embeddings.document_id
+    #         AND d.conversion_status = 'completed'
+    #     );
+    # """)
 
     # Covering index for common search result fields
     op.create_index(
@@ -82,14 +84,14 @@ def upgrade() -> None:
     # Advanced full-text search indexes for hybrid search optimization
     # GIN index with custom text search configuration
     op.execute("""
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_content_fulltext_gin
+        CREATE INDEX IF NOT EXISTS idx_content_fulltext_gin
         ON document_content
         USING gin(to_tsvector('english', plain_text));
     """)
 
     # Combined index for document metadata and content search
     op.execute("""
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_documents_metadata_gin
+        CREATE INDEX IF NOT EXISTS idx_documents_metadata_gin
         ON documents
         USING gin(metadata);
     """)
@@ -140,17 +142,17 @@ def downgrade() -> None:
     op.execute("ALTER TABLE document_images ALTER COLUMN image_embedding SET STATISTICS -1;")
 
     # Drop full-text search indexes
-    op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_documents_metadata_gin;")
-    op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_content_fulltext_gin;")
+    op.execute("DROP INDEX IF EXISTS idx_documents_metadata_gin;")
+    op.execute("DROP INDEX IF EXISTS idx_content_fulltext_gin;")
 
     # Drop covering index
     op.drop_index('idx_embeddings_search_covering', table_name='document_embeddings')
 
     # Drop partial index
-    op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_embeddings_completed_docs;")
+    # op.execute("DROP INDEX IF EXISTS idx_embeddings_completed_docs;")
 
     # Drop advanced distance metric indexes
-    op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_images_hnsw_cosine;")
-    op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_embeddings_inner_product;")
-    op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_embeddings_euclidean;")
-    op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_embeddings_hnsw_cosine;")
+    op.execute("DROP INDEX IF EXISTS idx_images_hnsw_cosine;")
+    op.execute("DROP INDEX IF EXISTS idx_embeddings_inner_product;")
+    op.execute("DROP INDEX IF EXISTS idx_embeddings_euclidean;")
+    op.execute("DROP INDEX IF EXISTS idx_embeddings_hnsw_cosine;")

@@ -27,7 +27,9 @@ class FormulaData(BaseModel):
     latex: str = Field(..., description="LaTeX representation of formula")
     confidence: float = Field(..., ge=0.0, le=1.0, description="Extraction confidence")
     bbox: Optional[List[int]] = Field(None, description="Bounding box [x1, y1, x2, y2]")
-    is_inline: bool = Field(default=False, description="Whether formula is inline or block")
+    is_inline: bool = Field(
+        default=False, description="Whether formula is inline or block"
+    )
 
 
 class ImageData(BaseModel):
@@ -47,10 +49,14 @@ class ChunkData(BaseModel):
 
     chunk_index: int = Field(..., ge=0, description="Chunk index in document")
     text: str = Field(..., min_length=1, description="Chunk text content")
-    start_char: int = Field(..., ge=0, description="Start character position in document")
+    start_char: int = Field(
+        ..., ge=0, description="Start character position in document"
+    )
     end_char: int = Field(..., gt=0, description="End character position in document")
     page: int = Field(..., ge=1, description="Primary page number for chunk")
-    token_count: Optional[int] = Field(None, ge=0, description="Approximate token count")
+    token_count: Optional[int] = Field(
+        None, ge=0, description="Approximate token count"
+    )
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -63,27 +69,49 @@ class ProcessingMetadata(BaseModel):
     """Metadata from PDF processing operation."""
 
     pages: int = Field(..., ge=1, description="Total number of pages")
-    processing_time_ms: int = Field(..., ge=0, description="Processing time in milliseconds")
-    ocr_confidence: Optional[float] = Field(None, ge=0.0, le=1.0, description="Average OCR confidence")
+    processing_time_ms: int = Field(
+        ..., ge=0, description="Processing time in milliseconds"
+    )
+    ocr_confidence: Optional[float] = Field(
+        None, ge=0.0, le=1.0, description="Average OCR confidence"
+    )
 
     # File information
     file_size_bytes: Optional[int] = Field(None, ge=0, description="Original file size")
     file_hash: Optional[str] = Field(None, description="SHA-256 hash of file")
 
     # Processing statistics
-    tables_found: Optional[int] = Field(None, ge=0, description="Number of tables extracted")
-    formulas_found: Optional[int] = Field(None, ge=0, description="Number of formulas extracted")
-    images_found: Optional[int] = Field(None, ge=0, description="Number of images extracted")
-    chunks_created: Optional[int] = Field(None, ge=0, description="Number of text chunks created")
+    tables_found: Optional[int] = Field(
+        None, ge=0, description="Number of tables extracted"
+    )
+    formulas_found: Optional[int] = Field(
+        None, ge=0, description="Number of formulas extracted"
+    )
+    images_found: Optional[int] = Field(
+        None, ge=0, description="Number of images extracted"
+    )
+    chunks_created: Optional[int] = Field(
+        None, ge=0, description="Number of text chunks created"
+    )
 
     # Quality metrics
-    text_extraction_quality: Optional[float] = Field(None, ge=0.0, le=1.0, description="Text extraction quality score")
-    layout_preservation_quality: Optional[float] = Field(None, ge=0.0, le=1.0, description="Layout preservation quality")
+    text_extraction_quality: Optional[float] = Field(
+        None, ge=0.0, le=1.0, description="Text extraction quality score"
+    )
+    layout_preservation_quality: Optional[float] = Field(
+        None, ge=0.0, le=1.0, description="Layout preservation quality"
+    )
 
     # Additional metadata
-    language_detected: Optional[str] = Field(None, description="Primary language detected")
-    mineru_version: Optional[str] = Field(None, description="MinerU library version used")
-    processing_options: Optional[Dict[str, Any]] = Field(None, description="Processing options used")
+    language_detected: Optional[str] = Field(
+        None, description="Primary language detected"
+    )
+    mineru_version: Optional[str] = Field(
+        None, description="MinerU library version used"
+    )
+    processing_options: Optional[Dict[str, Any]] = Field(
+        None, description="Processing options used"
+    )
 
 
 class ProcessingResult(BaseModel):
@@ -92,12 +120,22 @@ class ProcessingResult(BaseModel):
     markdown_content: str = Field(..., description="Full document in Markdown format")
     plain_text: str = Field(..., description="Plain text content for search")
 
-    extracted_tables: List[TableData] = Field(default_factory=list, description="Extracted table data")
-    extracted_formulas: List[FormulaData] = Field(default_factory=list, description="Extracted formula data")
-    extracted_images: List[ImageData] = Field(default_factory=list, description="Extracted image data")
-    chunk_data: List[ChunkData] = Field(default_factory=list, description="Text chunks for embeddings")
+    extracted_tables: List[TableData] = Field(
+        default_factory=list, description="Extracted table data"
+    )
+    extracted_formulas: List[FormulaData] = Field(
+        default_factory=list, description="Extracted formula data"
+    )
+    extracted_images: List[ImageData] = Field(
+        default_factory=list, description="Extracted image data"
+    )
+    chunk_data: List[ChunkData] = Field(
+        default_factory=list, description="Text chunks for embeddings"
+    )
 
-    processing_metadata: ProcessingMetadata = Field(..., description="Processing metadata")
+    processing_metadata: ProcessingMetadata = Field(
+        ..., description="Processing metadata"
+    )
 
     def get_content_summary(self) -> Dict[str, Any]:
         """Get a summary of the processed content."""
@@ -116,9 +154,9 @@ class ProcessingResult(BaseModel):
     def has_structured_content(self) -> bool:
         """Check if document contains structured content (tables, formulas, images)."""
         return (
-            len(self.extracted_tables) > 0 or
-            len(self.extracted_formulas) > 0 or
-            len(self.extracted_images) > 0
+            len(self.extracted_tables) > 0
+            or len(self.extracted_formulas) > 0
+            or len(self.extracted_images) > 0
         )
 
     def get_page_content(self, page_number: int) -> Dict[str, Any]:

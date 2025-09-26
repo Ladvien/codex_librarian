@@ -15,13 +15,14 @@ from pdf_to_markdown_mcp.core.monitoring import (
     health_monitor,
     metrics_collector,
     HealthStatus,
-    TracingManager
+    TracingManager,
 )
 
 router = APIRouter()
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
 
 @router.get("/health", response_model=Dict[str, Any])
 async def get_health() -> Dict[str, Any]:
@@ -48,7 +49,7 @@ async def get_health() -> Dict[str, Any]:
                 "status": component.status.value,
                 "last_check": component.last_check,
                 "response_time_ms": component.response_time_ms,
-                "details": component.details
+                "details": component.details,
             }
 
         response_data = {
@@ -58,14 +59,14 @@ async def get_health() -> Dict[str, Any]:
             "timestamp": system_health.timestamp,
             "uptime_seconds": system_health.uptime_seconds,
             "components": components_dict,
-            "correlation_id": correlation_id
+            "correlation_id": correlation_id,
         }
 
         logger.info(
             "health_check_completed",
             status=system_health.status.value,
             component_count=len(components_dict),
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
         )
 
         return response_data
@@ -75,7 +76,7 @@ async def get_health() -> Dict[str, Any]:
             "health_check_failed",
             error=str(e),
             correlation_id=correlation_id,
-            exc_info=True
+            exc_info=True,
         )
 
         return {
@@ -84,7 +85,7 @@ async def get_health() -> Dict[str, Any]:
             "version": "unknown",
             "timestamp": asyncio.get_event_loop().time(),
             "error": "Health check system failure",
-            "correlation_id": correlation_id
+            "correlation_id": correlation_id,
         }
 
 
@@ -114,13 +115,13 @@ async def get_detailed_health() -> Dict[str, Any]:
                 version_info = result.scalar()
                 dependencies["postgresql"] = {
                     "version": version_info.split()[1] if version_info else "unknown",
-                    "status": "connected"
+                    "status": "connected",
                 }
         except Exception as e:
             dependencies["postgresql"] = {
                 "version": "unknown",
                 "status": "error",
-                "error": str(e)
+                "error": str(e),
             }
 
         # Redis version
@@ -133,26 +134,26 @@ async def get_detailed_health() -> Dict[str, Any]:
                 # Get Redis info from first worker
                 worker_stats = list(stats.values())[0]
                 dependencies["redis"] = {
-                    "version": worker_stats.get("broker", {}).get("transport", "unknown"),
-                    "status": "connected"
+                    "version": worker_stats.get("broker", {}).get(
+                        "transport", "unknown"
+                    ),
+                    "status": "connected",
                 }
             else:
-                dependencies["redis"] = {
-                    "version": "unknown",
-                    "status": "no_workers"
-                }
+                dependencies["redis"] = {"version": "unknown", "status": "no_workers"}
         except Exception as e:
             dependencies["redis"] = {
                 "version": "unknown",
                 "status": "error",
-                "error": str(e)
+                "error": str(e),
             }
 
         # Python version
         import sys
+
         dependencies["python"] = {
             "version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
-            "status": "active"
+            "status": "active",
         }
 
         # Add dependency information to response
@@ -162,7 +163,7 @@ async def get_detailed_health() -> Dict[str, Any]:
         logger.info(
             "detailed_health_check_completed",
             dependency_count=len(dependencies),
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
         )
 
         return basic_health
@@ -172,7 +173,7 @@ async def get_detailed_health() -> Dict[str, Any]:
             "detailed_health_check_failed",
             error=str(e),
             correlation_id=correlation_id,
-            exc_info=True
+            exc_info=True,
         )
 
         raise HTTPException(
@@ -180,8 +181,8 @@ async def get_detailed_health() -> Dict[str, Any]:
             detail={
                 "error": "detailed_health_check_failed",
                 "message": "Failed to retrieve detailed health information",
-                "correlation_id": correlation_id
-            }
+                "correlation_id": correlation_id,
+            },
         )
 
 
@@ -203,13 +204,13 @@ async def get_readiness(response: Response) -> Dict[str, Any]:
             logger.warning(
                 "readiness_check_not_ready",
                 checks=readiness_result["checks"],
-                correlation_id=correlation_id
+                correlation_id=correlation_id,
             )
         else:
             logger.info(
                 "readiness_check_ready",
                 checks=readiness_result["checks"],
-                correlation_id=correlation_id
+                correlation_id=correlation_id,
             )
 
         return {
@@ -217,7 +218,7 @@ async def get_readiness(response: Response) -> Dict[str, Any]:
             "service": "PDF to Markdown MCP Server",
             "checks": readiness_result["checks"],
             "timestamp": asyncio.get_event_loop().time(),
-            "correlation_id": correlation_id
+            "correlation_id": correlation_id,
         }
 
     except Exception as e:
@@ -225,7 +226,7 @@ async def get_readiness(response: Response) -> Dict[str, Any]:
             "readiness_check_failed",
             error=str(e),
             correlation_id=correlation_id,
-            exc_info=True
+            exc_info=True,
         )
 
         response.status_code = 503
@@ -234,7 +235,7 @@ async def get_readiness(response: Response) -> Dict[str, Any]:
             "service": "PDF to Markdown MCP Server",
             "error": "Readiness check system failure",
             "timestamp": asyncio.get_event_loop().time(),
-            "correlation_id": correlation_id
+            "correlation_id": correlation_id,
         }
 
 
@@ -265,7 +266,7 @@ async def get_prometheus_metrics() -> str:
         logger.debug(
             "prometheus_metrics_generated",
             metrics_size_bytes=len(all_metrics),
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
         )
 
         return all_metrics
@@ -275,7 +276,7 @@ async def get_prometheus_metrics() -> str:
             "metrics_collection_failed",
             error=str(e),
             correlation_id=correlation_id,
-            exc_info=True
+            exc_info=True,
         )
 
         # Return minimal metrics with error information
@@ -305,7 +306,7 @@ async def get_json_metrics() -> Dict[str, Any]:
         metrics = {
             "timestamp": asyncio.get_event_loop().time(),
             "service": "PDF to Markdown MCP Server",
-            "correlation_id": correlation_id
+            "correlation_id": correlation_id,
         }
 
         # Collect database metrics
@@ -317,33 +318,39 @@ async def get_json_metrics() -> Dict[str, Any]:
 
             async with get_db() as session:
                 # Processing queue depth
-                queue_count = await session.scalar(
-                    session.query(ProcessingQueue).filter(
-                        ProcessingQueue.status == 'queued'
-                    ).count()
-                ) or 0
+                queue_count = (
+                    await session.scalar(
+                        session.query(ProcessingQueue)
+                        .filter(ProcessingQueue.status == "queued")
+                        .count()
+                    )
+                    or 0
+                )
 
                 # Total documents
-                total_docs = await session.scalar(
-                    session.query(Document).count()
-                ) or 0
+                total_docs = await session.scalar(session.query(Document).count()) or 0
 
                 # Documents in last hour
                 one_hour_ago = datetime.utcnow() - timedelta(hours=1)
-                recent_docs = await session.scalar(
-                    session.query(Document).filter(
-                        Document.created_at >= one_hour_ago
-                    ).count()
-                ) or 0
+                recent_docs = (
+                    await session.scalar(
+                        session.query(Document)
+                        .filter(Document.created_at >= one_hour_ago)
+                        .count()
+                    )
+                    or 0
+                )
 
-                metrics.update({
-                    "database": {
-                        "processing_queue_depth": queue_count,
-                        "documents_total": total_docs,
-                        "documents_last_hour": recent_docs,
-                        "processing_rate_per_hour": recent_docs
+                metrics.update(
+                    {
+                        "database": {
+                            "processing_queue_depth": queue_count,
+                            "documents_total": total_docs,
+                            "documents_last_hour": recent_docs,
+                            "processing_rate_per_hour": recent_docs,
+                        }
                     }
-                })
+                )
 
         except Exception as e:
             metrics["database"] = {"error": str(e)}
@@ -359,14 +366,16 @@ async def get_json_metrics() -> Dict[str, Any]:
             active_count = sum(len(tasks) for tasks in active.values())
             reserved_count = sum(len(tasks) for tasks in reserved.values())
 
-            metrics.update({
-                "celery": {
-                    "active_tasks": active_count,
-                    "reserved_tasks": reserved_count,
-                    "workers": len(active.keys()),
-                    "worker_names": list(active.keys())
+            metrics.update(
+                {
+                    "celery": {
+                        "active_tasks": active_count,
+                        "reserved_tasks": reserved_count,
+                        "workers": len(active.keys()),
+                        "worker_names": list(active.keys()),
+                    }
                 }
-            })
+            )
 
         except Exception as e:
             metrics["celery"] = {"error": str(e)}
@@ -379,25 +388,27 @@ async def get_json_metrics() -> Dict[str, Any]:
             cpu_percent = psutil.cpu_percent(interval=0.1)
 
             try:
-                disk = psutil.disk_usage('/')
+                disk = psutil.disk_usage("/")
                 disk_metrics = {
                     "disk_total_gb": round(disk.total / (1024**3), 2),
                     "disk_used_gb": round(disk.used / (1024**3), 2),
                     "disk_free_gb": round(disk.free / (1024**3), 2),
-                    "disk_percent": round((disk.used / disk.total) * 100, 1)
+                    "disk_percent": round((disk.used / disk.total) * 100, 1),
                 }
             except Exception:
                 disk_metrics = {}
 
-            metrics.update({
-                "system": {
-                    "memory_percent": round(memory.percent, 1),
-                    "memory_available_gb": round(memory.available / (1024**3), 2),
-                    "memory_total_gb": round(memory.total / (1024**3), 2),
-                    "cpu_percent": round(cpu_percent, 1),
-                    **disk_metrics
+            metrics.update(
+                {
+                    "system": {
+                        "memory_percent": round(memory.percent, 1),
+                        "memory_available_gb": round(memory.available / (1024**3), 2),
+                        "memory_total_gb": round(memory.total / (1024**3), 2),
+                        "cpu_percent": round(cpu_percent, 1),
+                        **disk_metrics,
+                    }
                 }
-            })
+            )
 
         except ImportError:
             metrics["system"] = {"error": "psutil not available"}
@@ -406,8 +417,14 @@ async def get_json_metrics() -> Dict[str, Any]:
 
         logger.info(
             "json_metrics_generated",
-            metric_categories=len([k for k in metrics.keys() if k not in ["timestamp", "service", "correlation_id"]]),
-            correlation_id=correlation_id
+            metric_categories=len(
+                [
+                    k
+                    for k in metrics.keys()
+                    if k not in ["timestamp", "service", "correlation_id"]
+                ]
+            ),
+            correlation_id=correlation_id,
         )
 
         return metrics
@@ -417,7 +434,7 @@ async def get_json_metrics() -> Dict[str, Any]:
             "json_metrics_collection_failed",
             error=str(e),
             correlation_id=correlation_id,
-            exc_info=True
+            exc_info=True,
         )
 
         raise HTTPException(
@@ -425,8 +442,8 @@ async def get_json_metrics() -> Dict[str, Any]:
             detail={
                 "error": "metrics_collection_failed",
                 "message": "Failed to collect JSON metrics",
-                "correlation_id": correlation_id
-            }
+                "correlation_id": correlation_id,
+            },
         )
 
 
@@ -440,45 +457,68 @@ async def _collect_custom_metrics() -> str:
 
         # Add health status as metrics
         healthy_components = sum(
-            1 for comp in system_health.components.values()
+            1
+            for comp in system_health.components.values()
             if comp.status == HealthStatus.HEALTHY
         )
 
         degraded_components = sum(
-            1 for comp in system_health.components.values()
+            1
+            for comp in system_health.components.values()
             if comp.status == HealthStatus.DEGRADED
         )
 
         unhealthy_components = sum(
-            1 for comp in system_health.components.values()
+            1
+            for comp in system_health.components.values()
             if comp.status == HealthStatus.UNHEALTHY
         )
 
-        custom_metrics.extend([
-            "# HELP system_health_components Number of components by health status",
-            "# TYPE system_health_components gauge",
-            f'system_health_components{{status="healthy"}} {healthy_components}',
-            f'system_health_components{{status="degraded"}} {degraded_components}',
-            f'system_health_components{{status="unhealthy"}} {unhealthy_components}',
-            "",
-            "# HELP system_uptime_seconds System uptime in seconds",
-            "# TYPE system_uptime_seconds gauge",
-            f"system_uptime_seconds {system_health.uptime_seconds}",
-            ""
-        ])
+        custom_metrics.extend(
+            [
+                "# HELP system_health_components Number of components by health status",
+                "# TYPE system_health_components gauge",
+                f'system_health_components{{status="healthy"}} {healthy_components}',
+                f'system_health_components{{status="degraded"}} {degraded_components}',
+                f'system_health_components{{status="unhealthy"}} {unhealthy_components}',
+                "",
+                "# HELP system_uptime_seconds System uptime in seconds",
+                "# TYPE system_uptime_seconds gauge",
+                f"system_uptime_seconds {system_health.uptime_seconds}",
+                "",
+            ]
+        )
 
         # Add component response times
         for name, component in system_health.components.items():
             if component.response_time_ms is not None:
-                custom_metrics.extend([
-                    f'component_response_time_milliseconds{{component="{name}"}} {component.response_time_ms}'
-                ])
+                custom_metrics.extend(
+                    [
+                        f'component_response_time_milliseconds{{component="{name}"}} {component.response_time_ms}'
+                    ]
+                )
 
         if any("response_time_milliseconds" in line for line in custom_metrics):
-            custom_metrics.insert(-len([line for line in custom_metrics if "response_time_milliseconds" in line]),
-                                "# HELP component_response_time_milliseconds Component response time in milliseconds")
-            custom_metrics.insert(-len([line for line in custom_metrics if "response_time_milliseconds" in line]),
-                                "# TYPE component_response_time_milliseconds gauge")
+            custom_metrics.insert(
+                -len(
+                    [
+                        line
+                        for line in custom_metrics
+                        if "response_time_milliseconds" in line
+                    ]
+                ),
+                "# HELP component_response_time_milliseconds Component response time in milliseconds",
+            )
+            custom_metrics.insert(
+                -len(
+                    [
+                        line
+                        for line in custom_metrics
+                        if "response_time_milliseconds" in line
+                    ]
+                ),
+                "# TYPE component_response_time_milliseconds gauge",
+            )
 
     except Exception as e:
         logger.error(f"Failed to collect custom metrics: {e}")

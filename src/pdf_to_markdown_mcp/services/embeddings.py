@@ -30,6 +30,7 @@ except ImportError:
 
 try:
     import structlog
+
     logger = structlog.get_logger()
 except ImportError:
     # Fall back to standard logging
@@ -39,12 +40,14 @@ except ImportError:
 
 class EmbeddingProvider(str, Enum):
     """Supported embedding providers."""
+
     OLLAMA = "ollama"
     OPENAI = "openai"
 
 
 class EmbeddingError(Exception):
     """Base exception for embedding-related errors."""
+
     pass
 
 
@@ -63,6 +66,7 @@ class EmbeddingConfig(BaseModel):
 
     class Config:
         """Pydantic configuration."""
+
         frozen = True
 
 
@@ -76,16 +80,23 @@ class EmbeddingResult(BaseModel):
 
     class Config:
         """Pydantic configuration."""
+
         frozen = True
 
 
 class OllamaEmbedder:
     """Ollama local embedding provider."""
 
-    def __init__(self, model_name: str = "nomic-embed-text", base_url: str = "http://localhost:11434"):
+    def __init__(
+        self,
+        model_name: str = "nomic-embed-text",
+        base_url: str = "http://localhost:11434",
+    ):
         """Initialize Ollama embedder."""
         if ollama is None:
-            raise ImportError("ollama package not installed. Install with: pip install ollama")
+            raise ImportError(
+                "ollama package not installed. Install with: pip install ollama"
+            )
 
         self.model_name = model_name
         self.base_url = base_url
@@ -112,34 +123,39 @@ class OllamaEmbedder:
         try:
             for text in texts:
                 response = await self.client.embeddings(
-                    model=self.model_name,
-                    prompt=text
+                    model=self.model_name, prompt=text
                 )
-                embeddings.append(response['embedding'])
+                embeddings.append(response["embedding"])
 
-            logger.info(f"Ollama embeddings generated: count={len(embeddings)}, model={self.model_name}")
+            logger.info(
+                f"Ollama embeddings generated: count={len(embeddings)}, model={self.model_name}"
+            )
             return embeddings
 
         except Exception as e:
-            logger.error(f"Ollama embedding failed: error={str(e)}, model={self.model_name}, text_count={len(texts)}")
+            logger.error(
+                f"Ollama embedding failed: error={str(e)}, model={self.model_name}, text_count={len(texts)}"
+            )
             raise EmbeddingError(f"Ollama embedding failed: {str(e)}")
 
 
 class OpenAIEmbedder:
     """OpenAI API embedding provider."""
 
-    def __init__(self, model_name: str = "text-embedding-3-small", api_key: Optional[str] = None):
+    def __init__(
+        self, model_name: str = "text-embedding-3-small", api_key: Optional[str] = None
+    ):
         """Initialize OpenAI embedder."""
         if AsyncOpenAI is None:
-            raise ImportError("openai package not installed. Install with: pip install openai")
+            raise ImportError(
+                "openai package not installed. Install with: pip install openai"
+            )
 
         self.model_name = model_name
         self.client = AsyncOpenAI(api_key=api_key)
 
     async def embed_texts(
-        self,
-        texts: List[str],
-        dimensions: int = 1536
+        self, texts: List[str], dimensions: int = 1536
     ) -> List[List[float]]:
         """
         Generate embeddings for list of texts using OpenAI API.
@@ -159,18 +175,20 @@ class OpenAIEmbedder:
 
         try:
             response = await self.client.embeddings.create(
-                model=self.model_name,
-                input=texts,
-                dimensions=dimensions
+                model=self.model_name, input=texts, dimensions=dimensions
             )
 
             embeddings = [item.embedding for item in response.data]
 
-            logger.info(f"OpenAI embeddings generated: count={len(embeddings)}, model={self.model_name}, dimensions={dimensions}")
+            logger.info(
+                f"OpenAI embeddings generated: count={len(embeddings)}, model={self.model_name}, dimensions={dimensions}"
+            )
             return embeddings
 
         except Exception as e:
-            logger.error(f"OpenAI embedding failed: error={str(e)}, model={self.model_name}, text_count={len(texts)}")
+            logger.error(
+                f"OpenAI embedding failed: error={str(e)}, model={self.model_name}, text_count={len(texts)}"
+            )
             raise EmbeddingError(f"OpenAI embedding failed: {str(e)}")
 
 
@@ -190,19 +208,22 @@ class EmbeddingService:
         """Initialize embedding service with configuration."""
         self.config = config
 
-        # Initialize providers
-        if config.provider == EmbeddingProvider.OLLAMA or config.provider == EmbeddingProvider.OPENAI:
+        # Initialize providers based on configuration
+        self.ollama_embedder = None
+        self.openai_embedder = None
+
+        if config.provider == EmbeddingProvider.OLLAMA:
             self.ollama_embedder = OllamaEmbedder(
-                model_name=config.ollama_model,
-                base_url=config.ollama_base_url
+                model_name=config.ollama_model, base_url=config.ollama_base_url
             )
-
+        elif config.provider == EmbeddingProvider.OPENAI:
             self.openai_embedder = OpenAIEmbedder(
-                model_name=config.openai_model,
-                api_key=config.openai_api_key
+                model_name=config.openai_model, api_key=config.openai_api_key
             )
 
-        logger.info(f"Embedding service initialized: provider={config.provider}, batch_size={config.batch_size}, max_retries={config.max_retries}")
+        logger.info(
+            f"Embedding service initialized: provider={config.provider}, batch_size={config.batch_size}, max_retries={config.max_retries}"
+        )
 
     async def generate_embeddings(self, texts: List[str]) -> EmbeddingResult:
         """
@@ -221,14 +242,14 @@ class EmbeddingService:
             return EmbeddingResult(
                 embeddings=[],
                 provider=self.config.provider,
-                model=self._get_model_name()
+                model=self._get_model_name(),
             )
 
         # Process in batches for performance
         all_embeddings = []
 
         for i in range(0, len(texts), self.config.batch_size):
-            batch = texts[i:i + self.config.batch_size]
+            batch = texts[i : i + self.config.batch_size]
 
             # Retry logic for each batch
             for attempt in range(self.config.max_retries + 1):
@@ -237,8 +258,7 @@ class EmbeddingService:
                         batch_embeddings = await self.ollama_embedder.embed_texts(batch)
                     else:  # OpenAI
                         batch_embeddings = await self.openai_embedder.embed_texts(
-                            batch,
-                            dimensions=self.config.embedding_dimensions
+                            batch, dimensions=self.config.embedding_dimensions
                         )
 
                     all_embeddings.extend(batch_embeddings)
@@ -246,20 +266,25 @@ class EmbeddingService:
 
                 except EmbeddingError as e:
                     if attempt == self.config.max_retries:
-                        raise EmbeddingError(f"Max retries ({self.config.max_retries}) exceeded: {str(e)}")
+                        raise EmbeddingError(
+                            f"Max retries ({self.config.max_retries}) exceeded: {str(e)}"
+                        )
 
                     # Exponential backoff
-                    await asyncio.sleep(2 ** attempt)
-                    logger.warning(f"Embedding retry: attempt={attempt + 1}, error={str(e)}")
+                    await asyncio.sleep(2**attempt)
+                    logger.warning(
+                        f"Embedding retry: attempt={attempt + 1}, error={str(e)}"
+                    )
 
         return EmbeddingResult(
             embeddings=all_embeddings,
             provider=self.config.provider,
             model=self._get_model_name(),
             metadata={
-                "batch_count": (len(texts) + self.config.batch_size - 1) // self.config.batch_size,
-                "total_texts": len(texts)
-            }
+                "batch_count": (len(texts) + self.config.batch_size - 1)
+                // self.config.batch_size,
+                "total_texts": len(texts),
+            },
         )
 
     async def health_check(self) -> bool:
@@ -282,7 +307,7 @@ class EmbeddingService:
         query_embedding: List[float],
         candidate_embeddings: List[List[float]],
         top_k: int = 10,
-        metric: str = "cosine"
+        metric: str = "cosine",
     ) -> List[Tuple[int, float]]:
         """
         Perform similarity search using embeddings.
@@ -331,7 +356,9 @@ class EmbeddingService:
 
         return results
 
-    async def normalize_embeddings(self, embeddings: List[List[float]]) -> List[List[float]]:
+    async def normalize_embeddings(
+        self, embeddings: List[List[float]]
+    ) -> List[List[float]]:
         """
         Normalize embeddings to unit vectors.
 
@@ -363,8 +390,7 @@ class EmbeddingService:
 
 # Factory function for easy service creation
 async def create_embedding_service(
-    provider: EmbeddingProvider = EmbeddingProvider.OLLAMA,
-    **kwargs
+    provider: EmbeddingProvider = EmbeddingProvider.OLLAMA, **kwargs
 ) -> EmbeddingService:
     """
     Factory function to create embedding service.

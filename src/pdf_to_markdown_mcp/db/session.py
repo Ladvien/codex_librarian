@@ -29,9 +29,13 @@ if not DATABASE_URL:
 
 # Optimized connection pool configuration
 POOL_SIZE = int(os.environ.get("DB_POOL_SIZE", "20"))  # Increased from 15
-MAX_OVERFLOW = int(os.environ.get("DB_MAX_OVERFLOW", "10"))  # Reduced from 30 to prevent exhaustion
+MAX_OVERFLOW = int(
+    os.environ.get("DB_MAX_OVERFLOW", "10")
+)  # Reduced from 30 to prevent exhaustion
 POOL_PRE_PING = os.environ.get("DB_POOL_PRE_PING", "true").lower() == "true"
-POOL_RECYCLE = int(os.environ.get("DB_POOL_RECYCLE", "1800"))  # 30 minutes instead of 1 hour
+POOL_RECYCLE = int(
+    os.environ.get("DB_POOL_RECYCLE", "1800")
+)  # 30 minutes instead of 1 hour
 POOL_TIMEOUT = int(os.environ.get("DB_POOL_TIMEOUT", "20"))  # Reduced from 30
 CONNECT_TIMEOUT = int(os.environ.get("DB_CONNECT_TIMEOUT", "10"))
 SQL_ECHO = os.environ.get("SQL_ECHO", "false").lower() == "true"
@@ -63,11 +67,7 @@ engine = create_engine(
 )
 
 # Session factory
-SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=engine
-)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 @event.listens_for(Engine, "connect")
@@ -124,7 +124,9 @@ def get_db() -> Generator[Session, None, None]:
                 )
                 time.sleep(wait_time)
             else:
-                logger.error(f"Database connection failed after {MAX_RETRIES} attempts: {e}")
+                logger.error(
+                    f"Database connection failed after {MAX_RETRIES} attempts: {e}"
+                )
                 raise
         except Exception as e:
             if session:
@@ -172,7 +174,9 @@ def get_db_session() -> Generator[Session, None, None]:
                 )
                 time.sleep(wait_time)
             else:
-                logger.error(f"Database connection failed after {MAX_RETRIES} attempts: {e}")
+                logger.error(
+                    f"Database connection failed after {MAX_RETRIES} attempts: {e}"
+                )
                 raise
         except Exception as e:
             if session:
@@ -245,7 +249,7 @@ class DatabaseManager:
             "response_time_ms": None,
             "connection_pool": {},
             "active_connections": 0,
-            "error": None
+            "error": None,
         }
 
         try:
@@ -258,24 +262,32 @@ class DatabaseManager:
 
                 # Check PGVector extension availability
                 try:
-                    result = session.execute(text("""
+                    result = session.execute(
+                        text(
+                            """
                         SELECT EXISTS(
                             SELECT 1 FROM pg_extension WHERE extname = 'vector'
                         )
-                    """)).scalar()
+                    """
+                        )
+                    ).scalar()
                     health_info["pgvector_available"] = bool(result)
                 except Exception:
                     health_info["pgvector_available"] = False
 
                 # Get active connections count
                 try:
-                    active_conn_result = session.execute(text("""
+                    active_conn_result = session.execute(
+                        text(
+                            """
                         SELECT count(*)
                         FROM pg_stat_activity
                         WHERE datname = current_database()
                         AND application_name = 'pdf_to_markdown_mcp'
                         AND state = 'active'
-                    """)).scalar()
+                    """
+                        )
+                    ).scalar()
                     health_info["active_connections"] = active_conn_result or 0
                 except Exception:
                     pass
@@ -291,10 +303,7 @@ class DatabaseManager:
 
         except Exception as e:
             logger.error(f"Database health check failed: {e}")
-            health_info.update({
-                "status": "unhealthy",
-                "error": str(e)
-            })
+            health_info.update({"status": "unhealthy", "error": str(e)})
             return health_info
 
     def get_connection_info(self) -> Dict[str, Any]:
@@ -311,14 +320,16 @@ class DatabaseManager:
             "checked_out": pool.checkedout(),
             "overflow": pool.overflow(),
             "invalid": pool.invalid(),
-            "url": str(self.engine.url).replace(
-                f":{self.engine.url.password}@", ":***@"
-            ) if self.engine.url.password else str(self.engine.url),
+            "url": (
+                str(self.engine.url).replace(f":{self.engine.url.password}@", ":***@")
+                if self.engine.url.password
+                else str(self.engine.url)
+            ),
             "pool_class": str(type(pool).__name__),
             "pool_timeout": POOL_TIMEOUT,
             "max_overflow": MAX_OVERFLOW,
             "pool_recycle": POOL_RECYCLE,
-            "pool_pre_ping": POOL_PRE_PING
+            "pool_pre_ping": POOL_PRE_PING,
         }
 
         # Add pool utilization metrics
@@ -362,16 +373,18 @@ class DatabaseManager:
         """
         # Whitelist of allowed operations
         allowed_operations = {
-            'vacuum': "SELECT schemaname, tablename FROM pg_tables WHERE schemaname = 'public'",
-            'analyze': "ANALYZE",
-            'stats': """SELECT
+            "vacuum": "SELECT schemaname, tablename FROM pg_tables WHERE schemaname = 'public'",
+            "analyze": "ANALYZE",
+            "stats": """SELECT
                 schemaname, tablename,
                 n_tup_ins, n_tup_upd, n_tup_del
-                FROM pg_stat_user_tables WHERE schemaname = 'public'"""
+                FROM pg_stat_user_tables WHERE schemaname = 'public'""",
         }
 
         if operation not in allowed_operations:
-            raise ValueError(f"Operation '{operation}' not allowed. Allowed: {list(allowed_operations.keys())}")
+            raise ValueError(
+                f"Operation '{operation}' not allowed. Allowed: {list(allowed_operations.keys())}"
+            )
 
         try:
             with get_db_session() as session:
@@ -390,9 +403,13 @@ class DatabaseManager:
         """
         try:
             with get_db_session() as session:
-                result = session.execute(text("""
+                result = session.execute(
+                    text(
+                        """
                     SELECT pg_size_pretty(pg_database_size(current_database()))
-                """)).scalar()
+                """
+                    )
+                ).scalar()
                 return result
         except Exception as e:
             logger.error(f"Failed to get database size: {e}")
@@ -407,7 +424,9 @@ class DatabaseManager:
         """
         try:
             with get_db_session() as session:
-                result = session.execute(text("""
+                result = session.execute(
+                    text(
+                        """
                     SELECT
                         schemaname,
                         tablename,
@@ -415,7 +434,9 @@ class DatabaseManager:
                     FROM pg_tables
                     WHERE schemaname = 'public'
                     ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC
-                """)).fetchall()
+                """
+                    )
+                ).fetchall()
 
                 return {row.tablename: row.size for row in result}
         except Exception as e:
@@ -433,7 +454,7 @@ class DatabaseManager:
             "vacuum_completed": False,
             "analyze_completed": False,
             "reindex_completed": False,
-            "errors": []
+            "errors": [],
         }
 
         try:
@@ -444,7 +465,7 @@ class DatabaseManager:
                     "document_content",
                     "document_embeddings",
                     "document_images",
-                    "processing_queue"
+                    "processing_queue",
                 ]
 
                 for table in tables_to_optimize:
@@ -484,14 +505,18 @@ class DatabaseManager:
         """
         try:
             with get_db_session() as session:
-                result = session.execute(text("""
+                result = session.execute(
+                    text(
+                        """
                     SELECT pg_terminate_backend(pid)
                     FROM pg_stat_activity
                     WHERE datname = current_database()
                     AND application_name = 'pdf_to_markdown_mcp'
                     AND state = 'idle'
                     AND query_start < NOW() - INTERVAL '30 minutes'
-                """)).fetchall()
+                """
+                    )
+                ).fetchall()
 
                 closed_count = len(result)
                 logger.info(f"Closed {closed_count} idle database connections")

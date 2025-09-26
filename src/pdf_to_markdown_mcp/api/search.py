@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from pdf_to_markdown_mcp.models.request import (
     SemanticSearchRequest,
     HybridSearchRequest,
-    FindSimilarRequest
+    FindSimilarRequest,
 )
 from pdf_to_markdown_mcp.models.response import SearchResponse, ErrorResponse, ErrorType
 from pdf_to_markdown_mcp.db.session import get_db
@@ -25,8 +25,7 @@ router = APIRouter()
 
 @router.post("/semantic_search", response_model=SearchResponse)
 async def semantic_search(
-    request: SemanticSearchRequest,
-    db: Session = Depends(get_db)
+    request: SemanticSearchRequest, db: Session = Depends(get_db)
 ) -> SearchResponse:
     """
     Search documents using natural language queries with vector similarity.
@@ -39,8 +38,8 @@ async def semantic_search(
             extra={
                 "query": request.query,
                 "top_k": request.top_k,
-                "threshold": request.threshold
-            }
+                "threshold": request.threshold,
+            },
         )
 
         search_engine = SearchEngine(db)
@@ -51,7 +50,7 @@ async def semantic_search(
             top_k=request.top_k,
             threshold=request.threshold,
             filters=request.filter,
-            include_content=request.include_content
+            include_content=request.include_content,
         )
 
         return SearchResponse(
@@ -71,8 +70,8 @@ async def semantic_search(
             status_code=400,
             detail=ErrorResponse(
                 error=ErrorType.VALIDATION,
-                message=f"Invalid search parameters: {str(e)}"
-            ).dict()
+                message=f"Invalid search parameters: {str(e)}",
+            ).dict(),
         )
 
     except Exception as e:
@@ -80,16 +79,14 @@ async def semantic_search(
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
-                error=ErrorType.EMBEDDING,
-                message=f"Search failed: {str(e)}"
-            ).dict()
+                error=ErrorType.EMBEDDING, message=f"Search failed: {str(e)}"
+            ).dict(),
         )
 
 
 @router.post("/hybrid_search", response_model=SearchResponse)
 async def hybrid_search(
-    request: HybridSearchRequest,
-    db: Session = Depends(get_db)
+    request: HybridSearchRequest, db: Session = Depends(get_db)
 ) -> SearchResponse:
     """
     Combine vector semantic search with full-text search for best results.
@@ -103,8 +100,8 @@ async def hybrid_search(
                 "query": request.query,
                 "semantic_weight": request.semantic_weight,
                 "keyword_weight": request.keyword_weight,
-                "top_k": request.top_k
-            }
+                "top_k": request.top_k,
+            },
         )
 
         search_engine = SearchEngine(db)
@@ -116,7 +113,7 @@ async def hybrid_search(
             keyword_weight=request.keyword_weight,
             top_k=request.top_k,
             filters=request.filter,
-            include_content=request.include_content
+            include_content=request.include_content,
         )
 
         return SearchResponse(
@@ -136,8 +133,8 @@ async def hybrid_search(
             status_code=400,
             detail=ErrorResponse(
                 error=ErrorType.VALIDATION,
-                message=f"Invalid search parameters: {str(e)}"
-            ).dict()
+                message=f"Invalid search parameters: {str(e)}",
+            ).dict(),
         )
 
     except Exception as e:
@@ -145,16 +142,14 @@ async def hybrid_search(
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
-                error=ErrorType.EMBEDDING,
-                message=f"Hybrid search failed: {str(e)}"
-            ).dict()
+                error=ErrorType.EMBEDDING, message=f"Hybrid search failed: {str(e)}"
+            ).dict(),
         )
 
 
 @router.post("/find_similar", response_model=SearchResponse)
 async def find_similar_documents(
-    request: FindSimilarRequest,
-    db: Session = Depends(get_db)
+    request: FindSimilarRequest, db: Session = Depends(get_db)
 ) -> SearchResponse:
     """
     Find documents similar to a given reference document.
@@ -167,8 +162,8 @@ async def find_similar_documents(
             extra={
                 "document_id": request.document_id,
                 "top_k": request.top_k,
-                "min_similarity": request.min_similarity
-            }
+                "min_similarity": request.min_similarity,
+            },
         )
 
         search_engine = SearchEngine(db)
@@ -178,7 +173,7 @@ async def find_similar_documents(
             document_id=request.document_id,
             top_k=request.top_k,
             min_similarity=request.min_similarity,
-            include_self=request.include_self
+            include_self=request.include_self,
         )
 
         return SearchResponse(
@@ -198,8 +193,8 @@ async def find_similar_documents(
             status_code=400,
             detail=ErrorResponse(
                 error=ErrorType.VALIDATION,
-                message=f"Invalid similarity search parameters: {str(e)}"
-            ).dict()
+                message=f"Invalid similarity search parameters: {str(e)}",
+            ).dict(),
         )
 
     except Exception as e:
@@ -207,19 +202,17 @@ async def find_similar_documents(
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
-                error=ErrorType.DATABASE,
-                message=f"Similarity search failed: {str(e)}"
-            ).dict()
+                error=ErrorType.DATABASE, message=f"Similarity search failed: {str(e)}"
+            ).dict(),
         )
 
 
 # Additional search utility endpoints
 
+
 @router.get("/search/suggestions")
 async def get_search_suggestions(
-    query: str,
-    limit: int = 5,
-    db: Session = Depends(get_db)
+    query: str, limit: int = 5, db: Session = Depends(get_db)
 ) -> List[str]:
     """
     Get search query suggestions based on existing content.
@@ -243,7 +236,9 @@ async def get_search_suggestions(
 
         for match in title_matches:
             # Extract meaningful terms from filename
-            filename = match.filename.replace('.pdf', '').replace('_', ' ').replace('-', ' ')
+            filename = (
+                match.filename.replace(".pdf", "").replace("_", " ").replace("-", " ")
+            )
             if filename not in suggestions:
                 suggestions.append(filename)
 
@@ -253,7 +248,7 @@ async def get_search_suggestions(
             f"{query} method",
             f"{query} analysis",
             f"{query} implementation",
-            f"{query} theory"
+            f"{query} theory",
         ]
 
         # Combine and deduplicate
@@ -269,8 +264,8 @@ async def get_search_suggestions(
             status_code=500,
             detail=ErrorResponse(
                 error=ErrorType.SYSTEM,
-                message=f"Failed to generate suggestions: {str(e)}"
-            ).dict()
+                message=f"Failed to generate suggestions: {str(e)}",
+            ).dict(),
         )
 
 
@@ -281,31 +276,34 @@ async def get_search_stats(db: Session = Depends(get_db)) -> dict:
     """
     try:
         from pdf_to_markdown_mcp.db.queries import DocumentQueries
-        from pdf_to_markdown_mcp.db.models import Document, DocumentEmbedding, DocumentContent
+        from pdf_to_markdown_mcp.db.models import (
+            Document,
+            DocumentEmbedding,
+            DocumentContent,
+        )
         from sqlalchemy import func, text
 
         # Get document statistics
         doc_stats = DocumentQueries.get_statistics(db)
-        total_documents = doc_stats.get('total_documents', 0)
+        total_documents = doc_stats.get("total_documents", 0)
 
         # Get embedding count
         total_embeddings = db.query(DocumentEmbedding).count()
 
         # Get content statistics
-        content_stats = (
-            db.query(
-                func.count(DocumentContent.id).label('total_content'),
-                func.avg(DocumentContent.page_count).label('avg_pages'),
-                func.sum(DocumentContent.page_count).label('total_pages')
-            )
-            .first()
-        )
+        content_stats = db.query(
+            func.count(DocumentContent.id).label("total_content"),
+            func.avg(DocumentContent.page_count).label("avg_pages"),
+            func.sum(DocumentContent.page_count).label("total_pages"),
+        ).first()
 
         # Check index health (simplified)
         index_status = "healthy"
         try:
             # Test a simple vector query to check if PGVector is working
-            test_query = text("SELECT COUNT(*) FROM document_embeddings WHERE embedding IS NOT NULL")
+            test_query = text(
+                "SELECT COUNT(*) FROM document_embeddings WHERE embedding IS NOT NULL"
+            )
             db.execute(test_query)
         except Exception:
             index_status = "degraded"
@@ -315,11 +313,15 @@ async def get_search_stats(db: Session = Depends(get_db)) -> dict:
             "total_embeddings": total_embeddings,
             "total_content_chunks": content_stats.total_content if content_stats else 0,
             "total_pages": content_stats.total_pages if content_stats else 0,
-            "avg_pages_per_document": float(content_stats.avg_pages) if content_stats and content_stats.avg_pages else 0.0,
+            "avg_pages_per_document": (
+                float(content_stats.avg_pages)
+                if content_stats and content_stats.avg_pages
+                else 0.0
+            ),
             "index_status": index_status,
             "avg_search_time_ms": 50.0,  # This would need to be tracked over time
             "popular_queries": [],  # This would need query logging to implement
-            "documents_by_status": doc_stats.get('by_status', {})
+            "documents_by_status": doc_stats.get("by_status", {}),
         }
 
     except Exception as e:
@@ -328,6 +330,6 @@ async def get_search_stats(db: Session = Depends(get_db)) -> dict:
             status_code=500,
             detail=ErrorResponse(
                 error=ErrorType.DATABASE,
-                message=f"Failed to retrieve search statistics: {str(e)}"
-            ).dict()
+                message=f"Failed to retrieve search statistics: {str(e)}",
+            ).dict(),
         )

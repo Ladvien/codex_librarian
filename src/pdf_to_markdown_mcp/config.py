@@ -42,7 +42,9 @@ class DatabaseSettings(BaseSettings):
 class EmbeddingSettings(BaseSettings):
     """Embedding generation configuration."""
 
-    provider: str = Field(default="ollama", env="EMBEDDING_PROVIDER")  # "ollama" or "openai"
+    provider: str = Field(
+        default="ollama", env="EMBEDDING_PROVIDER"
+    )  # "ollama" or "openai"
     model: str = Field(default="nomic-embed-text", env="EMBEDDING_MODEL")
     dimensions: int = Field(default=1536, env="EMBEDDING_DIMENSIONS")
     batch_size: int = Field(default=32, env="EMBEDDING_BATCH_SIZE")
@@ -89,14 +91,24 @@ class CelerySettings(BaseSettings):
 
     # Redis Broker Configuration
     broker_url: str = Field(default="redis://localhost:6379/0", env="CELERY_BROKER_URL")
-    result_backend: str = Field(default="redis://localhost:6379/0", env="CELERY_RESULT_BACKEND")
+    result_backend: str = Field(
+        default="redis://localhost:6379/0", env="CELERY_RESULT_BACKEND"
+    )
 
     # Redis Connection Pool Settings
-    broker_connection_retry_on_startup: bool = Field(default=True, env="CELERY_BROKER_CONNECTION_RETRY")
+    broker_connection_retry_on_startup: bool = Field(
+        default=True, env="CELERY_BROKER_CONNECTION_RETRY"
+    )
     broker_pool_limit: int = Field(default=10, env="CELERY_BROKER_POOL_LIMIT")
-    broker_connection_timeout: int = Field(default=30, env="CELERY_BROKER_CONNECTION_TIMEOUT")
-    broker_connection_retry: bool = Field(default=True, env="CELERY_BROKER_CONNECTION_RETRY_ENABLED")
-    broker_connection_max_retries: int = Field(default=3, env="CELERY_BROKER_CONNECTION_MAX_RETRIES")
+    broker_connection_timeout: int = Field(
+        default=30, env="CELERY_BROKER_CONNECTION_TIMEOUT"
+    )
+    broker_connection_retry: bool = Field(
+        default=True, env="CELERY_BROKER_CONNECTION_RETRY_ENABLED"
+    )
+    broker_connection_max_retries: int = Field(
+        default=3, env="CELERY_BROKER_CONNECTION_MAX_RETRIES"
+    )
 
     # Result Backend Configuration
     result_expires: int = Field(default=3600, env="CELERY_RESULT_EXPIRES")  # 1 hour
@@ -105,44 +117,76 @@ class CelerySettings(BaseSettings):
     result_serializer: str = Field(default="json", env="CELERY_RESULT_SERIALIZER")
 
     # Task Routing with Enhanced Queue Configuration
-    task_routes: dict = Field(default={
-        "pdf_to_markdown_mcp.worker.tasks.process_pdf_document": {"queue": "pdf_processing"},
-        "pdf_to_markdown_mcp.worker.tasks.generate_embeddings": {"queue": "embeddings"},
-        "pdf_to_markdown_mcp.worker.tasks.process_document_images": {"queue": "embeddings"},
-        "pdf_to_markdown_mcp.worker.tasks.process_pdf_batch": {"queue": "pdf_processing"},
-        "pdf_to_markdown_mcp.worker.tasks.cleanup_temp_files": {"queue": "maintenance"},
-        "pdf_to_markdown_mcp.worker.tasks.health_check": {"queue": "monitoring"},
-    })
+    task_routes: dict = Field(
+        default={
+            "pdf_to_markdown_mcp.worker.tasks.process_pdf_document": {
+                "queue": "pdf_processing"
+            },
+            "pdf_to_markdown_mcp.worker.tasks.generate_embeddings": {
+                "queue": "embeddings"
+            },
+            "pdf_to_markdown_mcp.worker.tasks.process_document_images": {
+                "queue": "embeddings"
+            },
+            "pdf_to_markdown_mcp.worker.tasks.process_pdf_batch": {
+                "queue": "pdf_processing"
+            },
+            "pdf_to_markdown_mcp.worker.tasks.cleanup_temp_files": {
+                "queue": "maintenance"
+            },
+            "pdf_to_markdown_mcp.worker.tasks.health_check": {"queue": "monitoring"},
+        }
+    )
 
     # Enhanced Worker Settings
     worker_concurrency: int = Field(default=4, env="CELERY_WORKER_CONCURRENCY")
-    worker_max_tasks_per_child: int = Field(default=1000, env="CELERY_WORKER_MAX_TASKS_PER_CHILD")
-    worker_disable_rate_limits: bool = Field(default=False, env="CELERY_WORKER_DISABLE_RATE_LIMITS")
+    worker_max_tasks_per_child: int = Field(
+        default=1000, env="CELERY_WORKER_MAX_TASKS_PER_CHILD"
+    )
+    worker_disable_rate_limits: bool = Field(
+        default=False, env="CELERY_WORKER_DISABLE_RATE_LIMITS"
+    )
 
     # Task Execution Limits
     task_soft_time_limit: int = Field(default=300, env="CELERY_TASK_SOFT_TIME_LIMIT")
     task_time_limit: int = Field(default=600, env="CELERY_TASK_TIME_LIMIT")
     task_acks_late: bool = Field(default=True, env="CELERY_TASK_ACKS_LATE")
-    task_reject_on_worker_lost: bool = Field(default=True, env="CELERY_TASK_REJECT_ON_WORKER_LOST")
+    task_reject_on_worker_lost: bool = Field(
+        default=True, env="CELERY_TASK_REJECT_ON_WORKER_LOST"
+    )
 
     # Enhanced Retry Configuration
-    task_default_max_retries: int = Field(default=3, env="CELERY_TASK_DEFAULT_MAX_RETRIES")
-    task_default_retry_delay: int = Field(default=60, env="CELERY_TASK_DEFAULT_RETRY_DELAY")
+    task_default_max_retries: int = Field(
+        default=3, env="CELERY_TASK_DEFAULT_MAX_RETRIES"
+    )
+    task_default_retry_delay: int = Field(
+        default=60, env="CELERY_TASK_DEFAULT_RETRY_DELAY"
+    )
     task_retry_backoff: bool = Field(default=True, env="CELERY_TASK_RETRY_BACKOFF")
     task_retry_jitter: bool = Field(default=False, env="CELERY_TASK_RETRY_JITTER")
 
     # Monitoring and Events
-    worker_send_task_events: bool = Field(default=True, env="CELERY_WORKER_SEND_TASK_EVENTS")
+    worker_send_task_events: bool = Field(
+        default=True, env="CELERY_WORKER_SEND_TASK_EVENTS"
+    )
     task_send_sent_event: bool = Field(default=True, env="CELERY_TASK_SEND_SENT_EVENT")
 
     # Queue Management
-    task_default_queue: str = Field(default="pdf_processing", env="CELERY_TASK_DEFAULT_QUEUE")
-    task_queue_max_priority: int = Field(default=10, env="CELERY_TASK_QUEUE_MAX_PRIORITY")
+    task_default_queue: str = Field(
+        default="pdf_processing", env="CELERY_TASK_DEFAULT_QUEUE"
+    )
+    task_queue_max_priority: int = Field(
+        default=10, env="CELERY_TASK_QUEUE_MAX_PRIORITY"
+    )
     task_message_ttl: int = Field(default=3600, env="CELERY_TASK_MESSAGE_TTL")  # 1 hour
 
     # Beat Scheduler (for periodic tasks)
-    beat_schedule_filename: str = Field(default="/tmp/celerybeat-schedule", env="CELERY_BEAT_SCHEDULE_FILENAME")
-    beat_max_loop_interval: int = Field(default=300, env="CELERY_BEAT_MAX_LOOP_INTERVAL")
+    beat_schedule_filename: str = Field(
+        default="/tmp/celerybeat-schedule", env="CELERY_BEAT_SCHEDULE_FILENAME"
+    )
+    beat_max_loop_interval: int = Field(
+        default=300, env="CELERY_BEAT_MAX_LOOP_INTERVAL"
+    )
 
     # Security Settings
     task_serializer: str = Field(default="json", env="CELERY_TASK_SERIALIZER")
@@ -151,19 +195,23 @@ class CelerySettings(BaseSettings):
     # Logging Configuration
     worker_log_format: str = Field(
         default="[%(asctime)s: %(levelname)s/%(processName)s] %(message)s",
-        env="CELERY_WORKER_LOG_FORMAT"
+        env="CELERY_WORKER_LOG_FORMAT",
     )
     worker_task_log_format: str = Field(
         default="[%(asctime)s: %(levelname)s/%(processName)s][%(task_name)s(%(task_id)s)] %(message)s",
-        env="CELERY_WORKER_TASK_LOG_FORMAT"
+        env="CELERY_WORKER_TASK_LOG_FORMAT",
     )
 
     # Redis Optimization Settings
     redis_max_connections: int = Field(default=20, env="REDIS_MAX_CONNECTIONS")
     redis_socket_timeout: int = Field(default=30, env="REDIS_SOCKET_TIMEOUT")
-    redis_socket_connect_timeout: int = Field(default=30, env="REDIS_SOCKET_CONNECT_TIMEOUT")
+    redis_socket_connect_timeout: int = Field(
+        default=30, env="REDIS_SOCKET_CONNECT_TIMEOUT"
+    )
     redis_retry_on_timeout: bool = Field(default=True, env="REDIS_RETRY_ON_TIMEOUT")
-    redis_health_check_interval: int = Field(default=30, env="REDIS_HEALTH_CHECK_INTERVAL")
+    redis_health_check_interval: int = Field(
+        default=30, env="REDIS_HEALTH_CHECK_INTERVAL"
+    )
 
     class Config:
         env_prefix = "CELERY_"
@@ -173,8 +221,7 @@ class WatcherSettings(BaseSettings):
     """File watcher configuration."""
 
     watch_directories: List[Union[str, DirectoryPath]] = Field(
-        default=["/home/user/Documents"],
-        env="WATCH_DIRECTORIES"
+        default=["/home/user/Documents"], env="WATCH_DIRECTORIES"
     )
     file_patterns: List[str] = Field(default=["*.pdf"], env="FILE_PATTERNS")
     recursive: bool = Field(default=True, env="WATCH_RECURSIVE")
@@ -192,8 +239,7 @@ class LoggingSettings(BaseSettings):
 
     level: str = Field(default="INFO", env="LOG_LEVEL")
     format: str = Field(
-        default="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        env="LOG_FORMAT"
+        default="%(asctime)s - %(name)s - %(levelname)s - %(message)s", env="LOG_FORMAT"
     )
 
     # File logging
@@ -245,7 +291,9 @@ class SecuritySettings(BaseSettings):
 
     # File upload security
     max_upload_size_mb: int = Field(default=500, env="MAX_UPLOAD_SIZE_MB")
-    allowed_file_types: List[str] = Field(default=["application/pdf"], env="ALLOWED_FILE_TYPES")
+    allowed_file_types: List[str] = Field(
+        default=["application/pdf"], env="ALLOWED_FILE_TYPES"
+    )
     scan_uploaded_files: bool = Field(default=True, env="SCAN_UPLOADED_FILES")
 
     # Input validation
@@ -303,9 +351,13 @@ class Settings(BaseSettings):
     # CORS settings - Environment-specific security
     cors_origins: List[str] = Field(default_factory=lambda: [], env="CORS_ORIGINS")
     cors_credentials: bool = Field(default=False, env="CORS_CREDENTIALS")
-    cors_methods: List[str] = Field(default=["GET", "POST", "PUT", "DELETE", "OPTIONS"], env="CORS_METHODS")
-    cors_headers: List[str] = Field(default=["Content-Type", "Authorization", "X-Correlation-ID"], env="CORS_HEADERS")
-
+    cors_methods: List[str] = Field(
+        default=["GET", "POST", "PUT", "DELETE", "OPTIONS"], env="CORS_METHODS"
+    )
+    cors_headers: List[str] = Field(
+        default=["Content-Type", "Authorization", "X-Correlation-ID"],
+        env="CORS_HEADERS",
+    )
 
     # Rate limiting
     rate_limit_per_minute: int = Field(default=60, env="RATE_LIMIT_PER_MINUTE")
@@ -362,10 +414,7 @@ class Settings(BaseSettings):
                 return []
             elif environment == "staging":
                 # Staging: Allow specific staging domains
-                return [
-                    "https://staging.myapp.com",
-                    "https://api-staging.myapp.com"
-                ]
+                return ["https://staging.myapp.com", "https://api-staging.myapp.com"]
             else:  # development, testing
                 # Development: Allow localhost for development
                 return [
@@ -374,16 +423,22 @@ class Settings(BaseSettings):
                     "http://localhost:8080",
                     "http://127.0.0.1:3000",
                     "http://127.0.0.1:3001",
-                    "http://127.0.0.1:8080"
+                    "http://127.0.0.1:8080",
                 ]
 
         # If origins explicitly provided, validate them
         if environment == "production":
             for origin in v:
                 if origin == "*":
-                    raise ValueError("Wildcard CORS origins (*) not allowed in production")
-                if not origin.startswith(("https://", "http://localhost:", "http://127.0.0.1:")):
-                    raise ValueError(f"Invalid origin for production: {origin}. Must use HTTPS or localhost for testing.")
+                    raise ValueError(
+                        "Wildcard CORS origins (*) not allowed in production"
+                    )
+                if not origin.startswith(
+                    ("https://", "http://localhost:", "http://127.0.0.1:")
+                ):
+                    raise ValueError(
+                        f"Invalid origin for production: {origin}. Must use HTTPS or localhost for testing."
+                    )
 
         return v
 
@@ -408,7 +463,7 @@ class Settings(BaseSettings):
     model_config = ConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        extra="ignore"  # This allows extra environment variables to be ignored
+        extra="ignore",  # This allows extra environment variables to be ignored
     )
 
 
@@ -429,11 +484,9 @@ def configure_logging():
         file_handler = RotatingFileHandler(
             settings.logging.log_file,
             maxBytes=settings.logging.max_file_size_mb * 1024 * 1024,
-            backupCount=settings.logging.backup_count
+            backupCount=settings.logging.backup_count,
         )
-        file_handler.setFormatter(
-            logging.Formatter(settings.logging.format)
-        )
+        file_handler.setFormatter(logging.Formatter(settings.logging.format))
 
         root_logger = logging.getLogger()
         root_logger.addHandler(file_handler)
@@ -460,7 +513,10 @@ def validate_configuration():
         errors.append("API key must be set when authentication is required")
 
     # Check embedding configuration
-    if settings.embedding.provider == "openai" and not settings.embedding.openai_api_key:
+    if (
+        settings.embedding.provider == "openai"
+        and not settings.embedding.openai_api_key
+    ):
         warnings.append("OpenAI API key not set but OpenAI embedding provider selected")
 
     # Validate rate limiting settings
@@ -472,6 +528,7 @@ def validate_configuration():
 
     if warnings:
         import warnings as warn
+
         for warning in warnings:
             warn.warn(f"Configuration warning: {warning}", UserWarning)
 

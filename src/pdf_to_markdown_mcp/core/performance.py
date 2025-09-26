@@ -47,7 +47,7 @@ class PerformanceMetrics:
             "memory_delta_mb": self.memory_delta_mb,
             "cpu_usage_percent": self.cpu_usage_percent,
             "timestamp": self.timestamp,
-            "metadata": self.metadata
+            "metadata": self.metadata,
         }
 
 
@@ -76,7 +76,7 @@ class QueryPerformanceMetrics:
             "plan_cost": self.plan_cost,
             "cache_hit": self.cache_hit,
             "timestamp": self.timestamp,
-            "parameters": self.parameters
+            "parameters": self.parameters,
         }
 
 
@@ -87,11 +87,11 @@ class PerformanceMonitor:
         self.metrics: List[PerformanceMetrics] = []
         self.query_metrics: List[QueryPerformanceMetrics] = []
         self.thresholds = {
-            'cpu_percent': 80.0,
-            'memory_percent': 85.0,
-            'response_time_ms': 1000.0,
-            'query_time_ms': 500.0,
-            'memory_delta_mb': 100.0
+            "cpu_percent": 80.0,
+            "memory_percent": 85.0,
+            "response_time_ms": 1000.0,
+            "query_time_ms": 500.0,
+            "memory_delta_mb": 100.0,
         }
         self.query_cache: Dict[str, Any] = {}
         self.slow_queries: Dict[str, int] = defaultdict(int)
@@ -101,7 +101,9 @@ class PerformanceMonitor:
         self.thresholds.update(thresholds)
 
     @asynccontextmanager
-    async def measure_performance(self, operation_name: str, metadata: Optional[Dict[str, Any]] = None):
+    async def measure_performance(
+        self, operation_name: str, metadata: Optional[Dict[str, Any]] = None
+    ):
         """Context manager for measuring operation performance."""
         start_time = time.time()
         process = psutil.Process()
@@ -113,7 +115,7 @@ class PerformanceMonitor:
         except Exception as e:
             if metadata is None:
                 metadata = {}
-            metadata['error'] = str(e)
+            metadata["error"] = str(e)
             raise
         finally:
             end_time = time.time()
@@ -126,22 +128,28 @@ class PerformanceMonitor:
                 memory_delta_mb=(end_memory - start_memory) / 1024 / 1024,
                 cpu_usage_percent=end_cpu,
                 timestamp=end_time,
-                metadata=metadata or {}
+                metadata=metadata or {},
             )
 
             self.record_metrics(metrics)
             await self._check_thresholds(metrics)
 
-    def performance_decorator(self, operation_name: str, metadata: Optional[Dict[str, Any]] = None):
+    def performance_decorator(
+        self, operation_name: str, metadata: Optional[Dict[str, Any]] = None
+    ):
         """Decorator for automatic performance monitoring."""
+
         def decorator(func):
             if asyncio.iscoroutinefunction(func):
+
                 @wraps(func)
                 async def async_wrapper(*args, **kwargs):
                     async with self.measure_performance(operation_name, metadata):
                         return await func(*args, **kwargs)
+
                 return async_wrapper
             else:
+
                 @wraps(func)
                 def sync_wrapper(*args, **kwargs):
                     # Convert sync function to async context
@@ -152,7 +160,9 @@ class PerformanceMonitor:
                     return loop.run_until_complete(
                         self.measure_performance(operation_name, metadata).__aenter__()
                     )
+
                 return sync_wrapper
+
         return decorator
 
     def record_metrics(self, metrics: PerformanceMetrics):
@@ -160,13 +170,13 @@ class PerformanceMonitor:
         self.metrics.append(metrics)
 
         # Log performance issues
-        if metrics.duration_ms > self.thresholds['response_time_ms']:
+        if metrics.duration_ms > self.thresholds["response_time_ms"]:
             logger.warning(
                 f"Slow operation detected: {metrics.operation_name} "
                 f"took {metrics.duration_ms:.2f}ms"
             )
 
-        if metrics.memory_delta_mb > self.thresholds['memory_delta_mb']:
+        if metrics.memory_delta_mb > self.thresholds["memory_delta_mb"]:
             logger.warning(
                 f"High memory usage: {metrics.operation_name} "
                 f"used {metrics.memory_delta_mb:.2f}MB"
@@ -177,7 +187,7 @@ class PerformanceMonitor:
         self.query_metrics.append(metrics)
 
         # Track slow queries
-        if metrics.execution_time_ms > self.thresholds['query_time_ms']:
+        if metrics.execution_time_ms > self.thresholds["query_time_ms"]:
             self.slow_queries[metrics.query_hash] += 1
             logger.warning(
                 f"Slow query detected: {metrics.execution_time_ms:.2f}ms - "
@@ -188,17 +198,19 @@ class PerformanceMonitor:
         """Check if metrics exceed performance thresholds."""
         alerts = []
 
-        if metrics.cpu_usage_percent > self.thresholds['cpu_percent']:
+        if metrics.cpu_usage_percent > self.thresholds["cpu_percent"]:
             alerts.append(f"High CPU usage: {metrics.cpu_usage_percent:.1f}%")
 
-        if metrics.duration_ms > self.thresholds['response_time_ms']:
+        if metrics.duration_ms > self.thresholds["response_time_ms"]:
             alerts.append(f"Slow response: {metrics.duration_ms:.1f}ms")
 
-        if metrics.memory_delta_mb > self.thresholds['memory_delta_mb']:
+        if metrics.memory_delta_mb > self.thresholds["memory_delta_mb"]:
             alerts.append(f"High memory delta: {metrics.memory_delta_mb:.1f}MB")
 
         if alerts:
-            logger.warning(f"Performance alerts for {metrics.operation_name}: {'; '.join(alerts)}")
+            logger.warning(
+                f"Performance alerts for {metrics.operation_name}: {'; '.join(alerts)}"
+            )
 
     def get_performance_summary(self, duration_minutes: int = 5) -> Dict[str, Any]:
         """Generate performance summary for specified duration."""
@@ -220,14 +232,24 @@ class PerformanceMonitor:
                 "count": len(durations),
                 "avg_duration_ms": sum(durations) / len(durations),
                 "max_duration_ms": max(durations),
-                "min_duration_ms": min(durations)
+                "min_duration_ms": min(durations),
             }
 
         # Calculate query statistics
         query_summary = {
             "total_queries": len(recent_queries),
-            "slow_queries": len([q for q in recent_queries if q.execution_time_ms > self.thresholds['query_time_ms']]),
-            "avg_query_time_ms": sum(q.execution_time_ms for q in recent_queries) / len(recent_queries) if recent_queries else 0
+            "slow_queries": len(
+                [
+                    q
+                    for q in recent_queries
+                    if q.execution_time_ms > self.thresholds["query_time_ms"]
+                ]
+            ),
+            "avg_query_time_ms": (
+                sum(q.execution_time_ms for q in recent_queries) / len(recent_queries)
+                if recent_queries
+                else 0
+            ),
         }
 
         # Calculate system statistics
@@ -240,7 +262,7 @@ class PerformanceMonitor:
                 "avg_cpu_percent": sum(cpu_values) / len(cpu_values),
                 "max_cpu_percent": max(cpu_values),
                 "total_memory_delta_mb": sum(memory_deltas),
-                "max_memory_delta_mb": max(memory_deltas)
+                "max_memory_delta_mb": max(memory_deltas),
             }
 
         return {
@@ -248,7 +270,7 @@ class PerformanceMonitor:
             "operations": operation_summary,
             "queries": query_summary,
             "system": system_summary,
-            "alerts": self._get_recent_alerts(cutoff_time)
+            "alerts": self._get_recent_alerts(cutoff_time),
         }
 
     def _get_recent_alerts(self, cutoff_time: float) -> List[str]:
@@ -258,13 +280,25 @@ class PerformanceMonitor:
         # Check for patterns in recent data
         recent_metrics = [m for m in self.metrics if m.timestamp > cutoff_time]
 
-        slow_operations = [m for m in recent_metrics if m.duration_ms > self.thresholds['response_time_ms']]
+        slow_operations = [
+            m
+            for m in recent_metrics
+            if m.duration_ms > self.thresholds["response_time_ms"]
+        ]
         if len(slow_operations) > 3:
-            alerts.append(f"Multiple slow operations detected: {len(slow_operations)} operations > {self.thresholds['response_time_ms']}ms")
+            alerts.append(
+                f"Multiple slow operations detected: {len(slow_operations)} operations > {self.thresholds['response_time_ms']}ms"
+            )
 
-        high_memory_ops = [m for m in recent_metrics if m.memory_delta_mb > self.thresholds['memory_delta_mb']]
+        high_memory_ops = [
+            m
+            for m in recent_metrics
+            if m.memory_delta_mb > self.thresholds["memory_delta_mb"]
+        ]
         if len(high_memory_ops) > 2:
-            alerts.append(f"High memory usage pattern: {len(high_memory_ops)} operations > {self.thresholds['memory_delta_mb']}MB")
+            alerts.append(
+                f"High memory usage pattern: {len(high_memory_ops)} operations > {self.thresholds['memory_delta_mb']}MB"
+            )
 
         return alerts
 
@@ -273,7 +307,9 @@ class PerformanceMonitor:
         cutoff_time = time.time() - (max_age_hours * 3600)
 
         self.metrics = [m for m in self.metrics if m.timestamp > cutoff_time]
-        self.query_metrics = [q for q in self.query_metrics if q.timestamp > cutoff_time]
+        self.query_metrics = [
+            q for q in self.query_metrics if q.timestamp > cutoff_time
+        ]
 
         logger.info(f"Cleared metrics older than {max_age_hours} hours")
 
@@ -293,14 +329,18 @@ class DatabasePerformanceOptimizer:
         """Set up SQLAlchemy event listeners for query monitoring."""
 
         @event.listens_for(self.engine, "before_cursor_execute")
-        def before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+        def before_cursor_execute(
+            conn, cursor, statement, parameters, context, executemany
+        ):
             context._query_start_time = time.time()
             context._statement = statement
             context._parameters = parameters
 
         @event.listens_for(self.engine, "after_cursor_execute")
-        def after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
-            if hasattr(context, '_query_start_time'):
+        def after_cursor_execute(
+            conn, cursor, statement, parameters, context, executemany
+        ):
+            if hasattr(context, "_query_start_time"):
                 execution_time = (time.time() - context._query_start_time) * 1000
 
                 # Create query hash for tracking
@@ -310,17 +350,21 @@ class DatabasePerformanceOptimizer:
                     query_hash=query_hash,
                     sql_statement=statement,
                     execution_time_ms=execution_time,
-                    rows_returned=cursor.rowcount if hasattr(cursor, 'rowcount') else None,
+                    rows_returned=(
+                        cursor.rowcount if hasattr(cursor, "rowcount") else None
+                    ),
                     rows_examined=None,  # Would need EXPLAIN to get this
                     plan_cost=None,  # Would need EXPLAIN to get this
                     cache_hit=query_hash in self.query_plans_cache,
                     timestamp=time.time(),
-                    parameters=parameters
+                    parameters=parameters,
                 )
 
                 self.monitor.record_query_metrics(metrics)
 
-    async def analyze_query_performance(self, query: str, parameters: Dict[str, Any] = None) -> Dict[str, Any]:
+    async def analyze_query_performance(
+        self, query: str, parameters: Dict[str, Any] = None
+    ) -> Dict[str, Any]:
         """Analyze query performance with EXPLAIN ANALYZE."""
         explain_query = f"EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) {query}"
 
@@ -339,7 +383,7 @@ class DatabasePerformanceOptimizer:
                     "shared_hit": plan_data.get("Shared Hit Blocks", 0),
                     "shared_read": plan_data.get("Shared Read Blocks", 0),
                     "rows": plan_data.get("Plan", {}).get("Actual Rows", 0),
-                    "plan": plan_data.get("Plan", {})
+                    "plan": plan_data.get("Plan", {}),
                 }
             except Exception as e:
                 logger.error(f"Failed to analyze query performance: {e}")
@@ -355,7 +399,7 @@ class DatabasePerformanceOptimizer:
             "checked_in": current_pool.checkedin(),
             "checked_out": current_pool.checkedout(),
             "overflow": current_pool.overflow(),
-            "invalidated": current_pool.invalidated()
+            "invalidated": current_pool.invalidated(),
         }
 
         logger.info(f"Current pool statistics: {pool_stats}")
@@ -364,18 +408,21 @@ class DatabasePerformanceOptimizer:
         suggestions = []
 
         if pool_stats["checked_out"] / pool_stats["size"] > 0.8:
-            suggestions.append("Consider increasing pool_size - high utilization detected")
+            suggestions.append(
+                "Consider increasing pool_size - high utilization detected"
+            )
 
         if pool_stats["overflow"] > pool_stats["size"] * 0.5:
-            suggestions.append("Consider increasing max_overflow - frequent overflow detected")
+            suggestions.append(
+                "Consider increasing max_overflow - frequent overflow detected"
+            )
 
         if pool_stats["invalidated"] > 0:
-            suggestions.append("Connection invalidations detected - check connection health")
+            suggestions.append(
+                "Connection invalidations detected - check connection health"
+            )
 
-        return {
-            "current_stats": pool_stats,
-            "suggestions": suggestions
-        }
+        return {"current_stats": pool_stats, "suggestions": suggestions}
 
 
 # Global performance monitor instance
@@ -393,13 +440,17 @@ def monitor_performance(operation_name: str, metadata: Dict[str, Any] = None):
     return performance_monitor.performance_decorator(operation_name, metadata)
 
 
-async def profile_async_operation(operation_name: str, operation_func: Callable, *args, **kwargs):
+async def profile_async_operation(
+    operation_name: str, operation_func: Callable, *args, **kwargs
+):
     """Profile an async operation and return results with metrics."""
     async with performance_monitor.measure_performance(operation_name):
         return await operation_func(*args, **kwargs)
 
 
-def profile_sync_operation(operation_name: str, operation_func: Callable, *args, **kwargs):
+def profile_sync_operation(
+    operation_name: str, operation_func: Callable, *args, **kwargs
+):
     """Profile a sync operation and return results with metrics."""
     start_time = time.time()
     result = operation_func(*args, **kwargs)

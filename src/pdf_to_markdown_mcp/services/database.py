@@ -22,7 +22,7 @@ from ..db.models import (
     DocumentContent,
     DocumentEmbedding,
     DocumentImage,
-    ProcessingQueue
+    ProcessingQueue,
 )
 from ..core.exceptions import DatabaseError, ValidationError
 
@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class VectorSearchResult:
     """Result object for vector similarity search."""
+
     document_id: int
     chunk_id: Optional[int]
     filename: str
@@ -47,6 +48,7 @@ class VectorSearchResult:
 @dataclass
 class HybridSearchResult:
     """Result object for hybrid search combining vector and text search."""
+
     document_id: int
     chunk_id: Optional[int]
     filename: str
@@ -64,6 +66,7 @@ class HybridSearchResult:
 @dataclass
 class DatabaseStats:
     """Database statistics and health information."""
+
     total_documents: int
     processing_stats: Dict[str, int]
     total_embeddings: int
@@ -107,20 +110,26 @@ class VectorDatabaseService:
         try:
             with self._get_session() as db:
                 # Check if PGVector extension is available
-                result = db.execute(text("""
+                result = db.execute(
+                    text(
+                        """
                     SELECT EXISTS(
                         SELECT 1 FROM pg_extension WHERE extname = 'vector'
                     )
-                """)).scalar()
+                """
+                    )
+                ).scalar()
 
                 if not result:
                     logger.warning("PGVector extension not installed")
                     return False
 
                 # Verify vector operations work
-                test_query = text("""
+                test_query = text(
+                    """
                     SELECT '[1,2,3]'::vector <-> '[1,2,4]'::vector as distance
-                """)
+                """
+                )
                 db.execute(test_query)
                 logger.info("PGVector extension verified and working")
                 return True
@@ -135,7 +144,7 @@ class VectorDatabaseService:
         top_k: int = 10,
         similarity_threshold: float = 0.7,
         document_filters: Optional[Dict[str, Any]] = None,
-        distance_metric: str = "cosine"
+        distance_metric: str = "cosine",
     ) -> List[VectorSearchResult]:
         """
         Perform async vector similarity search using PGVector.
@@ -165,11 +174,13 @@ class VectorDatabaseService:
                 distance_ops = {
                     "cosine": "<=>",
                     "euclidean": "<->",
-                    "inner_product": "<#>"
+                    "inner_product": "<#>",
                 }
 
                 if distance_metric not in distance_ops:
-                    raise ValidationError(f"Unsupported distance metric: {distance_metric}")
+                    raise ValidationError(
+                        f"Unsupported distance metric: {distance_metric}"
+                    )
 
                 distance_op = distance_ops[distance_metric]
 
@@ -199,12 +210,14 @@ class VectorDatabaseService:
                 params = {
                     "query_embedding": query_embedding,
                     "distance_metric": distance_metric,
-                    "top_k": top_k
+                    "top_k": top_k,
                 }
 
                 # Add similarity threshold with optimized filtering
                 if distance_metric == "inner_product":
-                    base_query += " AND (de.embedding <#> :query_embedding::vector) >= :threshold"
+                    base_query += (
+                        " AND (de.embedding <#> :query_embedding::vector) >= :threshold"
+                    )
                     params["threshold"] = similarity_threshold
                 else:
                     base_query += f" AND 1 - (de.embedding {distance_op} :query_embedding::vector) >= :threshold"
@@ -218,11 +231,15 @@ class VectorDatabaseService:
 
                     if "exclude_document_id" in document_filters:
                         base_query += " AND de.document_id != :exclude_document_id"
-                        params["exclude_document_id"] = int(document_filters["exclude_document_id"])
+                        params["exclude_document_id"] = int(
+                            document_filters["exclude_document_id"]
+                        )
 
                 # Optimized ordering and limiting
                 if distance_metric == "inner_product":
-                    base_query += " ORDER BY (de.embedding <#> :query_embedding::vector) DESC"
+                    base_query += (
+                        " ORDER BY (de.embedding <#> :query_embedding::vector) DESC"
+                    )
                 else:
                     base_query += f" ORDER BY de.embedding {distance_op} :query_embedding::vector ASC"
 
@@ -240,20 +257,24 @@ class VectorDatabaseService:
                         if row.doc_metadata:
                             metadata.update(row.doc_metadata)
 
-                        results.append(VectorSearchResult(
-                            document_id=row.document_id,
-                            chunk_id=row.embedding_id,
-                            filename=row.filename,
-                            source_path=row.source_path,
-                            content=row.chunk_text,
-                            similarity_score=float(row.similarity_score),
-                            page_number=row.page_number,
-                            chunk_index=row.chunk_index,
-                            metadata=metadata,
-                            search_type=f"vector_{distance_metric}"
-                        ))
+                        results.append(
+                            VectorSearchResult(
+                                document_id=row.document_id,
+                                chunk_id=row.embedding_id,
+                                filename=row.filename,
+                                source_path=row.source_path,
+                                content=row.chunk_text,
+                                similarity_score=float(row.similarity_score),
+                                page_number=row.page_number,
+                                chunk_index=row.chunk_index,
+                                metadata=metadata,
+                                search_type=f"vector_{distance_metric}",
+                            )
+                        )
 
-                    logger.info(f"Async vector search returned {len(results)} results in optimized query")
+                    logger.info(
+                        f"Async vector search returned {len(results)} results in optimized query"
+                    )
                     return results
 
         except Exception as e:
@@ -267,7 +288,7 @@ class VectorDatabaseService:
         top_k: int = 10,
         semantic_weight: float = 0.7,
         keyword_weight: float = 0.3,
-        similarity_threshold: float = 0.5
+        similarity_threshold: float = 0.5,
     ) -> List[HybridSearchResult]:
         """
         Perform hybrid search combining vector similarity and full-text search.
@@ -291,7 +312,8 @@ class VectorDatabaseService:
                 keyword_weight = keyword_weight / total_weight
 
             # Complex hybrid search query
-            hybrid_query = text("""
+            hybrid_query = text(
+                """
                 WITH semantic_results AS (
                     SELECT
                         de.id as embedding_id,
@@ -347,7 +369,8 @@ class VectorDatabaseService:
                        COALESCE(kr.keyword_score, 0) * :keyword_weight) >= :threshold
                 ORDER BY combined_score DESC
                 LIMIT :top_k
-            """)
+            """
+            )
 
             params = {
                 "query_text": query_text,
@@ -355,7 +378,7 @@ class VectorDatabaseService:
                 "semantic_weight": semantic_weight,
                 "keyword_weight": keyword_weight,
                 "threshold": similarity_threshold,
-                "top_k": top_k
+                "top_k": top_k,
             }
 
             with self._get_session() as db:
@@ -369,19 +392,21 @@ class VectorDatabaseService:
                     if row.doc_metadata:
                         metadata.update(row.doc_metadata)
 
-                    results.append(HybridSearchResult(
-                        document_id=row.document_id,
-                        chunk_id=row.chunk_id,
-                        filename=row.filename,
-                        source_path=row.source_path,
-                        content=row.chunk_text,
-                        combined_score=float(row.combined_score),
-                        semantic_score=float(row.semantic_score),
-                        keyword_score=float(row.keyword_score),
-                        page_number=row.page_number,
-                        chunk_index=row.chunk_index,
-                        metadata=metadata
-                    ))
+                    results.append(
+                        HybridSearchResult(
+                            document_id=row.document_id,
+                            chunk_id=row.chunk_id,
+                            filename=row.filename,
+                            source_path=row.source_path,
+                            content=row.chunk_text,
+                            combined_score=float(row.combined_score),
+                            semantic_score=float(row.semantic_score),
+                            keyword_score=float(row.keyword_score),
+                            page_number=row.page_number,
+                            chunk_index=row.chunk_index,
+                            metadata=metadata,
+                        )
+                    )
 
                 logger.info(f"Hybrid search returned {len(results)} results")
                 return results
@@ -395,7 +420,7 @@ class VectorDatabaseService:
         reference_document_id: int,
         top_k: int = 5,
         similarity_threshold: float = 0.6,
-        exclude_self: bool = True
+        exclude_self: bool = True,
     ) -> List[VectorSearchResult]:
         """
         Find documents similar to a reference document using averaged embeddings.
@@ -411,31 +436,41 @@ class VectorDatabaseService:
         """
         try:
             # First, get the average embedding for the reference document
-            avg_embedding_query = text("""
+            avg_embedding_query = text(
+                """
                 SELECT AVG(de.embedding) as avg_embedding
                 FROM document_embeddings de
                 WHERE de.document_id = :ref_doc_id
                 HAVING COUNT(de.id) > 0
-            """)
+            """
+            )
 
             with self._get_session() as db:
-                result = db.execute(avg_embedding_query, {"ref_doc_id": reference_document_id})
+                result = db.execute(
+                    avg_embedding_query, {"ref_doc_id": reference_document_id}
+                )
                 row = result.first()
 
                 if not row or not row.avg_embedding:
-                    raise ValidationError(f"No embeddings found for document {reference_document_id}")
+                    raise ValidationError(
+                        f"No embeddings found for document {reference_document_id}"
+                    )
 
                 # Convert PostgreSQL vector to list
                 reference_embedding = list(row.avg_embedding)
 
                 # Find similar documents using the averaged embedding
-                filters = {"exclude_document_id": reference_document_id} if exclude_self else None
+                filters = (
+                    {"exclude_document_id": reference_document_id}
+                    if exclude_self
+                    else None
+                )
 
                 similar_results = await self.vector_similarity_search(
                     query_embedding=reference_embedding,
                     top_k=top_k * 3,  # Get more results to aggregate by document
                     similarity_threshold=similarity_threshold,
-                    document_filters=filters
+                    document_filters=filters,
                 )
 
                 # Group by document and average similarity scores
@@ -445,9 +480,11 @@ class VectorDatabaseService:
                     if doc_id not in doc_similarities:
                         doc_similarities[doc_id] = {
                             "result": result,
-                            "similarities": []
+                            "similarities": [],
                         }
-                    doc_similarities[doc_id]["similarities"].append(result.similarity_score)
+                    doc_similarities[doc_id]["similarities"].append(
+                        result.similarity_score
+                    )
 
                 # Create final results with averaged similarities
                 final_results = []
@@ -490,12 +527,15 @@ class VectorDatabaseService:
                 total_images = db.query(DocumentImage).count()
 
                 # Queue statistics
-                queue_depth = db.query(ProcessingQueue).filter(
-                    ProcessingQueue.status.in_(["queued", "processing"])
-                ).count()
+                queue_depth = (
+                    db.query(ProcessingQueue)
+                    .filter(ProcessingQueue.status.in_(["queued", "processing"]))
+                    .count()
+                )
 
                 # Index usage statistics (PostgreSQL specific)
-                index_usage_query = text("""
+                index_usage_query = text(
+                    """
                     SELECT
                         schemaname,
                         tablename,
@@ -506,14 +546,15 @@ class VectorDatabaseService:
                     FROM pg_stat_user_indexes
                     WHERE schemaname = 'public'
                     ORDER BY idx_scan DESC
-                """)
+                """
+                )
 
                 index_stats = db.execute(index_usage_query).fetchall()
                 index_usage = {
                     row.indexname: {
                         "scans": row.idx_scan,
                         "tuples_read": row.idx_tup_read,
-                        "tuples_fetched": row.idx_tup_fetch
+                        "tuples_fetched": row.idx_tup_fetch,
                     }
                     for row in index_stats
                 }
@@ -528,7 +569,7 @@ class VectorDatabaseService:
                     total_images=total_images,
                     queue_depth=queue_depth,
                     index_usage=index_usage,
-                    connection_pool=connection_pool
+                    connection_pool=connection_pool,
                 )
 
         except Exception as e:
@@ -549,14 +590,15 @@ class VectorDatabaseService:
                     "ANALYZE document_embeddings;",
                     "ANALYZE document_images;",
                     "ANALYZE documents;",
-                    "ANALYZE document_content;"
+                    "ANALYZE document_content;",
                 ]
 
                 for query in analyze_queries:
                     db.execute(text(query))
 
                 # Get index statistics
-                index_stats_query = text("""
+                index_stats_query = text(
+                    """
                     SELECT
                         i.relname as index_name,
                         t.relname as table_name,
@@ -570,7 +612,8 @@ class VectorDatabaseService:
                     WHERE i.relkind = 'i'
                         AND t.relname IN ('document_embeddings', 'document_images')
                     ORDER BY s.idx_scan DESC
-                """)
+                """
+                )
 
                 index_results = db.execute(index_stats_query).fetchall()
 
@@ -583,10 +626,10 @@ class VectorDatabaseService:
                             "table_name": row.table_name,
                             "scans": row.idx_scan,
                             "tuples_read": row.idx_tup_read,
-                            "size": row.index_size
+                            "size": row.index_size,
                         }
                         for row in index_results
-                    ]
+                    ],
                 }
 
                 logger.info("Vector indexes optimized successfully")
@@ -609,7 +652,7 @@ class VectorDatabaseService:
                 "pgvector_available": False,
                 "query_performance": None,
                 "connection_pool": {},
-                "disk_usage": None
+                "disk_usage": None,
             }
 
             with self._get_session() as db:
@@ -628,9 +671,11 @@ class VectorDatabaseService:
 
                 # Check disk usage (PostgreSQL specific)
                 try:
-                    disk_usage_query = text("""
+                    disk_usage_query = text(
+                        """
                         SELECT pg_size_pretty(pg_database_size(current_database())) as db_size
-                    """)
+                    """
+                    )
                     result = db.execute(disk_usage_query).scalar()
                     health_status["disk_usage"] = result
                 except Exception:
@@ -641,15 +686,12 @@ class VectorDatabaseService:
 
         except Exception as e:
             logger.error(f"Database health check failed: {e}")
-            return {
-                "database_connection": False,
-                "error": str(e)
-            }
+            return {"database_connection": False, "error": str(e)}
 
     # Document CRUD Operations
     # Following architecture principles: Service layer provides DTO abstraction
 
-    async def find_document_by_hash(self, file_hash: str) -> Optional['DocumentDTO']:
+    async def find_document_by_hash(self, file_hash: str) -> Optional["DocumentDTO"]:
         """
         Find document by file hash.
 
@@ -663,7 +705,9 @@ class VectorDatabaseService:
 
         try:
             with self._get_session() as db:
-                document = db.query(Document).filter(Document.file_hash == file_hash).first()
+                document = (
+                    db.query(Document).filter(Document.file_hash == file_hash).first()
+                )
                 if not document:
                     return None
 
@@ -673,7 +717,7 @@ class VectorDatabaseService:
             logger.error(f"Error finding document by hash {file_hash}: {e}")
             raise DatabaseError(f"Failed to find document: {e}")
 
-    async def create_document(self, create_data: 'CreateDocumentDTO') -> 'DocumentDTO':
+    async def create_document(self, create_data: "CreateDocumentDTO") -> "DocumentDTO":
         """
         Create new document record.
 
@@ -695,14 +739,16 @@ class VectorDatabaseService:
                     file_size_bytes=create_data.size_bytes,
                     conversion_status=ProcessingStatusType.PENDING,
                     created_at=datetime.utcnow(),
-                    updated_at=datetime.utcnow()
+                    updated_at=datetime.utcnow(),
                 )
 
                 db.add(document)
                 db.commit()
                 db.refresh(document)
 
-                logger.info(f"Created document with ID {document.id}, hash {document.file_hash}")
+                logger.info(
+                    f"Created document with ID {document.id}, hash {document.file_hash}"
+                )
                 return self._convert_to_dto(document)
 
         except Exception as e:
@@ -710,7 +756,9 @@ class VectorDatabaseService:
             db.rollback()
             raise DatabaseError(f"Failed to create document: {e}")
 
-    async def update_document(self, document_id: int, update_data: 'UpdateDocumentDTO') -> 'DocumentDTO':
+    async def update_document(
+        self, document_id: int, update_data: "UpdateDocumentDTO"
+    ) -> "DocumentDTO":
         """
         Update existing document.
 
@@ -735,7 +783,9 @@ class VectorDatabaseService:
                 if update_data.page_count is not None:
                     document.page_count = update_data.page_count
                 if update_data.processing_time_seconds is not None:
-                    document.processing_duration_seconds = update_data.processing_time_seconds
+                    document.processing_duration_seconds = (
+                        update_data.processing_time_seconds
+                    )
                 if update_data.error_message is not None:
                     document.error_details = update_data.error_message
                 if update_data.processed_at is not None:
@@ -756,7 +806,7 @@ class VectorDatabaseService:
             db.rollback()
             raise DatabaseError(f"Failed to update document: {e}")
 
-    async def get_document_by_id(self, document_id: int) -> Optional['DocumentDTO']:
+    async def get_document_by_id(self, document_id: int) -> Optional["DocumentDTO"]:
         """
         Get document by ID.
 
@@ -808,7 +858,7 @@ class VectorDatabaseService:
             db.rollback()
             raise DatabaseError(f"Failed to delete document: {e}")
 
-    def _convert_to_dto(self, document: Document) -> 'DocumentDTO':
+    def _convert_to_dto(self, document: Document) -> "DocumentDTO":
         """
         Convert SQLAlchemy Document to DocumentDTO.
 
@@ -833,12 +883,14 @@ class VectorDatabaseService:
             page_count=document.page_count,
             processing_time_seconds=document.processing_duration_seconds,
             error_message=document.error_details,
-            metadata=document.metadata or {}
+            metadata=document.metadata or {},
         )
 
 
 # Factory function for easy instantiation
-def create_database_service(db_session: Optional[Session] = None) -> VectorDatabaseService:
+def create_database_service(
+    db_session: Optional[Session] = None,
+) -> VectorDatabaseService:
     """
     Create a VectorDatabaseService instance.
 

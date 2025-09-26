@@ -14,6 +14,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 class APIVersion(str, Enum):
     """Supported API versions."""
+
     V1 = "v1"
 
 
@@ -25,7 +26,7 @@ class VersionedAPIRouter(APIRouter):
         version: APIVersion,
         prefix: str = "",
         tags: Optional[list] = None,
-        **kwargs: Any
+        **kwargs: Any,
     ):
         """Initialize versioned router with version prefix and tags."""
         # Add version to prefix
@@ -37,11 +38,7 @@ class VersionedAPIRouter(APIRouter):
         if version_tag not in versioned_tags:
             versioned_tags.append(version_tag)
 
-        super().__init__(
-            prefix=versioned_prefix,
-            tags=versioned_tags,
-            **kwargs
-        )
+        super().__init__(prefix=versioned_prefix, tags=versioned_tags, **kwargs)
 
         self.version = version
 
@@ -106,7 +103,7 @@ def create_versioned_openapi_schema(
     app,
     version: APIVersion,
     title: str = "PDF to Markdown MCP Server API",
-    description: str = "API for converting PDFs to Markdown with vector search"
+    description: str = "API for converting PDFs to Markdown with vector search",
 ) -> Dict[str, Any]:
     """
     Create version-specific OpenAPI schema.
@@ -122,7 +119,9 @@ def create_versioned_openapi_schema(
 
     # Add version to description
     version_description = f"\n\n**API Version:** {version.value}"
-    schema["info"]["description"] = schema["info"].get("description", description) + version_description
+    schema["info"]["description"] = (
+        schema["info"].get("description", description) + version_description
+    )
 
     # Filter paths to only include this version
     versioned_paths = {}
@@ -155,6 +154,7 @@ def add_version_tags_to_operations(router: APIRouter, version: APIVersion):
 
 # Version compatibility helpers
 
+
 def is_version_supported(version: str) -> bool:
     """Check if a version string is supported."""
     return version in [v.value for v in APIVersion]
@@ -177,11 +177,12 @@ def version_comparison_key(version: APIVersion) -> tuple:
     This allows for proper version ordering when needed.
     """
     # For now, just use the version number
-    version_num = int(version.value.replace('v', ''))
+    version_num = int(version.value.replace("v", ""))
     return (version_num,)
 
 
 # Deprecation helpers (for future use)
+
 
 def is_version_deprecated(version: APIVersion) -> bool:
     """Check if a version is deprecated (for future use)."""

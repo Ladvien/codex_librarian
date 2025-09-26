@@ -118,7 +118,7 @@ def upgrade() -> None:
 
     # Documents indexes
     op.create_index('idx_documents_status', 'documents', ['conversion_status'])
-    op.create_index('idx_documents_created', 'documents', ['created_at'], postgresql_using='btree', postgresql_desc=['created_at'])
+    op.create_index('idx_documents_created', 'documents', ['created_at'], postgresql_using='btree')
     op.create_index('idx_documents_source_path', 'documents', ['source_path'])
     op.create_index('idx_documents_file_hash', 'documents', ['file_hash'])
 

@@ -47,7 +47,7 @@ def upgrade() -> None:
     # Create IVFFlat index for document embeddings (cosine similarity)
     # Using lists=100 as a reasonable default for medium-sized datasets
     op.execute("""
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_embeddings_vector
+        CREATE INDEX IF NOT EXISTS idx_embeddings_vector
         ON document_embeddings
         USING ivfflat (embedding vector_cosine_ops)
         WITH (lists = 100);
@@ -55,7 +55,7 @@ def upgrade() -> None:
 
     # Create IVFFlat index for image embeddings (cosine similarity)
     op.execute("""
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_images_vector
+        CREATE INDEX IF NOT EXISTS idx_images_vector
         ON document_images
         USING ivfflat (image_embedding vector_cosine_ops)
         WITH (lists = 50);
@@ -89,8 +89,8 @@ def downgrade() -> None:
     """Remove PGVector indexes and revert to array columns."""
 
     # Drop PGVector indexes
-    op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_images_vector;")
-    op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_embeddings_vector;")
+    op.execute("DROP INDEX IF EXISTS idx_images_vector;")
+    op.execute("DROP INDEX IF EXISTS idx_embeddings_vector;")
 
     # Drop additional indexes
     op.drop_index('idx_images_page', table_name='document_images')

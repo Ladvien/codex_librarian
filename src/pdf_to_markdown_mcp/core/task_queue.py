@@ -39,7 +39,7 @@ class TaskQueue:
         file_path: str,
         validation_result: Dict[str, Any],
         priority: int = 5,
-        processing_options: Optional[Dict[str, Any]] = None
+        processing_options: Optional[Dict[str, Any]] = None,
     ) -> int:
         """Queue a PDF file for background processing.
 
@@ -61,47 +61,60 @@ class TaskQueue:
             file_path_obj = Path(file_path)
 
             # Validate input parameters
-            if not validation_result.get('valid'):
-                raise ValidationError(f"Cannot queue invalid file: {validation_result.get('error', 'Unknown error')}")
+            if not validation_result.get("valid"):
+                raise ValidationError(
+                    f"Cannot queue invalid file: {validation_result.get('error', 'Unknown error')}"
+                )
 
             if not file_path_obj.exists():
                 raise ValidationError(f"File does not exist: {file_path}")
 
             with self.get_session() as session:
                 # Check if document already exists (by path or hash)
-                existing_doc = DocumentQueries.get_by_path(session, str(file_path_obj.absolute()))
+                existing_doc = DocumentQueries.get_by_path(
+                    session, str(file_path_obj.absolute())
+                )
 
                 if existing_doc:
                     # Check if already processed successfully
-                    if existing_doc.conversion_status == 'completed':
+                    if existing_doc.conversion_status == "completed":
                         logger.info(f"File already processed successfully: {file_path}")
                         return existing_doc.id
 
                     # Update existing document
                     document = existing_doc
                     document.updated_at = datetime.utcnow()
-                    document.conversion_status = 'pending'
+                    document.conversion_status = "pending"
                     document.error_message = None
                 else:
                     # Create new document record
                     document = Document(
                         source_path=str(file_path_obj.absolute()),
                         filename=file_path_obj.name,
-                        file_hash=validation_result.get('hash'),
-                        file_size_bytes=validation_result.get('size_bytes'),
-                        conversion_status='pending',
+                        file_hash=validation_result.get("hash"),
+                        file_size_bytes=validation_result.get("size_bytes"),
+                        conversion_status="pending",
                         metadata={
-                            'mime_type': validation_result.get('mime_type'),
-                            'discovered_at': datetime.utcnow().isoformat(),
-                            'validator_info': {k: v for k, v in validation_result.items() if k != 'hash'}
-                        }
+                            "mime_type": validation_result.get("mime_type"),
+                            "discovered_at": datetime.utcnow().isoformat(),
+                            "validator_info": {
+                                k: v
+                                for k, v in validation_result.items()
+                                if k != "hash"
+                            },
+                        },
                     )
                     session.add(document)
                     session.flush()  # Get the ID without committing
 
                 # Check if already in processing queue
-                existing_queue_entry = QueueQueries.get_by_file_path(session, str(file_path_obj.absolute()))
-                if existing_queue_entry and existing_queue_entry.status in ['queued', 'processing']:
+                existing_queue_entry = QueueQueries.get_by_file_path(
+                    session, str(file_path_obj.absolute())
+                )
+                if existing_queue_entry and existing_queue_entry.status in [
+                    "queued",
+                    "processing",
+                ]:
                     logger.info(f"Document already queued for processing: {file_path}")
                     return document.id
 
@@ -109,7 +122,7 @@ class TaskQueue:
                 queue_entry = ProcessingQueue(
                     file_path=str(file_path_obj.absolute()),
                     priority=priority,
-                    status='queued'
+                    status="queued",
                 )
                 session.add(queue_entry)
 
@@ -120,20 +133,24 @@ class TaskQueue:
                     task = process_pdf_document.delay(
                         document_id=document.id,
                         file_path=str(file_path_obj.absolute()),
-                        processing_options=processing_options or {}
+                        processing_options=processing_options or {},
                     )
 
                     # Update queue entry with task ID
                     queue_entry.worker_id = task.id
                     session.commit()
 
-                    logger.info(f"Successfully queued PDF for processing: {file_path} (doc_id={document.id}, task_id={task.id})")
+                    logger.info(
+                        f"Successfully queued PDF for processing: {file_path} (doc_id={document.id}, task_id={task.id})"
+                    )
                     return document.id
 
                 except Exception as task_error:
                     # Update document status to reflect task creation failure
-                    document.conversion_status = 'failed'
-                    document.error_message = f"Failed to create processing task: {str(task_error)}"
+                    document.conversion_status = "failed"
+                    document.error_message = (
+                        f"Failed to create processing task: {str(task_error)}"
+                    )
                     session.commit()
                     raise QueueError(f"Failed to create Celery task: {str(task_error)}")
 
@@ -154,21 +171,21 @@ class TaskQueue:
             with self.get_session() as session:
                 stats = QueueQueries.get_queue_statistics(session)
                 return {
-                    'total_queued': stats.get('queued', 0),
-                    'total_processing': stats.get('processing', 0),
-                    'total_completed': stats.get('completed', 0),
-                    'total_failed': stats.get('failed', 0),
-                    'queue_depth': stats.get('queued', 0) + stats.get('processing', 0)
+                    "total_queued": stats.get("queued", 0),
+                    "total_processing": stats.get("processing", 0),
+                    "total_completed": stats.get("completed", 0),
+                    "total_failed": stats.get("failed", 0),
+                    "queue_depth": stats.get("queued", 0) + stats.get("processing", 0),
                 }
         except Exception as e:
             logger.error(f"Error getting queue status: {e}")
             return {
-                'error': str(e),
-                'total_queued': 0,
-                'total_processing': 0,
-                'total_completed': 0,
-                'total_failed': 0,
-                'queue_depth': 0
+                "error": str(e),
+                "total_queued": 0,
+                "total_processing": 0,
+                "total_completed": 0,
+                "total_failed": 0,
+                "queue_depth": 0,
             }
 
     def clear_completed_entries(self, older_than_days: int = 7) -> int:
@@ -206,12 +223,14 @@ class TaskQueue:
                     logger.warning(f"Document not found for retry: {document_id}")
                     return False
 
-                if document.conversion_status != 'failed':
-                    logger.warning(f"Cannot retry document with status: {document.conversion_status}")
+                if document.conversion_status != "failed":
+                    logger.warning(
+                        f"Cannot retry document with status: {document.conversion_status}"
+                    )
                     return False
 
                 # Reset status
-                document.conversion_status = 'pending'
+                document.conversion_status = "pending"
                 document.error_message = None
                 document.updated_at = datetime.utcnow()
 
@@ -219,11 +238,13 @@ class TaskQueue:
                 task = process_pdf_document.delay(
                     document_id=document.id,
                     file_path=document.source_path,
-                    processing_options={}
+                    processing_options={},
                 )
 
                 session.commit()
-                logger.info(f"Successfully retried processing for document {document_id} (task_id={task.id})")
+                logger.info(
+                    f"Successfully retried processing for document {document_id} (task_id={task.id})"
+                )
                 return True
 
         except Exception as e:

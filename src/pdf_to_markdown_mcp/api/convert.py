@@ -16,13 +16,22 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from pdf_to_markdown_mcp.models.request import ConvertSingleRequest, BatchConvertRequest
-from pdf_to_markdown_mcp.models.response import ConvertSingleResponse, BatchConvertResponse, ErrorResponse, ErrorType
+from pdf_to_markdown_mcp.models.response import (
+    ConvertSingleResponse,
+    BatchConvertResponse,
+    ErrorResponse,
+    ErrorType,
+)
 from pdf_to_markdown_mcp.models.dto import CreateDocumentDTO, DocumentDTO
 from pdf_to_markdown_mcp.core.processor import PDFProcessor
 from pdf_to_markdown_mcp.core.dependencies import get_database_service
 from pdf_to_markdown_mcp.services.database import VectorDatabaseService
 from pdf_to_markdown_mcp.worker.tasks import process_pdf_document, process_pdf_batch
-from pdf_to_markdown_mcp.auth.security import RequireAuth, validate_path_security, validate_file_security
+from pdf_to_markdown_mcp.auth.security import (
+    RequireAuth,
+    validate_path_security,
+    validate_file_security,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -33,7 +42,7 @@ async def convert_single_pdf(
     request: ConvertSingleRequest,
     background_tasks: BackgroundTasks,
     db_service: VectorDatabaseService = Depends(get_database_service),
-    authenticated: bool = RequireAuth
+    authenticated: bool = RequireAuth,
 ) -> ConvertSingleResponse:
     """
     Convert a single PDF file to Markdown and store in database.
@@ -43,7 +52,7 @@ async def convert_single_pdf(
     try:
         logger.info(
             "Single PDF conversion requested",
-            extra={"file_path": str(request.file_path)}
+            extra={"file_path": str(request.file_path)},
         )
 
         # Validate file path security and integrity
@@ -52,7 +61,10 @@ async def convert_single_pdf(
 
         logger.info(
             "File validation passed",
-            extra={"validated_path": str(validated_path), "file_size": file_validation["size_bytes"]}
+            extra={
+                "validated_path": str(validated_path),
+                "file_size": file_validation["size_bytes"],
+            },
         )
 
         # Calculate file hash for deduplication
@@ -64,7 +76,10 @@ async def convert_single_pdf(
         if existing_doc:
             logger.info(
                 f"Document already exists with hash {file_hash}",
-                extra={"document_id": existing_doc.id, "status": existing_doc.processing_status}
+                extra={
+                    "document_id": existing_doc.id,
+                    "status": existing_doc.processing_status,
+                },
             )
 
             # Return existing document info
@@ -83,13 +98,13 @@ async def convert_single_pdf(
             filename=validated_path.name,
             file_path=str(validated_path),
             file_hash=file_hash,
-            size_bytes=file_validation["size_bytes"]
+            size_bytes=file_validation["size_bytes"],
         )
         document = await db_service.create_document(create_data)
 
         logger.info(
             f"Created document record with ID {document.id}",
-            extra={"document_id": document.id}
+            extra={"document_id": document.id},
         )
 
         # Queue for background processing if store_embeddings is True
@@ -98,7 +113,7 @@ async def convert_single_pdf(
             job = process_pdf_document.delay(
                 document_id=document.id,
                 file_path=str(request.file_path),
-                processing_options=request.options.dict()
+                processing_options=request.options.dict(),
             )
 
             return ConvertSingleResponse(
@@ -107,7 +122,11 @@ async def convert_single_pdf(
                 job_id=job.id,
                 message="PDF queued for processing",
                 source_path=request.file_path,
-                output_path=request.output_dir / f"{request.file_path.stem}.md" if request.output_dir else None,
+                output_path=(
+                    request.output_dir / f"{request.file_path.stem}.md"
+                    if request.output_dir
+                    else None
+                ),
                 file_size_bytes=request.file_path.stat().st_size,
             )
 
@@ -117,7 +136,7 @@ async def convert_single_pdf(
             result = await processor.process_pdf(
                 file_path=request.file_path,
                 output_dir=request.output_dir,
-                options=request.options
+                options=request.options,
             )
 
             return ConvertSingleResponse(
@@ -142,8 +161,8 @@ async def convert_single_pdf(
             status_code=404,
             detail=ErrorResponse(
                 error=ErrorType.NOT_FOUND,
-                message=f"File not found: {request.file_path}"
-            ).dict()
+                message=f"File not found: {request.file_path}",
+            ).dict(),
         )
 
     except PermissionError:
@@ -152,8 +171,8 @@ async def convert_single_pdf(
             status_code=403,
             detail=ErrorResponse(
                 error=ErrorType.PERMISSION,
-                message=f"Permission denied: {request.file_path}"
-            ).dict()
+                message=f"Permission denied: {request.file_path}",
+            ).dict(),
         )
 
     except Exception as e:
@@ -161,9 +180,8 @@ async def convert_single_pdf(
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
-                error=ErrorType.PROCESSING,
-                message=f"Failed to process PDF: {str(e)}"
-            ).dict()
+                error=ErrorType.PROCESSING, message=f"Failed to process PDF: {str(e)}"
+            ).dict(),
         )
 
 
@@ -172,7 +190,7 @@ async def batch_convert_pdfs(
     request: BatchConvertRequest,
     background_tasks: BackgroundTasks,
     db_service: VectorDatabaseService = Depends(get_database_service),
-    authenticated: bool = RequireAuth
+    authenticated: bool = RequireAuth,
 ) -> BatchConvertResponse:
     """
     Batch convert multiple PDF files based on pattern matching.
@@ -185,8 +203,8 @@ async def batch_convert_pdfs(
             extra={
                 "directory": str(request.directory),
                 "pattern": request.pattern,
-                "max_files": request.max_files
-            }
+                "max_files": request.max_files,
+            },
         )
 
         # Validate directory path to prevent traversal attacks
@@ -194,7 +212,7 @@ async def batch_convert_pdfs(
 
         logger.info(
             "Directory validation passed",
-            extra={"validated_directory": str(validated_directory)}
+            extra={"validated_directory": str(validated_directory)},
         )
 
         # Find matching PDF files
@@ -204,10 +222,12 @@ async def batch_convert_pdfs(
             found_files = list(validated_directory.glob(request.pattern))
 
         # Limit to max_files
-        found_files = found_files[:request.max_files]
+        found_files = found_files[: request.max_files]
 
         # Filter to only PDF files
-        pdf_files = [f for f in found_files if f.suffix.lower() == '.pdf' and f.is_file()]
+        pdf_files = [
+            f for f in found_files if f.suffix.lower() == ".pdf" and f.is_file()
+        ]
 
         # Filter out already processed files based on file hash
         files_to_process = []
@@ -219,23 +239,27 @@ async def batch_convert_pdfs(
                 existing_doc = await db_service.find_document_by_hash(file_hash)
 
                 if existing_doc:
-                    skipped_files.append({
-                        "file": file_path.name,
-                        "reason": f"Already processed (document ID: {existing_doc.id})"
-                    })
+                    skipped_files.append(
+                        {
+                            "file": file_path.name,
+                            "reason": f"Already processed (document ID: {existing_doc.id})",
+                        }
+                    )
                 else:
                     files_to_process.append(file_path)
             except Exception as e:
-                skipped_files.append({
-                    "file": file_path.name,
-                    "reason": f"File validation error: {str(e)}"
-                })
+                skipped_files.append(
+                    {
+                        "file": file_path.name,
+                        "reason": f"File validation error: {str(e)}",
+                    }
+                )
 
         # Queue batch processing job
         if files_to_process:
             job = process_pdf_batch.delay(
                 file_paths=[str(f) for f in files_to_process],
-                processing_options=request.options.dict()
+                processing_options=request.options.dict(),
             )
 
             return BatchConvertResponse(
@@ -245,7 +269,8 @@ async def batch_convert_pdfs(
                 files_found=len(found_files),
                 files_queued=len(files_to_process),
                 files_skipped=len(skipped_files),
-                estimated_time_minutes=len(files_to_process) * 2,  # Rough estimate: 2 min per file
+                estimated_time_minutes=len(files_to_process)
+                * 2,  # Rough estimate: 2 min per file
                 queue_position=None,  # Would need queue depth calculation
                 queued_files=[f.name for f in files_to_process],
                 skipped_files=skipped_files,
@@ -269,8 +294,8 @@ async def batch_convert_pdfs(
             status_code=500,
             detail=ErrorResponse(
                 error=ErrorType.PROCESSING,
-                message=f"Failed to initiate batch processing: {str(e)}"
-            ).dict()
+                message=f"Failed to initiate batch processing: {str(e)}",
+            ).dict(),
         )
 
 
@@ -285,15 +310,14 @@ def _calculate_file_hash(file_path: Path) -> str:
 
 @router.get("/stream_progress")
 async def stream_progress(
-    job_id: str = None,
-    batch_id: str = None,
-    authenticated: bool = RequireAuth
+    job_id: str = None, batch_id: str = None, authenticated: bool = RequireAuth
 ) -> StreamingResponse:
     """
     Stream real-time progress updates using Server-Sent Events.
 
     This endpoint implements the stream_progress MCP tool functionality.
     """
+
     async def generate_progress_events():
         """Generate SSE events for progress updates."""
         try:
@@ -303,7 +327,7 @@ async def stream_progress(
             if not target_job_id:
                 error_data = {
                     "error": "missing_job_id",
-                    "message": "Either job_id or batch_id must be provided"
+                    "message": "Either job_id or batch_id must be provided",
                 }
                 yield f"data: {json.dumps(error_data)}\n\n"
                 return
@@ -320,10 +344,12 @@ async def stream_progress(
                     progress_data = {
                         "job_id": target_job_id,
                         "state": current_state,
-                        "progress_percent": task_info.get('percentage', 0),
-                        "current_step": task_info.get('message', f"Task {current_state.lower()}"),
-                        "timestamp": task_info.get('timestamp', None),
-                        "eta_seconds": task_info.get('eta_seconds', None)
+                        "progress_percent": task_info.get("percentage", 0),
+                        "current_step": task_info.get(
+                            "message", f"Task {current_state.lower()}"
+                        ),
+                        "timestamp": task_info.get("timestamp", None),
+                        "eta_seconds": task_info.get("eta_seconds", None),
                     }
 
                     yield f"data: {json.dumps(progress_data)}\n\n"
@@ -338,15 +364,12 @@ async def stream_progress(
                 "status": "completed" if task.successful() else "failed",
                 "result": task.result if task.successful() else None,
                 "error": str(task.result) if task.failed() else None,
-                "timestamp": None
+                "timestamp": None,
             }
             yield f"data: {json.dumps(final_data)}\n\n"
 
         except Exception as e:
-            error_data = {
-                "error": "stream_error",
-                "message": str(e)
-            }
+            error_data = {"error": "stream_error", "message": str(e)}
             yield f"data: {json.dumps(error_data)}\n\n"
 
     # Import settings for secure CORS configuration
@@ -358,16 +381,18 @@ async def stream_progress(
         "Connection": "keep-alive",
         "Content-Security-Policy": "default-src 'self'",
         "X-Frame-Options": "DENY",
-        "X-Content-Type-Options": "nosniff"
+        "X-Content-Type-Options": "nosniff",
     }
 
     # Add CORS headers only if properly configured (not wildcard in production)
     if settings.cors_origins and settings.cors_origins != ["*"]:
         secure_headers["Access-Control-Allow-Origin"] = settings.cors_origins[0]
-        secure_headers["Access-Control-Allow-Headers"] = "Cache-Control, Authorization, X-Correlation-ID"
+        secure_headers["Access-Control-Allow-Headers"] = (
+            "Cache-Control, Authorization, X-Correlation-ID"
+        )
 
     return StreamingResponse(
         generate_progress_events(),
         media_type="text/event-stream",
-        headers=secure_headers
+        headers=secure_headers,
     )
