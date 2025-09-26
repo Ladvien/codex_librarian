@@ -3,18 +3,18 @@
 # Always available - core watcher functionality
 from .watcher import (
     DirectoryWatcher,
-    PDFFileHandler,
-    WatcherConfig,
     FileValidator,
+    PDFFileHandler,
     SmartFileDetector,
+    WatcherConfig,
 )
 
 __all__ = [
     "DirectoryWatcher",
-    "PDFFileHandler",
-    "WatcherConfig",
     "FileValidator",
+    "PDFFileHandler",
     "SmartFileDetector",
+    "WatcherConfig",
 ]
 
 # Optional imports that require database dependencies
@@ -38,16 +38,16 @@ except ImportError:
 try:
     from .watcher_service import (
         WatcherManager,
-        create_watcher_service,
         create_default_watcher_config,
+        create_watcher_service,
         get_watcher_manager,
     )
 
     __all__.extend(
         [
             "WatcherManager",
-            "create_watcher_service",
             "create_default_watcher_config",
+            "create_watcher_service",
             "get_watcher_manager",
         ]
     )
@@ -61,36 +61,36 @@ except ImportError:
 # Monitoring and health check components
 try:
     from .monitoring import (
-        MetricsCollector,
-        HealthMonitor,
-        ComponentHealth,
-        HealthStatus,
-        SystemHealth,
         AlertingEngine,
         AlertRule,
         AlertSeverity,
+        ComponentHealth,
+        HealthMonitor,
+        HealthStatus,
+        MetricsCollector,
+        SystemHealth,
         TracingManager,
-        metrics_collector,
-        health_monitor,
         alerting_engine,
         create_standard_alerts,
+        health_monitor,
+        metrics_collector,
     )
 
     __all__.extend(
         [
-            "MetricsCollector",
-            "HealthMonitor",
-            "ComponentHealth",
-            "HealthStatus",
-            "SystemHealth",
-            "AlertingEngine",
             "AlertRule",
             "AlertSeverity",
+            "AlertingEngine",
+            "ComponentHealth",
+            "HealthMonitor",
+            "HealthStatus",
+            "MetricsCollector",
+            "SystemHealth",
             "TracingManager",
-            "metrics_collector",
-            "health_monitor",
             "alerting_engine",
             "create_standard_alerts",
+            "health_monitor",
+            "metrics_collector",
         ]
     )
 except ImportError:

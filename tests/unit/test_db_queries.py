@@ -12,29 +12,24 @@ Test Categories:
 5. Error handling and edge cases
 """
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock, call
-from sqlalchemy.orm import Session
-from sqlalchemy.exc import SQLAlchemyError, IntegrityError
-from sqlalchemy import text, func
-from typing import Dict, Any, List, Optional
-import time
-from decimal import Decimal
+from unittest.mock import Mock
 
-from src.pdf_to_markdown_mcp.db.queries import (
-    DocumentQueries,
-    SearchQueries,
-    QueueQueries,
-    _validate_string,
-    _validate_integer,
-    _validate_embedding,
-    _validate_float
-)
+import pytest
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.orm import Session
+
 from src.pdf_to_markdown_mcp.db.models import (
     Document,
-    DocumentEmbedding,
     ProcessingQueue,
-    DocumentContent
+)
+from src.pdf_to_markdown_mcp.db.queries import (
+    DocumentQueries,
+    QueueQueries,
+    SearchQueries,
+    _validate_embedding,
+    _validate_float,
+    _validate_integer,
+    _validate_string,
 )
 
 
@@ -122,7 +117,7 @@ class TestDocumentQueries:
             None,
             -1,
             0,
-            "1'; DROP TABLE documents; --"  # SQL injection attempt
+            "1'; DROP TABLE documents; --",  # SQL injection attempt
         ]
 
         for invalid_input in invalid_inputs:
@@ -171,7 +166,7 @@ class TestDocumentQueries:
             "../../config/secrets.env",
             "/etc/shadow",
             "\\..\\..\\windows\\system32\\config\\sam",
-            "'; DROP TABLE documents; --"
+            "'; DROP TABLE documents; --",
         ]
 
         mock_result = Mock()
@@ -183,7 +178,7 @@ class TestDocumentQueries:
             try:
                 result = DocumentQueries.get_by_path(mock_db_session, malicious_path)
                 # Should use parameterized query - safe even with malicious input
-                assert result is None or hasattr(result, 'id')
+                assert result is None or hasattr(result, "id")
                 mock_db_session.query.assert_called_with(Document)
             except ValueError:
                 # Input validation may reject obviously malicious paths
@@ -226,7 +221,7 @@ class TestDocumentQueries:
             "a" * 64,  # SHA-256 length
             "a" * 32,  # MD5 length
             "invalid!@#$%",  # Special characters
-            "'; DROP TABLE documents; --"  # SQL injection attempt
+            "'; DROP TABLE documents; --",  # SQL injection attempt
         ]
 
         mock_result = Mock()
@@ -261,10 +256,7 @@ class TestDocumentQueries:
 
         # When
         result = DocumentQueries.get_by_status(
-            mock_db_session,
-            status="completed",
-            limit=10,
-            offset=20
+            mock_db_session, status="completed", limit=10, offset=20
         )
 
         # Then
@@ -287,7 +279,7 @@ class TestDocumentQueries:
             {"status": "completed", "limit": -1, "offset": 0},
             {"status": "completed", "limit": 10, "offset": -5},
             {"status": "", "limit": 0, "offset": 0},
-            {"status": None, "limit": 10, "offset": 0}
+            {"status": None, "limit": 10, "offset": 0},
         ]
 
         mock_query = Mock()
@@ -297,10 +289,7 @@ class TestDocumentQueries:
         # When & Then
         for test_case in invalid_test_cases:
             try:
-                result = DocumentQueries.get_by_status(
-                    mock_db_session,
-                    **test_case
-                )
+                result = DocumentQueries.get_by_status(mock_db_session, **test_case)
                 # Should use ORM safely even with invalid inputs
                 mock_db_session.query.assert_called_with(Document)
             except (ValueError, TypeError):
@@ -324,9 +313,9 @@ class TestSearchQueries:
         for i in range(3):
             row = Mock()
             row.id = i + 1
-            row.filename = f"document_{i+1}.pdf"
-            row.source_path = f"/path/to/document_{i+1}.pdf"
-            row.plain_text = f"Sample content for document {i+1}"
+            row.filename = f"document_{i + 1}.pdf"
+            row.source_path = f"/path/to/document_{i + 1}.pdf"
+            row.plain_text = f"Sample content for document {i + 1}"
             row.score = 0.8 - (i * 0.1)
             row.metadata = {"page_count": 10 + i}
             results.append(row)
@@ -334,7 +323,9 @@ class TestSearchQueries:
 
     # Test fulltext_search functionality
 
-    def test_fulltext_search_basic_functionality(self, mock_db_session, sample_search_results):
+    def test_fulltext_search_basic_functionality(
+        self, mock_db_session, sample_search_results
+    ):
         """
         Test basic full-text search functionality
 
@@ -347,16 +338,14 @@ class TestSearchQueries:
 
         # When
         results = SearchQueries.fulltext_search(
-            mock_db_session,
-            query="machine learning",
-            limit=10
+            mock_db_session, query="machine learning", limit=10
         )
 
         # Then
         assert len(results) == 3
-        assert all(hasattr(result, 'document_id') for result in results)
-        assert all(hasattr(result, 'filename') for result in results)
-        assert all(hasattr(result, 'score') for result in results)
+        assert all(hasattr(result, "document_id") for result in results)
+        assert all(hasattr(result, "filename") for result in results)
+        assert all(hasattr(result, "score") for result in results)
 
         # Verify parameterized query was used
         mock_db_session.execute.assert_called_once()
@@ -380,16 +369,14 @@ class TestSearchQueries:
             " " * 600,  # Too long
             None,  # None value
             12345,  # Non-string
-            "'; DROP TABLE documents; --"  # SQL injection
+            "'; DROP TABLE documents; --",  # SQL injection
         ]
 
         # When & Then
         for invalid_query in invalid_queries:
             try:
                 result = SearchQueries.fulltext_search(
-                    mock_db_session,
-                    query=invalid_query,
-                    limit=10
+                    mock_db_session, query=invalid_query, limit=10
                 )
                 # If it succeeds, verify safe execution
                 if mock_db_session.execute.called:
@@ -421,9 +408,7 @@ class TestSearchQueries:
         for case in edge_cases:
             try:
                 result = SearchQueries.fulltext_search(
-                    mock_db_session,
-                    query="test",
-                    **case
+                    mock_db_session, query="test", **case
                 )
                 # Should validate limits
                 if case["limit"] <= 0 or case["limit"] > 1000:
@@ -447,17 +432,14 @@ class TestSearchQueries:
             {"document_id": "1'; DROP TABLE documents; --"},
             {"document_id": {"$ne": None}},  # NoSQL injection
             {"unknown_field": "malicious_value"},
-            {"document_id": [1, 2, "'; TRUNCATE TABLE documents; --"]}
+            {"document_id": [1, 2, "'; TRUNCATE TABLE documents; --"]},
         ]
 
         # When & Then
         for malicious_filter in malicious_filters:
             try:
                 result = SearchQueries.fulltext_search(
-                    mock_db_session,
-                    query="test",
-                    filters=malicious_filter,
-                    limit=10
+                    mock_db_session, query="test", filters=malicious_filter, limit=10
                 )
 
                 # Verify safe parameterization
@@ -490,9 +472,9 @@ class TestSearchQueries:
             row = Mock()
             row.document_id = i + 1
             row.id = i + 1
-            row.filename = f"doc_{i+1}.pdf"
-            row.source_path = f"/path/doc_{i+1}.pdf"
-            row.chunk_text = f"Content chunk {i+1}"
+            row.filename = f"doc_{i + 1}.pdf"
+            row.source_path = f"/path/doc_{i + 1}.pdf"
+            row.chunk_text = f"Content chunk {i + 1}"
             row.similarity = 0.9 - (i * 0.1)
             row.page_number = i + 1
             row.chunk_index = i
@@ -503,14 +485,12 @@ class TestSearchQueries:
 
         # When
         results = SearchQueries.vector_similarity_search(
-            mock_db_session,
-            query_embedding=valid_embedding,
-            threshold=0.7
+            mock_db_session, query_embedding=valid_embedding, threshold=0.7
         )
 
         # Then
         assert len(results) == 3
-        assert all(hasattr(result, 'similarity') for result in results)
+        assert all(hasattr(result, "similarity") for result in results)
         assert all(result.similarity >= 0.7 for result in results)
 
         # Verify parameterized query with vector casting
@@ -536,17 +516,15 @@ class TestSearchQueries:
             ["not", "numbers"],  # Non-numeric values
             None,  # None value
             "not_a_list",  # Not a list
-            [float('inf')] * 1536,  # Infinity values
-            [float('nan')] * 1536,  # NaN values
+            [float("inf")] * 1536,  # Infinity values
+            [float("nan")] * 1536,  # NaN values
         ]
 
         # When & Then
         for invalid_embedding in invalid_embeddings:
             try:
                 result = SearchQueries.vector_similarity_search(
-                    mock_db_session,
-                    query_embedding=invalid_embedding,
-                    threshold=0.7
+                    mock_db_session, query_embedding=invalid_embedding, threshold=0.7
                 )
 
                 # If it doesn't raise an exception, verify safe handling
@@ -556,7 +534,9 @@ class TestSearchQueries:
                     assert ":query_embedding::vector" in str(call_args[0][0])
 
             except (ValueError, TypeError):
-                assert True, f"Embedding validation correctly rejected invalid embedding"
+                assert True, (
+                    "Embedding validation correctly rejected invalid embedding"
+                )
 
     def test_vector_similarity_search_threshold_validation(self, mock_db_session):
         """
@@ -572,11 +552,11 @@ class TestSearchQueries:
 
         invalid_thresholds = [
             -0.5,  # Negative threshold
-            1.5,   # Threshold > 1
-            "0.7", # String threshold
+            1.5,  # Threshold > 1
+            "0.7",  # String threshold
             None,  # None threshold
-            float('inf'),  # Infinity
-            float('nan'),  # NaN
+            float("inf"),  # Infinity
+            float("nan"),  # NaN
         ]
 
         # When & Then
@@ -585,7 +565,7 @@ class TestSearchQueries:
                 result = SearchQueries.vector_similarity_search(
                     mock_db_session,
                     query_embedding=valid_embedding,
-                    threshold=invalid_threshold
+                    threshold=invalid_threshold,
                 )
 
                 # Should handle gracefully or use default
@@ -615,8 +595,8 @@ class TestSearchQueries:
         for i in range(3):
             row = Mock()
             row.id = i + 1
-            row.filename = f"hybrid_doc_{i+1}.pdf"
-            row.source_path = f"/path/hybrid_{i+1}.pdf"
+            row.filename = f"hybrid_doc_{i + 1}.pdf"
+            row.source_path = f"/path/hybrid_{i + 1}.pdf"
             row.metadata = {}
             row.created_at = Mock()
             row.created_at.isoformat.return_value = "2025-09-26T10:00:00Z"
@@ -625,7 +605,7 @@ class TestSearchQueries:
             row.semantic_score = 0.8 - (i * 0.1)
             row.keyword_score = 0.7 - (i * 0.1)
             row.combined_score = (0.8 - i * 0.1) * 0.7 + (0.7 - i * 0.1) * 0.3
-            row.chunk_text = f"Hybrid content {i+1}"
+            row.chunk_text = f"Hybrid content {i + 1}"
             row.page_number = i + 1
             row.chunk_index = i
             row.chunk_metadata = {}
@@ -638,14 +618,14 @@ class TestSearchQueries:
             mock_db_session,
             query="artificial intelligence",
             query_embedding=valid_embedding,
-            limit=10
+            limit=10,
         )
 
         # Then
         assert len(results) <= 3  # May be deduplicated
-        assert all('combined_score' in result for result in results)
-        assert all('semantic_score' in result for result in results)
-        assert all('keyword_score' in result for result in results)
+        assert all("combined_score" in result for result in results)
+        assert all("semantic_score" in result for result in results)
+        assert all("keyword_score" in result for result in results)
 
         # Verify complex parameterized query
         mock_db_session.execute.assert_called_once()
@@ -667,9 +647,9 @@ class TestSearchQueries:
 
         invalid_weight_cases = [
             {"semantic_weight": -0.1, "keyword_weight": 0.3},  # Negative weight
-            {"semantic_weight": 1.5, "keyword_weight": 0.3},   # Weight > 1
-            {"semantic_weight": "0.7", "keyword_weight": 0.3}, # String weight
-            {"semantic_weight": None, "keyword_weight": 0.3},   # None weight
+            {"semantic_weight": 1.5, "keyword_weight": 0.3},  # Weight > 1
+            {"semantic_weight": "0.7", "keyword_weight": 0.3},  # String weight
+            {"semantic_weight": None, "keyword_weight": 0.3},  # None weight
         ]
 
         # When & Then
@@ -679,11 +659,14 @@ class TestSearchQueries:
                     mock_db_session,
                     query="test",
                     query_embedding=valid_embedding,
-                    **weight_case
+                    **weight_case,
                 )
 
                 # Should validate weights
-                if weight_case["semantic_weight"] < 0 or weight_case["semantic_weight"] > 1:
+                if (
+                    weight_case["semantic_weight"] < 0
+                    or weight_case["semantic_weight"] > 1
+                ):
                     pytest.fail("Should have validated weight range")
 
             except (ValueError, TypeError):
@@ -840,7 +823,7 @@ class TestQueueQueries:
             ("queued", 50),
             ("processing", 30),
             ("completed", 15),
-            ("failed", 5)
+            ("failed", 5),
         ]
 
         mock_db_session.query.side_effect = [mock_total_query, mock_status_query]
@@ -903,7 +886,7 @@ class TestInputValidationFunctions:
             "normal string",
             "string with numbers 123",
             "string-with-dashes",
-            "string_with_underscores"
+            "string_with_underscores",
         ]
 
         # When & Then
@@ -932,13 +915,17 @@ class TestInputValidationFunctions:
         # When & Then
         for dangerous_pattern in dangerous_patterns:
             try:
-                result = _validate_string(dangerous_pattern, "test_field", max_length=500)
+                result = _validate_string(
+                    dangerous_pattern, "test_field", max_length=500
+                )
                 # If validation passes, ensure dangerous elements are neutralized
                 assert "DROP TABLE" not in result.upper()
                 assert "DELETE FROM" not in result.upper()
                 assert "<script>" not in result.lower()
             except ValueError:
-                assert True, f"Dangerous pattern correctly rejected: {dangerous_pattern}"
+                assert True, (
+                    f"Dangerous pattern correctly rejected: {dangerous_pattern}"
+                )
 
     def test_validate_integer_type_validation(self):
         """
@@ -955,8 +942,8 @@ class TestInputValidationFunctions:
             "not_a_number",  # String
             1.5,  # Float
             None,  # None
-            [],   # List
-            {},   # Dict
+            [],  # List
+            {},  # Dict
         ]
 
         # When & Then
@@ -982,12 +969,12 @@ class TestInputValidationFunctions:
         valid_embedding_512 = [0.1] * 512
 
         invalid_embeddings = [
-            [0.1] * 100,   # Wrong dimension
+            [0.1] * 100,  # Wrong dimension
             [0.1] * 2000,  # Too many dimensions
-            [],            # Empty
+            [],  # Empty
             ["not", "numbers"],  # Non-numeric
-            None,          # None
-            "not_a_list"   # Not a list
+            None,  # None
+            "not_a_list",  # Not a list
         ]
 
         # When & Then
@@ -1014,10 +1001,10 @@ class TestInputValidationFunctions:
         valid_floats = [0.0, 0.5, 1.0, -1.0, 3.14159]
         invalid_floats = [
             "not_a_float",  # String
-            None,           # None
-            float('inf'),   # Infinity
-            float('nan'),   # NaN
-            [],             # List
+            None,  # None
+            float("inf"),  # Infinity
+            float("nan"),  # NaN
+            [],  # List
         ]
 
         # When & Then
@@ -1049,7 +1036,9 @@ class TestErrorHandlingAndEdgeCases:
         Then should handle gracefully and provide meaningful errors
         """
         # Given
-        mock_db_session.query.side_effect = SQLAlchemyError("Connection to database failed")
+        mock_db_session.query.side_effect = SQLAlchemyError(
+            "Connection to database failed"
+        )
 
         # When & Then
         with pytest.raises(SQLAlchemyError) as exc_info:
@@ -1075,7 +1064,9 @@ class TestErrorHandlingAndEdgeCases:
         mock_query.with_for_update.return_value = mock_query
         mock_query.first.return_value = sample_queue_job
         mock_db_session.query.return_value = mock_query
-        mock_db_session.commit.side_effect = IntegrityError("Constraint violation", None, None)
+        mock_db_session.commit.side_effect = IntegrityError(
+            "Constraint violation", None, None
+        )
 
         # When & Then
         with pytest.raises(SQLAlchemyError):
@@ -1101,7 +1092,7 @@ class TestErrorHandlingAndEdgeCases:
             results = SearchQueries.fulltext_search(
                 mock_db_session,
                 query="common term",
-                limit=50  # Should limit even with large dataset
+                limit=50,  # Should limit even with large dataset
             )
 
             # Then - Should handle large datasets gracefully
@@ -1140,4 +1131,6 @@ class TestErrorHandlingAndEdgeCases:
 
 
 if __name__ == "__main__":
-    pytest.main([__file__, "-v", "--tb=short", "--cov=src.pdf_to_markdown_mcp.db.queries"])
+    pytest.main(
+        [__file__, "-v", "--tb=short", "--cov=src.pdf_to_markdown_mcp.db.queries"]
+    )

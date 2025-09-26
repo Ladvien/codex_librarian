@@ -6,16 +6,17 @@ for monitoring the PDF to Markdown MCP server.
 """
 
 import asyncio
-from typing import Dict, Any, Optional
-from fastapi import APIRouter, HTTPException, Response, Depends
-from fastapi.responses import PlainTextResponse
 import logging
+from typing import Any
+
+from fastapi import APIRouter, HTTPException, Response
+from fastapi.responses import PlainTextResponse
 
 from pdf_to_markdown_mcp.core.monitoring import (
-    health_monitor,
-    metrics_collector,
     HealthStatus,
     TracingManager,
+    health_monitor,
+    metrics_collector,
 )
 
 router = APIRouter()
@@ -24,8 +25,8 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-@router.get("/health", response_model=Dict[str, Any])
-async def get_health() -> Dict[str, Any]:
+@router.get("/health", response_model=dict[str, Any])
+async def get_health() -> dict[str, Any]:
     """
     Comprehensive system health check.
 
@@ -90,7 +91,7 @@ async def get_health() -> Dict[str, Any]:
 
 
 @router.get("/health/detailed")
-async def get_detailed_health() -> Dict[str, Any]:
+async def get_detailed_health() -> dict[str, Any]:
     """
     Detailed health check with additional diagnostic information.
 
@@ -107,8 +108,9 @@ async def get_detailed_health() -> Dict[str, Any]:
 
         # PostgreSQL version
         try:
-            from pdf_to_markdown_mcp.db.session import get_db
             from sqlalchemy import text
+
+            from pdf_to_markdown_mcp.db.session import get_db
 
             async with get_db() as session:
                 result = await session.execute(text("SELECT version()"))
@@ -187,7 +189,7 @@ async def get_detailed_health() -> Dict[str, Any]:
 
 
 @router.get("/ready")
-async def get_readiness(response: Response) -> Dict[str, Any]:
+async def get_readiness(response: Response) -> dict[str, Any]:
     """
     Readiness probe for load balancers and orchestrators.
 
@@ -294,7 +296,7 @@ metrics_collection_last_error_timestamp {asyncio.get_event_loop().time()}
 
 
 @router.get("/metrics/json")
-async def get_json_metrics() -> Dict[str, Any]:
+async def get_json_metrics() -> dict[str, Any]:
     """
     JSON-formatted metrics endpoint for applications that prefer JSON over Prometheus format.
 
@@ -311,10 +313,10 @@ async def get_json_metrics() -> Dict[str, Any]:
 
         # Collect database metrics
         try:
-            from pdf_to_markdown_mcp.db.session import get_db
-            from pdf_to_markdown_mcp.db.models import Document, ProcessingQueue
-            from sqlalchemy import func, and_
             from datetime import datetime, timedelta
+
+            from pdf_to_markdown_mcp.db.models import Document, ProcessingQueue
+            from pdf_to_markdown_mcp.db.session import get_db
 
             async with get_db() as session:
                 # Processing queue depth
@@ -420,7 +422,7 @@ async def get_json_metrics() -> Dict[str, Any]:
             metric_categories=len(
                 [
                     k
-                    for k in metrics.keys()
+                    for k in metrics
                     if k not in ["timestamp", "service", "correlation_id"]
                 ]
             ),

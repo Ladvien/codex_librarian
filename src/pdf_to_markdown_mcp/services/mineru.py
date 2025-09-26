@@ -6,37 +6,32 @@ including layout-aware text extraction, table detection, formula recognition, an
 """
 
 import asyncio
-import logging
 import hashlib
-import uuid
-from pathlib import Path
-from typing import Dict, Any, List, Optional, Callable
+import logging
 import time
+import uuid
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
 
-from pdf_to_markdown_mcp.models.request import ProcessingOptions
+from pdf_to_markdown_mcp.config import settings
+from pdf_to_markdown_mcp.core.errors import (
+    ProcessingError,
+    ValidationError,
+    processing_error,
+    validation_error,
+)
 from pdf_to_markdown_mcp.core.streaming import (
-    stream_large_file,
-    StreamingProgressTracker,
     MemoryMappedFileReader,
-    stream_processing_with_backpressure,
+    StreamingProgressTracker,
+    stream_large_file,
 )
 from pdf_to_markdown_mcp.models.processing import (
-    ProcessingResult,
-    ProcessingMetadata,
-    TableData,
-    FormulaData,
-    ImageData,
     ChunkData,
+    ProcessingMetadata,
+    ProcessingResult,
 )
-from pdf_to_markdown_mcp.core.errors import (
-    ValidationError,
-    ProcessingError,
-    OCRError,
-    ResourceError,
-    validation_error,
-    processing_error,
-)
-from pdf_to_markdown_mcp.config import settings
+from pdf_to_markdown_mcp.models.request import ProcessingOptions
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +56,7 @@ class MinerUService:
     built-in OCR, and automatic content chunking for embeddings.
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         """
         Initialize MinerU service.
 
@@ -136,8 +131,9 @@ class MinerUService:
         self,
         pdf_path: Path,
         options: ProcessingOptions,
-        progress_callback: Optional[Callable[[int, int, Optional[str]], None]] = None,
-        output_dir: Optional[Path] = None,
+        progress_callback: Callable[[int, int, str | None], None] | None = None,
+        output_dir: Path | None = None,
+        output_filename: str | None = None,
     ) -> ProcessingResult:
         """
         Process PDF file with MinerU library using streaming support.
@@ -147,6 +143,7 @@ class MinerUService:
             options: Processing options
             progress_callback: Optional callback for progress updates
             output_dir: Optional output directory for files
+            output_filename: Optional specific output filename (with extension)
 
         Returns:
             ProcessingResult with extracted content and metadata
@@ -246,7 +243,7 @@ class MinerUService:
 
             return result
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             if progress_tracker:
                 await progress_tracker.set_completion(
                     success=False,
@@ -266,7 +263,7 @@ class MinerUService:
                 await progress_tracker.set_completion(success=False, error=str(e))
             self.logger.exception("PDF processing failed: %s", pdf_path)
             raise processing_error(
-                f"PDF processing failed: {str(e)}", str(pdf_path), "mineru_processing"
+                f"PDF processing failed: {e!s}", str(pdf_path), "mineru_processing"
             )
 
     async def validate_pdf_file(self, pdf_path: Path) -> bool:
@@ -322,9 +319,9 @@ class MinerUService:
                         "pdf_header",
                         header.decode("ascii", errors="ignore"),
                     )
-        except IOError as e:
+        except OSError as e:
             raise validation_error(
-                f"Cannot read PDF file: {str(e)}", "file_access", str(e)
+                f"Cannot read PDF file: {e!s}", "file_access", str(e)
             )
 
         return True
@@ -483,7 +480,7 @@ class MinerUService:
 
     def _generate_chunks(
         self, text: str, chunk_size: int, overlap: int
-    ) -> List[ChunkData]:
+    ) -> list[ChunkData]:
         """
         Generate text chunks for embeddings.
 
@@ -563,7 +560,7 @@ class MinerUService:
 
         return hash_sha256.hexdigest()
 
-    async def get_processing_stats(self) -> Dict[str, Any]:
+    async def get_processing_stats(self) -> dict[str, Any]:
         """
         Get processing statistics.
 
@@ -606,7 +603,7 @@ class MinerUService:
     async def _validate_pdf_file_streaming(
         self,
         pdf_path: Path,
-        progress_tracker: Optional[StreamingProgressTracker] = None,
+        progress_tracker: StreamingProgressTracker | None = None,
     ) -> bool:
         """
         Validate PDF file using streaming for large files.
@@ -688,9 +685,9 @@ class MinerUService:
                             f"PDF {pdf_path} may be incomplete (no EOF marker found)"
                         )
 
-        except IOError as e:
+        except OSError as e:
             raise validation_error(
-                f"Cannot read PDF file: {str(e)}", "file_access", str(e)
+                f"Cannot read PDF file: {e!s}", "file_access", str(e)
             )
 
         return True
@@ -699,8 +696,8 @@ class MinerUService:
         self,
         pdf_path: Path,
         config: Any,
-        output_dir: Optional[Path] = None,
-        progress_tracker: Optional[StreamingProgressTracker] = None,
+        output_dir: Path | None = None,
+        progress_tracker: StreamingProgressTracker | None = None,
     ) -> ProcessingResult:
         """
         Internal method to process PDF with MinerU using streaming.
@@ -745,7 +742,7 @@ class MinerUService:
         self,
         pdf_path: Path,
         config: Any,
-        progress_tracker: Optional[StreamingProgressTracker] = None,
+        progress_tracker: StreamingProgressTracker | None = None,
     ) -> ProcessingResult:
         """
         Mock MinerU processing with streaming simulation.
@@ -840,7 +837,8 @@ class MinerUService:
             f"This is mock content extracted from {filename} using streaming processing.\\n\\n"
             f"File size: {file_size} bytes\\n"
             f"Estimated content size: {content_size} characters\\n\\n"
-            + "Sample extracted content...\\n" * (content_size // 30)
+            + "Sample extracted content...\\n"
+            * (content_size // 30)
         )
 
         plain_text = (
@@ -848,7 +846,8 @@ class MinerUService:
             f"This is mock content extracted from {filename} using streaming processing.\\n"
             f"File size: {file_size} bytes\\n"
             f"Estimated content size: {content_size} characters\\n\\n"
-            + "Sample extracted content...\\n" * (content_size // 30)
+            + "Sample extracted content...\\n"
+            * (content_size // 30)
         )
 
         return ProcessingResult(
@@ -861,7 +860,7 @@ class MinerUService:
             processing_metadata=metadata,
         )
 
-    def get_streaming_capabilities(self) -> Dict[str, Any]:
+    def get_streaming_capabilities(self) -> dict[str, Any]:
         """Get information about streaming capabilities."""
         return {
             "streaming_supported": True,

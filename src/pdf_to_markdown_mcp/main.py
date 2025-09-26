@@ -5,34 +5,35 @@ Main application entry point with middleware, CORS, health checks,
 and API route registration.
 """
 
-from contextlib import asynccontextmanager
-from typing import Dict, Any
 import asyncio
 import logging
-import uvicorn
+from contextlib import asynccontextmanager
+from typing import Any
 
+import uvicorn
 from fastapi import FastAPI, Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from pdf_to_markdown_mcp.config import settings, configure_logging
+from pdf_to_markdown_mcp.api import (
+    config as config_api,
+)
 from pdf_to_markdown_mcp.api import (
     convert,
+    health,
     search,
     status,
-    config as config_api,
-    health,
 )
+from pdf_to_markdown_mcp.config import configure_logging, settings
 
 # Database connection imports removed for basic startup
 from pdf_to_markdown_mcp.core.monitoring import (
-    metrics_collector,
-    health_monitor,
     TracingManager,
+    metrics_collector,
 )
 from pdf_to_markdown_mcp.middleware.security import create_security_middleware
 
@@ -278,7 +279,7 @@ async def general_exception_handler(request: Request, exc: Exception):
 
 
 @app.get("/health-legacy")
-async def health_check_legacy() -> Dict[str, Any]:
+async def health_check_legacy() -> dict[str, Any]:
     """Legacy health check endpoint. Use /health instead."""
     logger.warning("Legacy /health-legacy endpoint used, consider migrating to /health")
 
@@ -288,12 +289,13 @@ async def health_check_legacy() -> Dict[str, Any]:
 
 
 @app.get("/ready-legacy")
-async def readiness_check_legacy() -> Dict[str, Any]:
+async def readiness_check_legacy() -> dict[str, Any]:
     """Legacy readiness endpoint. Use /ready instead."""
     logger.warning("Legacy /ready-legacy endpoint used, consider migrating to /ready")
 
-    from pdf_to_markdown_mcp.api.health import get_readiness
     from fastapi import Response
+
+    from pdf_to_markdown_mcp.api.health import get_readiness
 
     response = Response()
     result = await get_readiness(response)
@@ -311,7 +313,7 @@ app.include_router(health.router, tags=["health"])
 
 
 @app.get("/")
-async def root() -> Dict[str, str]:
+async def root() -> dict[str, str]:
     """Root endpoint with API information."""
     return {
         "service": settings.app_name,

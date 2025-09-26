@@ -4,13 +4,12 @@ Unit tests for configuration API endpoints.
 Tests the configure MCP tool following TDD principles.
 """
 
-import pytest
 from unittest.mock import Mock, patch
-from pathlib import Path
+
+import pytest
 from sqlalchemy.orm import Session
 
 from pdf_to_markdown_mcp.models.request import ConfigurationRequest
-from pdf_to_markdown_mcp.models.response import ConfigurationResponse
 
 
 class TestConfigureEndpoint:
@@ -24,7 +23,7 @@ class TestConfigureEndpoint:
     @pytest.fixture
     def mock_settings(self):
         """Mock application settings."""
-        with patch('pdf_to_markdown_mcp.api.config.settings') as mock_settings:
+        with patch("pdf_to_markdown_mcp.api.config.settings") as mock_settings:
             # Set up default mock values
             mock_settings.watcher.watch_directories = ["/default/path"]
             mock_settings.embedding.provider = "ollama"
@@ -67,12 +66,13 @@ class TestConfigureEndpoint:
         # Given
         request_data = {
             "watch_directories": valid_watch_directories,
-            "restart_watcher": True
+            "restart_watcher": True,
         }
         request = ConfigurationRequest(**request_data)
 
         # When
         from pdf_to_markdown_mcp.api.config import update_configuration
+
         response = await update_configuration(request, mock_db_session)
 
         # Then
@@ -109,13 +109,14 @@ class TestConfigureEndpoint:
                 "provider": "openai",
                 "model": "text-embedding-ada-002",
                 "batch_size": 64,
-                "dimensions": 1536
+                "dimensions": 1536,
             }
         }
         request = ConfigurationRequest(**request_data)
 
         # When
         from pdf_to_markdown_mcp.api.config import update_configuration
+
         response = await update_configuration(request, mock_db_session)
 
         # Then
@@ -135,21 +136,21 @@ class TestConfigureEndpoint:
     ):
         """Test validation error for invalid embedding provider."""
         # Given
-        request_data = {
-            "embedding_config": {
-                "provider": "invalid_provider"
-            }
-        }
+        request_data = {"embedding_config": {"provider": "invalid_provider"}}
         request = ConfigurationRequest(**request_data)
 
         # When
         from pdf_to_markdown_mcp.api.config import update_configuration
+
         response = await update_configuration(request, mock_db_session)
 
         # Then
         assert response.success is False
         assert len(response.validation_errors) > 0
-        assert any("Invalid embedding provider" in error for error in response.validation_errors)
+        assert any(
+            "Invalid embedding provider" in error
+            for error in response.validation_errors
+        )
 
     @pytest.mark.asyncio
     async def test_configure_updates_ocr_settings_successfully(
@@ -158,16 +159,13 @@ class TestConfigureEndpoint:
         """Test successful update of OCR settings."""
         # Given
         request_data = {
-            "ocr_settings": {
-                "language": "fra",
-                "dpi": 300,
-                "preserve_layout": False
-            }
+            "ocr_settings": {"language": "fra", "dpi": 300, "preserve_layout": False}
         }
         request = ConfigurationRequest(**request_data)
 
         # When
         from pdf_to_markdown_mcp.api.config import update_configuration
+
         response = await update_configuration(request, mock_db_session)
 
         # Then
@@ -193,12 +191,15 @@ class TestConfigureEndpoint:
 
         # When
         from pdf_to_markdown_mcp.api.config import update_configuration
+
         response = await update_configuration(request, mock_db_session)
 
         # Then
         assert response.success is False
         assert len(response.validation_errors) > 0
-        assert any("DPI must be at least 72" in error for error in response.validation_errors)
+        assert any(
+            "DPI must be at least 72" in error for error in response.validation_errors
+        )
 
     @pytest.mark.asyncio
     async def test_configure_updates_processing_limits_successfully(
@@ -210,13 +211,14 @@ class TestConfigureEndpoint:
             "processing_limits": {
                 "max_file_size_mb": 750,
                 "processing_timeout_seconds": 600,
-                "chunk_size": 1200
+                "chunk_size": 1200,
             }
         }
         request = ConfigurationRequest(**request_data)
 
         # When
         from pdf_to_markdown_mcp.api.config import update_configuration
+
         response = await update_configuration(request, mock_db_session)
 
         # Then
@@ -238,21 +240,31 @@ class TestConfigureEndpoint:
             "processing_limits": {
                 "max_file_size_mb": -10,  # Invalid negative value
                 "processing_timeout_seconds": 0,  # Invalid zero value
-                "chunk_size": 50  # Below minimum of 100
+                "chunk_size": 50,  # Below minimum of 100
             }
         }
         request = ConfigurationRequest(**request_data)
 
         # When
         from pdf_to_markdown_mcp.api.config import update_configuration
+
         response = await update_configuration(request, mock_db_session)
 
         # Then
         assert response.success is False
         assert len(response.validation_errors) >= 3
-        assert any("Max file size must be positive" in error for error in response.validation_errors)
-        assert any("Processing timeout must be positive" in error for error in response.validation_errors)
-        assert any("Chunk size must be at least 100" in error for error in response.validation_errors)
+        assert any(
+            "Max file size must be positive" in error
+            for error in response.validation_errors
+        )
+        assert any(
+            "Processing timeout must be positive" in error
+            for error in response.validation_errors
+        )
+        assert any(
+            "Chunk size must be at least 100" in error
+            for error in response.validation_errors
+        )
 
     @pytest.mark.asyncio
     async def test_configure_handles_multiple_updates_with_partial_errors(
@@ -264,24 +276,31 @@ class TestConfigureEndpoint:
             "watch_directories": valid_watch_directories,  # Valid
             "embedding_config": {
                 "provider": "invalid_provider",  # Invalid
-                "batch_size": 32  # Valid
+                "batch_size": 32,  # Valid
             },
             "processing_limits": {
                 "max_file_size_mb": 1000,  # Valid
-                "chunk_size": 50  # Invalid (below minimum)
-            }
+                "chunk_size": 50,  # Invalid (below minimum)
+            },
         }
         request = ConfigurationRequest(**request_data)
 
         # When
         from pdf_to_markdown_mcp.api.config import update_configuration
+
         response = await update_configuration(request, mock_db_session)
 
         # Then
         assert response.success is False  # Overall failure due to validation errors
         assert len(response.validation_errors) >= 2
-        assert any("Invalid embedding provider" in error for error in response.validation_errors)
-        assert any("Chunk size must be at least 100" in error for error in response.validation_errors)
+        assert any(
+            "Invalid embedding provider" in error
+            for error in response.validation_errors
+        )
+        assert any(
+            "Chunk size must be at least 100" in error
+            for error in response.validation_errors
+        )
 
         # Valid settings should still be updated
         assert mock_settings.watcher.watch_directories == valid_watch_directories
@@ -295,9 +314,12 @@ class TestGetCurrentConfigurationEndpoint:
     @pytest.fixture
     def mock_settings(self):
         """Mock settings with complete configuration."""
-        with patch('pdf_to_markdown_mcp.api.config.settings') as mock_settings:
+        with patch("pdf_to_markdown_mcp.api.config.settings") as mock_settings:
             # Set up comprehensive mock values
-            mock_settings.watcher.watch_directories = ["/home/user/docs", "/shared/pdfs"]
+            mock_settings.watcher.watch_directories = [
+                "/home/user/docs",
+                "/shared/pdfs",
+            ]
             mock_settings.embedding.provider = "ollama"
             mock_settings.embedding.model = "nomic-embed-text"
             mock_settings.embedding.dimensions = 1536
@@ -321,10 +343,13 @@ class TestGetCurrentConfigurationEndpoint:
             yield mock_settings
 
     @pytest.mark.asyncio
-    async def test_get_current_configuration_returns_complete_config(self, mock_settings):
+    async def test_get_current_configuration_returns_complete_config(
+        self, mock_settings
+    ):
         """Test that get_current_configuration returns all configuration sections."""
         # When
         from pdf_to_markdown_mcp.api.config import get_current_configuration
+
         result = await get_current_configuration()
 
         # Then
@@ -378,17 +403,13 @@ class TestValidateConfigurationEndpoint:
 
         config_data = {
             "watch_directories": [str(valid_dir)],
-            "embedding_config": {
-                "provider": "ollama",
-                "batch_size": 32
-            },
-            "processing_limits": {
-                "max_file_size_mb": 500
-            }
+            "embedding_config": {"provider": "ollama", "batch_size": 32},
+            "processing_limits": {"max_file_size_mb": 500},
         }
 
         # When
         from pdf_to_markdown_mcp.api.config import validate_configuration
+
         result = await validate_configuration(config_data)
 
         # Then
@@ -402,26 +423,30 @@ class TestValidateConfigurationEndpoint:
         # Given
         config_data = {
             "watch_directories": ["/nonexistent/directory"],
-            "embedding_config": {
-                "provider": "invalid_provider",
-                "batch_size": -5
-            },
-            "processing_limits": {
-                "max_file_size_mb": -100
-            }
+            "embedding_config": {"provider": "invalid_provider", "batch_size": -5},
+            "processing_limits": {"max_file_size_mb": -100},
         }
 
         # When
         from pdf_to_markdown_mcp.api.config import validate_configuration
+
         result = await validate_configuration(config_data)
 
         # Then
         assert result["valid"] is False
         assert len(result["errors"]) >= 4  # Multiple validation errors
         assert any("Directory does not exist" in error for error in result["errors"])
-        assert any("Provider must be 'ollama' or 'openai'" in error for error in result["errors"])
-        assert any("Batch size must be a positive integer" in error for error in result["errors"])
-        assert any("Max file size must be positive" in error for error in result["errors"])
+        assert any(
+            "Provider must be 'ollama' or 'openai'" in error
+            for error in result["errors"]
+        )
+        assert any(
+            "Batch size must be a positive integer" in error
+            for error in result["errors"]
+        )
+        assert any(
+            "Max file size must be positive" in error for error in result["errors"]
+        )
 
     @pytest.mark.asyncio
     async def test_validate_configuration_generates_warnings(self):
@@ -435,13 +460,16 @@ class TestValidateConfigurationEndpoint:
 
         # When
         from pdf_to_markdown_mcp.api.config import validate_configuration
+
         result = await validate_configuration(config_data)
 
         # Then
         assert result["valid"] is True  # Still valid despite warning
         assert len(result["warnings"]) >= 1
-        assert any("Large max file size may impact performance" in warning
-                  for warning in result["warnings"])
+        assert any(
+            "Large max file size may impact performance" in warning
+            for warning in result["warnings"]
+        )
 
 
 class TestResetConfigurationEndpoint:
@@ -450,7 +478,7 @@ class TestResetConfigurationEndpoint:
     @pytest.fixture
     def mock_settings(self):
         """Mock settings for reset testing."""
-        with patch('pdf_to_markdown_mcp.api.config.settings') as mock_settings:
+        with patch("pdf_to_markdown_mcp.api.config.settings") as mock_settings:
             mock_settings.watcher.watch_directories = ["/default/watch"]
             mock_settings.embedding.provider = "ollama"
             yield mock_settings
@@ -460,6 +488,7 @@ class TestResetConfigurationEndpoint:
         """Test that reset_configuration resets settings to defaults."""
         # When
         from pdf_to_markdown_mcp.api.config import reset_configuration
+
         response = await reset_configuration()
 
         # Then

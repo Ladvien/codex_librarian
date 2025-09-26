@@ -5,17 +5,18 @@ Testing modular router structure, API versioning, and proper
 endpoint organization following TDD principles.
 """
 
+from unittest.mock import Mock, patch
+
 import pytest
-from fastapi import FastAPI, APIRouter
+from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
-from unittest.mock import Mock, patch, AsyncMock
 
 from src.pdf_to_markdown_mcp.api.v1 import create_v1_router
 from src.pdf_to_markdown_mcp.api.versioning import (
     APIVersion,
     VersionedAPIRouter,
     get_api_version,
-    version_middleware
+    version_middleware,
 )
 
 
@@ -26,7 +27,7 @@ class TestAPIVersioning:
         """Test APIVersion enum contains expected versions."""
         # Then
         assert APIVersion.V1 == "v1"
-        assert hasattr(APIVersion, 'V1')
+        assert hasattr(APIVersion, "V1")
 
     def test_get_api_version_from_header(self):
         """Test API version extraction from Accept header."""
@@ -74,10 +75,7 @@ class TestVersionedAPIRouter:
         version = APIVersion.V1
 
         # When
-        router = VersionedAPIRouter(
-            version=version,
-            prefix="/test"
-        )
+        router = VersionedAPIRouter(version=version, prefix="/test")
 
         # Then
         assert isinstance(router, APIRouter)
@@ -89,10 +87,7 @@ class TestVersionedAPIRouter:
         version = APIVersion.V1
 
         # When
-        router = VersionedAPIRouter(
-            version=version,
-            tags=["conversion"]
-        )
+        router = VersionedAPIRouter(version=version, tags=["conversion"])
 
         # Then
         expected_tags = ["conversion", f"v{version.value}"]
@@ -102,10 +97,10 @@ class TestVersionedAPIRouter:
 class TestV1RouterStructure:
     """Test V1 API router structure and organization."""
 
-    @patch('src.pdf_to_markdown_mcp.api.v1.convert.router')
-    @patch('src.pdf_to_markdown_mcp.api.v1.search.router')
-    @patch('src.pdf_to_markdown_mcp.api.v1.status.router')
-    @patch('src.pdf_to_markdown_mcp.api.v1.config.router')
+    @patch("src.pdf_to_markdown_mcp.api.v1.convert.router")
+    @patch("src.pdf_to_markdown_mcp.api.v1.search.router")
+    @patch("src.pdf_to_markdown_mcp.api.v1.status.router")
+    @patch("src.pdf_to_markdown_mcp.api.v1.config.router")
     def test_create_v1_router_includes_all_subrouters(
         self, mock_config, mock_status, mock_search, mock_convert
     ):
@@ -157,7 +152,7 @@ class TestV1RouterStructure:
             "/api/v1/semantic_search",
             "/api/v1/hybrid_search",
             "/api/v1/status",
-            "/api/v1/configure"
+            "/api/v1/configure",
         ]
 
         # At minimum, the prefix structure should be correct
@@ -303,9 +298,9 @@ class TestAPIDocumentationVersioning:
                     for method, spec in methods.items():
                         # Should have version information in tags or summary
                         has_version_info = (
-                            "v1" in spec.get("tags", []) or
-                            "v1" in spec.get("summary", "").lower() or
-                            "version" in spec.get("description", "").lower()
+                            "v1" in spec.get("tags", [])
+                            or "v1" in spec.get("summary", "").lower()
+                            or "version" in spec.get("description", "").lower()
                         )
                         # Note: This might not always be true, so we'll make it optional
                         # assert has_version_info, f"Endpoint {path} {method} should include version info"
@@ -338,7 +333,7 @@ class TestVersionCompatibility:
             V2 = "v2"
 
         # The version system should be extensible
-        assert hasattr(APIVersion, 'V1')
+        assert hasattr(APIVersion, "V1")
         # Future versions would be added to the enum
 
 

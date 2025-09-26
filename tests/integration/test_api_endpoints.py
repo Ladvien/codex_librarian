@@ -5,23 +5,22 @@ This module tests the FastAPI endpoints with real HTTP requests
 and service integration following TDD principles.
 """
 
+from unittest.mock import Mock, patch
+
 import pytest
-import asyncio
-from pathlib import Path
-from unittest.mock import AsyncMock, Mock, patch
 from httpx import AsyncClient
-import json
 
+from src.pdf_to_markdown_mcp.db.models import (
+    Document,
+    DocumentContent,
+    DocumentEmbedding,
+)
 from src.pdf_to_markdown_mcp.main import create_app
-from src.pdf_to_markdown_mcp.db.models import Document, DocumentContent, DocumentEmbedding
-
 from tests.fixtures import (
     DocumentFactory,
-    ProcessingResultFactory,
-    create_temp_pdf,
-    create_sample_embeddings,
-    create_mock_mineru_service,
     create_mock_embedding_service,
+    create_sample_embeddings,
+    create_temp_pdf,
 )
 
 
@@ -44,14 +43,19 @@ class TestConvertEndpoints:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_convert_single_pdf_success(self, client, async_db_session, temp_directory):
+    async def test_convert_single_pdf_success(
+        self, client, async_db_session, temp_directory
+    ):
         """Test successful single PDF conversion."""
         # Given
         pdf_path = create_temp_pdf(directory=temp_directory)
 
-        with patch('src.pdf_to_markdown_mcp.api.convert.get_db_session') as mock_get_db, \
-             patch('src.pdf_to_markdown_mcp.api.convert.process_pdf_document') as mock_task:
-
+        with (
+            patch("src.pdf_to_markdown_mcp.api.convert.get_db_session") as mock_get_db,
+            patch(
+                "src.pdf_to_markdown_mcp.api.convert.process_pdf_document"
+            ) as mock_task,
+        ):
             mock_get_db.return_value = async_db_session
             mock_task.delay.return_value = Mock(id="task-123")
 
@@ -61,8 +65,8 @@ class TestConvertEndpoints:
                 "processing_options": {
                     "language": "en",
                     "chunk_for_embeddings": True,
-                    "extract_tables": True
-                }
+                    "extract_tables": True,
+                },
             }
 
             # When
@@ -77,9 +81,11 @@ class TestConvertEndpoints:
             assert response_data["task_id"] == "task-123"
 
             # Verify document was created in database
-            document = await async_db_session.query(Document).filter_by(
-                file_path=str(pdf_path)
-            ).first()
+            document = (
+                await async_db_session.query(Document)
+                .filter_by(file_path=str(pdf_path))
+                .first()
+            )
             assert document is not None
             assert document.status == "pending"
 
@@ -88,12 +94,9 @@ class TestConvertEndpoints:
     async def test_convert_single_pdf_file_not_found(self, client, async_db_session):
         """Test conversion with non-existent file."""
         # Given
-        request_data = {
-            "file_path": "/nonexistent/file.pdf",
-            "store_embeddings": True
-        }
+        request_data = {"file_path": "/nonexistent/file.pdf", "store_embeddings": True}
 
-        with patch('src.pdf_to_markdown_mcp.api.convert.get_db_session') as mock_get_db:
+        with patch("src.pdf_to_markdown_mcp.api.convert.get_db_session") as mock_get_db:
             mock_get_db.return_value = async_db_session
 
             # When
@@ -107,27 +110,25 @@ class TestConvertEndpoints:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_convert_single_pdf_duplicate_file(self, client, async_db_session, temp_directory):
+    async def test_convert_single_pdf_duplicate_file(
+        self, client, async_db_session, temp_directory
+    ):
         """Test conversion with duplicate file (already processed)."""
         # Given
         pdf_path = create_temp_pdf(directory=temp_directory)
 
         # Create existing document
         document_data = DocumentFactory.create(
-            file_path=str(pdf_path),
-            status="completed"
+            file_path=str(pdf_path), status="completed"
         )
         document = Document(**document_data)
         async_db_session.add(document)
         await async_db_session.commit()
 
-        with patch('src.pdf_to_markdown_mcp.api.convert.get_db_session') as mock_get_db:
+        with patch("src.pdf_to_markdown_mcp.api.convert.get_db_session") as mock_get_db:
             mock_get_db.return_value = async_db_session
 
-            request_data = {
-                "file_path": str(pdf_path),
-                "store_embeddings": True
-            }
+            request_data = {"file_path": str(pdf_path), "store_embeddings": True}
 
             # When
             response = await client.post("/convert_single", json=request_data)
@@ -141,7 +142,9 @@ class TestConvertEndpoints:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_batch_convert_success(self, client, async_db_session, temp_directory):
+    async def test_batch_convert_success(
+        self, client, async_db_session, temp_directory
+    ):
         """Test successful batch PDF conversion."""
         # Given
         pdf_paths = [
@@ -149,19 +152,19 @@ class TestConvertEndpoints:
             for i in range(3)
         ]
 
-        with patch('src.pdf_to_markdown_mcp.api.convert.get_db_session') as mock_get_db, \
-             patch('src.pdf_to_markdown_mcp.api.convert.batch_process_pdfs') as mock_task:
-
+        with (
+            patch("src.pdf_to_markdown_mcp.api.convert.get_db_session") as mock_get_db,
+            patch(
+                "src.pdf_to_markdown_mcp.api.convert.batch_process_pdfs"
+            ) as mock_task,
+        ):
             mock_get_db.return_value = async_db_session
             mock_task.delay.return_value = Mock(id="batch-task-123")
 
             request_data = {
                 "file_paths": [str(path) for path in pdf_paths],
                 "store_embeddings": True,
-                "processing_options": {
-                    "language": "en",
-                    "batch_size": 2
-                }
+                "processing_options": {"language": "en", "batch_size": 2},
             }
 
             # When
@@ -177,9 +180,11 @@ class TestConvertEndpoints:
 
             # Verify documents were created
             for pdf_path in pdf_paths:
-                document = await async_db_session.query(Document).filter_by(
-                    file_path=str(pdf_path)
-                ).first()
+                document = (
+                    await async_db_session.query(Document)
+                    .filter_by(file_path=str(pdf_path))
+                    .first()
+                )
                 assert document is not None
 
     @pytest.mark.integration
@@ -187,12 +192,9 @@ class TestConvertEndpoints:
     async def test_batch_convert_empty_list(self, client, async_db_session):
         """Test batch conversion with empty file list."""
         # Given
-        request_data = {
-            "file_paths": [],
-            "store_embeddings": True
-        }
+        request_data = {"file_paths": [], "store_embeddings": True}
 
-        with patch('src.pdf_to_markdown_mcp.api.convert.get_db_session') as mock_get_db:
+        with patch("src.pdf_to_markdown_mcp.api.convert.get_db_session") as mock_get_db:
             mock_get_db.return_value = async_db_session
 
             # When
@@ -206,7 +208,9 @@ class TestConvertEndpoints:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_convert_with_invalid_processing_options(self, client, temp_directory):
+    async def test_convert_with_invalid_processing_options(
+        self, client, temp_directory
+    ):
         """Test conversion with invalid processing options."""
         # Given
         pdf_path = create_temp_pdf(directory=temp_directory)
@@ -215,8 +219,8 @@ class TestConvertEndpoints:
             "file_path": str(pdf_path),
             "processing_options": {
                 "language": "invalid_language",  # Invalid language
-                "chunk_size": -100  # Invalid chunk size
-            }
+                "chunk_size": -100,  # Invalid chunk size
+            },
         }
 
         # When
@@ -247,7 +251,7 @@ class TestSearchEndpoints:
             markdown_content="# Test Document\n\nThis is about machine learning.",
             plain_text="Test Document\n\nThis is about machine learning.",
             word_count=10,
-            language="en"
+            language="en",
         )
         async_db_session.add(content)
 
@@ -261,15 +265,18 @@ class TestSearchEndpoints:
                 embedding=embedding,
                 start_char=i * 50,
                 end_char=(i + 1) * 50,
-                token_count=5
+                token_count=5,
             )
             async_db_session.add(doc_embedding)
 
         await async_db_session.commit()
 
-        with patch('src.pdf_to_markdown_mcp.api.search.get_db_session') as mock_get_db, \
-             patch('src.pdf_to_markdown_mcp.api.search.EmbeddingService') as mock_embedding_class:
-
+        with (
+            patch("src.pdf_to_markdown_mcp.api.search.get_db_session") as mock_get_db,
+            patch(
+                "src.pdf_to_markdown_mcp.api.search.EmbeddingService"
+            ) as mock_embedding_class,
+        ):
             mock_get_db.return_value = async_db_session
             mock_embedding = create_mock_embedding_service()
             mock_embedding.generate_embedding.return_value = embeddings[0]
@@ -278,7 +285,7 @@ class TestSearchEndpoints:
             request_data = {
                 "query": "machine learning algorithms",
                 "limit": 10,
-                "threshold": 0.7
+                "threshold": 0.7,
             }
 
             # When
@@ -303,9 +310,12 @@ class TestSearchEndpoints:
     async def test_semantic_search_no_results(self, client, async_db_session):
         """Test semantic search with no matching results."""
         # Given - Empty database
-        with patch('src.pdf_to_markdown_mcp.api.search.get_db_session') as mock_get_db, \
-             patch('src.pdf_to_markdown_mcp.api.search.EmbeddingService') as mock_embedding_class:
-
+        with (
+            patch("src.pdf_to_markdown_mcp.api.search.get_db_session") as mock_get_db,
+            patch(
+                "src.pdf_to_markdown_mcp.api.search.EmbeddingService"
+            ) as mock_embedding_class,
+        ):
             mock_get_db.return_value = async_db_session
             mock_embedding = create_mock_embedding_service()
             mock_embedding_class.return_value = mock_embedding
@@ -313,7 +323,7 @@ class TestSearchEndpoints:
             request_data = {
                 "query": "nonexistent content",
                 "limit": 10,
-                "threshold": 0.7
+                "threshold": 0.7,
             }
 
             # When
@@ -341,7 +351,7 @@ class TestSearchEndpoints:
             markdown_content="# AI Research\n\nDeep learning and neural networks",
             plain_text="AI Research\n\nDeep learning and neural networks",
             word_count=8,
-            language="en"
+            language="en",
         )
         async_db_session.add(content)
 
@@ -354,14 +364,17 @@ class TestSearchEndpoints:
             embedding=embedding,
             start_char=0,
             end_char=42,
-            token_count=6
+            token_count=6,
         )
         async_db_session.add(doc_embedding)
         await async_db_session.commit()
 
-        with patch('src.pdf_to_markdown_mcp.api.search.get_db_session') as mock_get_db, \
-             patch('src.pdf_to_markdown_mcp.api.search.EmbeddingService') as mock_embedding_class:
-
+        with (
+            patch("src.pdf_to_markdown_mcp.api.search.get_db_session") as mock_get_db,
+            patch(
+                "src.pdf_to_markdown_mcp.api.search.EmbeddingService"
+            ) as mock_embedding_class,
+        ):
             mock_get_db.return_value = async_db_session
             mock_embedding_service = create_mock_embedding_service()
             mock_embedding_class.return_value = mock_embedding_service
@@ -371,7 +384,7 @@ class TestSearchEndpoints:
                 "limit": 10,
                 "semantic_weight": 0.7,
                 "keyword_weight": 0.3,
-                "threshold": 0.5
+                "threshold": 0.5,
             }
 
             # When
@@ -398,8 +411,7 @@ class TestSearchEndpoints:
         documents = []
         for i in range(3):
             document_data = DocumentFactory.create(
-                file_name=f"document_{i}.pdf",
-                status="completed"
+                file_name=f"document_{i}.pdf", status="completed"
             )
             document = Document(**document_data)
             async_db_session.add(document)
@@ -409,7 +421,7 @@ class TestSearchEndpoints:
 
         # Add embeddings
         embeddings = create_sample_embeddings(3, 1536)
-        for i, (document, embedding) in enumerate(zip(documents, embeddings)):
+        for i, (document, embedding) in enumerate(zip(documents, embeddings, strict=False)):
             doc_embedding = DocumentEmbedding(
                 document_id=document.id,
                 chunk_index=0,
@@ -417,19 +429,19 @@ class TestSearchEndpoints:
                 embedding=embedding,
                 start_char=0,
                 end_char=20,
-                token_count=4
+                token_count=4,
             )
             async_db_session.add(doc_embedding)
 
         await async_db_session.commit()
 
-        with patch('src.pdf_to_markdown_mcp.api.search.get_db_session') as mock_get_db:
+        with patch("src.pdf_to_markdown_mcp.api.search.get_db_session") as mock_get_db:
             mock_get_db.return_value = async_db_session
 
             request_data = {
                 "document_id": documents[0].id,
                 "limit": 5,
-                "threshold": 0.1
+                "threshold": 0.1,
             }
 
             # When
@@ -463,18 +475,19 @@ class TestStatusEndpoints:
 
         await async_db_session.commit()
 
-        with patch('src.pdf_to_markdown_mcp.api.status.get_db_session') as mock_get_db, \
-             patch('src.pdf_to_markdown_mcp.api.status.app') as mock_celery:
-
+        with (
+            patch("src.pdf_to_markdown_mcp.api.status.get_db_session") as mock_get_db,
+            patch("src.pdf_to_markdown_mcp.api.status.app") as mock_celery,
+        ):
             mock_get_db.return_value = async_db_session
 
             # Mock Celery stats
             mock_celery.control.inspect.return_value.stats.return_value = {
-                'worker1': {
-                    'total_tasks': 100,
-                    'active_tasks': 5,
-                    'completed_tasks': 90,
-                    'failed_tasks': 5
+                "worker1": {
+                    "total_tasks": 100,
+                    "active_tasks": 5,
+                    "completed_tasks": 90,
+                    "failed_tasks": 5,
                 }
             }
 
@@ -503,13 +516,15 @@ class TestStatusEndpoints:
         # Given
         task_id = "test-task-123"
 
-        with patch('src.pdf_to_markdown_mcp.api.status.get_task_progress') as mock_progress:
+        with patch(
+            "src.pdf_to_markdown_mcp.api.status.get_task_progress"
+        ) as mock_progress:
             mock_progress.return_value = {
                 "task_id": task_id,
                 "state": "PROGRESS",
                 "current": 50,
                 "total": 100,
-                "status": "Processing chunks..."
+                "status": "Processing chunks...",
             }
 
             # When
@@ -525,10 +540,17 @@ class TestStatusEndpoints:
     async def test_health_endpoint_all_services_healthy(self, client):
         """Test health endpoint with all services healthy."""
         # Given
-        with patch('src.pdf_to_markdown_mcp.main.check_database_health') as mock_db_health, \
-             patch('src.pdf_to_markdown_mcp.main.check_embedding_service_health') as mock_embedding_health, \
-             patch('src.pdf_to_markdown_mcp.main.check_celery_health') as mock_celery_health:
-
+        with (
+            patch(
+                "src.pdf_to_markdown_mcp.main.check_database_health"
+            ) as mock_db_health,
+            patch(
+                "src.pdf_to_markdown_mcp.main.check_embedding_service_health"
+            ) as mock_embedding_health,
+            patch(
+                "src.pdf_to_markdown_mcp.main.check_celery_health"
+            ) as mock_celery_health,
+        ):
             mock_db_health.return_value = True
             mock_embedding_health.return_value = True
             mock_celery_health.return_value = True
@@ -549,10 +571,17 @@ class TestStatusEndpoints:
     async def test_health_endpoint_with_service_failures(self, client):
         """Test health endpoint with some service failures."""
         # Given
-        with patch('src.pdf_to_markdown_mcp.main.check_database_health') as mock_db_health, \
-             patch('src.pdf_to_markdown_mcp.main.check_embedding_service_health') as mock_embedding_health, \
-             patch('src.pdf_to_markdown_mcp.main.check_celery_health') as mock_celery_health:
-
+        with (
+            patch(
+                "src.pdf_to_markdown_mcp.main.check_database_health"
+            ) as mock_db_health,
+            patch(
+                "src.pdf_to_markdown_mcp.main.check_embedding_service_health"
+            ) as mock_embedding_health,
+            patch(
+                "src.pdf_to_markdown_mcp.main.check_celery_health"
+            ) as mock_celery_health,
+        ):
             mock_db_health.return_value = True
             mock_embedding_health.return_value = False  # Service down
             mock_celery_health.return_value = True
@@ -578,19 +607,17 @@ class TestConfigurationEndpoints:
         """Test successful configuration update."""
         # Given
         config_data = {
-            "processing": {
-                "chunk_size": 1200,
-                "chunk_overlap": 250,
-                "language": "en"
-            },
+            "processing": {"chunk_size": 1200, "chunk_overlap": 250, "language": "en"},
             "embedding": {
                 "provider": "openai",
                 "model": "text-embedding-ada-002",
-                "batch_size": 50
-            }
+                "batch_size": 50,
+            },
         }
 
-        with patch('src.pdf_to_markdown_mcp.api.config.update_configuration') as mock_update:
+        with patch(
+            "src.pdf_to_markdown_mcp.api.config.update_configuration"
+        ) as mock_update:
             mock_update.return_value = True
 
             # When
@@ -610,7 +637,7 @@ class TestConfigurationEndpoints:
         invalid_config = {
             "processing": {
                 "chunk_size": -100,  # Invalid negative size
-                "language": "invalid_lang"  # Invalid language
+                "language": "invalid_lang",  # Invalid language
             }
         }
 

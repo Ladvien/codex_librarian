@@ -7,10 +7,9 @@ These Pydantic models define the structure of API responses.
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
-from pydantic import BaseModel, Field
+from typing import Any
 
-from pdf_to_markdown_mcp.models.document import ProcessingStatus
+from pydantic import BaseModel, Field
 
 
 class ErrorType(str, Enum):
@@ -31,10 +30,10 @@ class ErrorResponse(BaseModel):
 
     error: ErrorType = Field(..., description="Error type")
     message: str = Field(..., description="Human-readable error message")
-    details: Optional[Dict[str, Any]] = Field(
+    details: dict[str, Any] | None = Field(
         None, description="Additional error details"
     )
-    correlation_id: Optional[str] = Field(None, description="Request correlation ID")
+    correlation_id: str | None = Field(None, description="Request correlation ID")
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
     class Config:
@@ -57,10 +56,10 @@ class ConvertSingleResponse(BaseModel):
     """Response model for single PDF conversion."""
 
     success: bool = Field(..., description="Whether conversion was successful")
-    document_id: Optional[int] = Field(
+    document_id: int | None = Field(
         None, description="Database ID of processed document"
     )
-    job_id: Optional[str] = Field(
+    job_id: str | None = Field(
         None, description="Background job ID for status tracking"
     )
 
@@ -68,26 +67,26 @@ class ConvertSingleResponse(BaseModel):
 
     # File information
     source_path: Path = Field(..., description="Original file path")
-    output_path: Optional[Path] = Field(None, description="Output markdown file path")
+    output_path: Path | None = Field(None, description="Output markdown file path")
 
     # Processing results
-    processing_time_ms: Optional[int] = Field(
+    processing_time_ms: int | None = Field(
         None, description="Processing time in milliseconds"
     )
-    page_count: Optional[int] = Field(None, description="Number of pages processed")
-    chunk_count: Optional[int] = Field(
+    page_count: int | None = Field(None, description="Number of pages processed")
+    chunk_count: int | None = Field(
         None, description="Number of text chunks created"
     )
-    embedding_count: Optional[int] = Field(
+    embedding_count: int | None = Field(
         None, description="Number of embeddings generated"
     )
 
     # Statistics
     file_size_bytes: int = Field(..., description="Original file size")
-    has_images: Optional[bool] = Field(
+    has_images: bool | None = Field(
         None, description="Whether document contains images"
     )
-    has_tables: Optional[bool] = Field(
+    has_tables: bool | None = Field(
         None, description="Whether document contains tables"
     )
 
@@ -131,18 +130,18 @@ class BatchConvertResponse(BaseModel):
     )
 
     # Processing information
-    estimated_time_minutes: Optional[int] = Field(
+    estimated_time_minutes: int | None = Field(
         None, description="Estimated processing time"
     )
-    queue_position: Optional[int] = Field(
+    queue_position: int | None = Field(
         None, description="Position in processing queue"
     )
 
     # File details
-    queued_files: List[str] = Field(
+    queued_files: list[str] = Field(
         default_factory=list, description="List of files queued for processing"
     )
-    skipped_files: List[Dict[str, str]] = Field(
+    skipped_files: list[dict[str, str]] = Field(
         default_factory=list, description="Files skipped with reasons"
     )
 
@@ -172,28 +171,28 @@ class SearchResult(BaseModel):
     """Individual search result."""
 
     document_id: int = Field(..., description="Document database ID")
-    chunk_id: Optional[int] = Field(None, description="Chunk database ID")
+    chunk_id: int | None = Field(None, description="Chunk database ID")
 
     # Document information
     filename: str = Field(..., description="Original filename")
-    source_path: Optional[str] = Field(None, description="Original file path")
+    source_path: str | None = Field(None, description="Original file path")
 
     # Content
-    title: Optional[str] = Field(None, description="Document title if available")
-    content: Optional[str] = Field(None, description="Matching content chunk")
+    title: str | None = Field(None, description="Document title if available")
+    content: str | None = Field(None, description="Matching content chunk")
 
     # Relevance
     similarity_score: float = Field(..., ge=0.0, le=1.0, description="Similarity score")
     rank: int = Field(..., ge=1, description="Result rank (1-based)")
 
     # Context
-    page_number: Optional[int] = Field(
+    page_number: int | None = Field(
         None, description="Page number where content was found"
     )
-    chunk_index: Optional[int] = Field(None, description="Chunk index within page")
+    chunk_index: int | None = Field(None, description="Chunk index within page")
 
     # Metadata
-    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+    metadata: dict[str, Any] | None = Field(None, description="Additional metadata")
 
     class Config:
         schema_extra = {
@@ -220,7 +219,7 @@ class SearchResponse(BaseModel):
     query: str = Field(..., description="Original search query")
 
     # Results
-    results: List[SearchResult] = Field(
+    results: list[SearchResult] = Field(
         default_factory=list, description="Search results"
     )
     total_results: int = Field(..., ge=0, description="Total number of results found")
@@ -230,10 +229,10 @@ class SearchResponse(BaseModel):
 
     # Search parameters
     top_k: int = Field(..., description="Maximum results requested")
-    threshold: Optional[float] = Field(None, description="Similarity threshold used")
+    threshold: float | None = Field(None, description="Similarity threshold used")
 
     # Filters applied
-    filters: Optional[Dict[str, Any]] = Field(
+    filters: dict[str, Any] | None = Field(
         None, description="Filters that were applied"
     )
 
@@ -275,21 +274,21 @@ class StatusResponse(BaseModel):
     """Response model for status queries."""
 
     # Job information
-    job_id: Optional[str] = Field(None, description="Specific job ID if requested")
-    status: Optional[JobStatus] = Field(None, description="Job status")
+    job_id: str | None = Field(None, description="Specific job ID if requested")
+    status: JobStatus | None = Field(None, description="Job status")
 
     # Progress information
-    progress_percent: Optional[float] = Field(
+    progress_percent: float | None = Field(
         None, ge=0.0, le=100.0, description="Completion percentage"
     )
-    current_step: Optional[str] = Field(None, description="Current processing step")
+    current_step: str | None = Field(None, description="Current processing step")
 
     # Timing
-    started_at: Optional[datetime] = Field(None, description="Job start time")
-    estimated_completion: Optional[datetime] = Field(
+    started_at: datetime | None = Field(None, description="Job start time")
+    estimated_completion: datetime | None = Field(
         None, description="Estimated completion time"
     )
-    completed_at: Optional[datetime] = Field(None, description="Job completion time")
+    completed_at: datetime | None = Field(None, description="Job completion time")
 
     # Queue statistics
     queue_depth: int = Field(..., ge=0, description="Current queue depth")
@@ -297,15 +296,15 @@ class StatusResponse(BaseModel):
 
     # System statistics
     total_documents: int = Field(..., ge=0, description="Total documents in database")
-    processing_rate_per_hour: Optional[float] = Field(
+    processing_rate_per_hour: float | None = Field(
         None, description="Average processing rate"
     )
 
     # Error information
-    error_message: Optional[str] = Field(
+    error_message: str | None = Field(
         None, description="Error message if job failed"
     )
-    retry_count: Optional[int] = Field(None, description="Number of retry attempts")
+    retry_count: int | None = Field(None, description="Number of retry attempts")
 
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
@@ -336,20 +335,20 @@ class ConfigurationResponse(BaseModel):
     message: str = Field(..., description="Status message")
 
     # Updated configuration
-    watch_directories: Optional[List[str]] = Field(
+    watch_directories: list[str] | None = Field(
         None, description="Active watch directories"
     )
-    embedding_provider: Optional[str] = Field(
+    embedding_provider: str | None = Field(
         None, description="Current embedding provider"
     )
 
     # Service status
-    services_restarted: List[str] = Field(
+    services_restarted: list[str] = Field(
         default_factory=list, description="Services that were restarted"
     )
 
     # Validation results
-    validation_errors: List[str] = Field(
+    validation_errors: list[str] = Field(
         default_factory=list, description="Configuration validation errors"
     )
 
@@ -376,14 +375,14 @@ class HealthResponse(BaseModel):
     version: str = Field(..., description="Service version")
 
     # Component health
-    checks: Dict[str, str] = Field(
+    checks: dict[str, str] = Field(
         ..., description="Individual component health status"
     )
 
     # System information
-    uptime_seconds: Optional[int] = Field(None, description="Service uptime")
-    memory_usage_mb: Optional[float] = Field(None, description="Memory usage in MB")
-    cpu_percent: Optional[float] = Field(None, description="CPU usage percentage")
+    uptime_seconds: int | None = Field(None, description="Service uptime")
+    memory_usage_mb: float | None = Field(None, description="Memory usage in MB")
+    cpu_percent: float | None = Field(None, description="CPU usage percentage")
 
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 

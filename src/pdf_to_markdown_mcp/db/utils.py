@@ -7,7 +7,7 @@ utilities for database operations.
 
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
@@ -29,7 +29,7 @@ class DatabaseUtils:
     @staticmethod
     def cleanup_old_records(
         db: Session, days_old: int = 30, dry_run: bool = True
-    ) -> Dict[str, int]:
+    ) -> dict[str, int]:
         """
         Clean up old processing queue records and failed documents.
 
@@ -76,7 +76,7 @@ class DatabaseUtils:
         return stats
 
     @staticmethod
-    def optimize_indexes(db: Session) -> List[str]:
+    def optimize_indexes(db: Session) -> list[str]:
         """
         Optimize database indexes and update statistics.
 
@@ -118,7 +118,7 @@ class DatabaseUtils:
         return commands
 
     @staticmethod
-    def check_database_health(db: Session) -> Dict[str, Any]:
+    def check_database_health(db: Session) -> dict[str, Any]:
         """
         Perform comprehensive database health check.
 
@@ -218,7 +218,7 @@ class DatabaseUtils:
         return health
 
     @staticmethod
-    def get_embedding_stats(db: Session) -> Dict[str, Any]:
+    def get_embedding_stats(db: Session) -> dict[str, Any]:
         """
         Get statistics about vector embeddings.
 

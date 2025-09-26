@@ -7,34 +7,28 @@ backpressure handling, and memory monitoring.
 """
 
 import asyncio
+import gc
 import logging
 import mmap
+import threading
 import time
-import psutil
+from collections.abc import AsyncIterator, Callable
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import (
-    AsyncIterator,
-    Optional,
-    Callable,
-    Dict,
     Any,
-    List,
-    Union,
+    Generic,
     Protocol,
     TypeVar,
-    Generic,
 )
-from dataclasses import dataclass, field
-from contextlib import asynccontextmanager
-import weakref
-import threading
-from concurrent.futures import ThreadPoolExecutor
-from queue import Queue, Full, Empty
-import gc
+
+import psutil
 
 from pdf_to_markdown_mcp.core.exceptions import (
-    ResourceError,
     ProcessingError,
+    ResourceError,
     ValidationError,
 )
 
@@ -43,7 +37,7 @@ logger = logging.getLogger(__name__)
 # Type definitions
 T = TypeVar("T")
 ChunkType = bytes
-ProgressCallback = Callable[[int, int, Optional[str]], None]
+ProgressCallback = Callable[[int, int, str | None], None]
 
 # Constants for streaming configuration
 DEFAULT_CHUNK_SIZE = 64 * 1024  # 64KB chunks
@@ -114,7 +108,7 @@ class StreamingMetrics:
         return min(100.0, (self.bytes_processed / self.total_bytes) * 100.0)
 
     @property
-    def estimated_completion_time(self) -> Optional[float]:
+    def estimated_completion_time(self) -> float | None:
         """Estimate completion time in seconds."""
         if self.processing_rate_mbps <= 0 or self.total_bytes <= 0:
             return None
@@ -122,7 +116,7 @@ class StreamingMetrics:
         remaining_mb = (self.total_bytes - self.bytes_processed) / (1024 * 1024)
         return remaining_mb / self.processing_rate_mbps
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert metrics to dictionary for serialization."""
         return {
             "progress_percent": self.progress_percent,
@@ -172,7 +166,7 @@ class MemoryMonitor:
             # Short async sleep to yield control
             await asyncio.sleep(BACKPRESSURE_SLEEP_MS / 1000.0)
 
-    def get_memory_stats(self) -> Dict[str, float]:
+    def get_memory_stats(self) -> dict[str, float]:
         """Get current memory statistics."""
         memory = psutil.virtual_memory()
         process = psutil.Process()
@@ -191,7 +185,7 @@ class StreamingBuffer(Generic[T]):
     def __init__(self, max_size: int = 10):
         self._queue: asyncio.Queue[T] = asyncio.Queue(maxsize=max_size)
         self._closed = False
-        self._error: Optional[Exception] = None
+        self._error: Exception | None = None
 
     async def put(self, item: T) -> None:
         """Put item into buffer with backpressure."""
@@ -213,7 +207,7 @@ class StreamingBuffer(Generic[T]):
 
         try:
             return await asyncio.wait_for(self._queue.get(), timeout=1.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             if self._closed and self._queue.empty():
                 raise StopAsyncIteration
             raise
@@ -240,7 +234,7 @@ class MemoryMappedFileReader:
     """Memory-mapped file reader for efficient large file processing."""
 
     def __init__(
-        self, file_path: Path, chunk_size: Optional[int] = None, read_ahead: bool = True
+        self, file_path: Path, chunk_size: int | None = None, read_ahead: bool = True
     ):
         self.file_path = file_path
         self.file_size = file_path.stat().st_size
@@ -315,7 +309,7 @@ class MemoryMappedFileReader:
         except Exception as e:
             logger.warning(f"Error closing memory-mapped file: {e}")
 
-    async def read_chunk(self, size: Optional[int] = None) -> bytes:
+    async def read_chunk(self, size: int | None = None) -> bytes:
         """Read a chunk of data."""
         if self._closed:
             raise ValueError("File is closed")
@@ -389,28 +383,28 @@ class StreamingProgressTracker:
         self,
         operation_id: str,
         total_size: int,
-        callback: Optional[ProgressCallback] = None,
+        callback: ProgressCallback | None = None,
     ):
         self.operation_id = operation_id
         self.total_size = total_size
         self.callback = callback
         self.metrics = StreamingMetrics(total_bytes=total_size)
-        self._subscribers: List[Callable[[Dict[str, Any]], None]] = []
+        self._subscribers: list[Callable[[dict[str, Any]], None]] = []
         self._lock = threading.Lock()
 
-    def subscribe(self, callback: Callable[[Dict[str, Any]], None]) -> None:
+    def subscribe(self, callback: Callable[[dict[str, Any]], None]) -> None:
         """Subscribe to progress updates."""
         with self._lock:
             self._subscribers.append(callback)
 
-    def unsubscribe(self, callback: Callable[[Dict[str, Any]], None]) -> None:
+    def unsubscribe(self, callback: Callable[[dict[str, Any]], None]) -> None:
         """Unsubscribe from progress updates."""
         with self._lock:
             if callback in self._subscribers:
                 self._subscribers.remove(callback)
 
     async def update_progress(
-        self, bytes_processed: int, current_step: Optional[str] = None
+        self, bytes_processed: int, current_step: str | None = None
     ) -> None:
         """Update processing progress."""
         # Update metrics
@@ -444,7 +438,7 @@ class StreamingProgressTracker:
                     logger.warning(f"Progress subscriber error: {e}")
 
     async def set_completion(
-        self, success: bool = True, error: Optional[str] = None
+        self, success: bool = True, error: str | None = None
     ) -> None:
         """Mark operation as completed."""
         completion_data = {
@@ -471,7 +465,7 @@ class ConcurrencyLimiter:
     def __init__(self, max_concurrent: int = MAX_CONCURRENT_STREAMS):
         self.max_concurrent = max_concurrent
         self._semaphore = asyncio.Semaphore(max_concurrent)
-        self._active_operations: Dict[str, StreamingProgressTracker] = {}
+        self._active_operations: dict[str, StreamingProgressTracker] = {}
         self._lock = threading.Lock()
 
     @asynccontextmanager
@@ -487,7 +481,7 @@ class ConcurrencyLimiter:
                 with self._lock:
                     self._active_operations.pop(operation_id, None)
 
-    def get_active_operations(self) -> Dict[str, Dict[str, Any]]:
+    def get_active_operations(self) -> dict[str, dict[str, Any]]:
         """Get status of all active operations."""
         with self._lock:
             return {
@@ -495,7 +489,7 @@ class ConcurrencyLimiter:
                 for op_id, tracker in self._active_operations.items()
             }
 
-    def get_capacity_info(self) -> Dict[str, int]:
+    def get_capacity_info(self) -> dict[str, int]:
         """Get concurrency capacity information."""
         with self._lock:
             return {
@@ -512,8 +506,8 @@ _global_limiter = ConcurrencyLimiter()
 async def stream_large_file(
     file_path: Path,
     operation_id: str,
-    progress_callback: Optional[ProgressCallback] = None,
-    chunk_size: Optional[int] = None,
+    progress_callback: ProgressCallback | None = None,
+    chunk_size: int | None = None,
     memory_limit_percent: float = MAX_MEMORY_USAGE_PERCENT,
 ) -> AsyncIterator[bytes]:
     """
@@ -658,7 +652,7 @@ async def stream_processing_with_backpressure(
             pass
 
 
-def get_streaming_stats() -> Dict[str, Any]:
+def get_streaming_stats() -> dict[str, Any]:
     """Get global streaming statistics."""
     memory_stats = psutil.virtual_memory()
 

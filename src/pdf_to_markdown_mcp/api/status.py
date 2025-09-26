@@ -4,26 +4,25 @@ Status and monitoring API endpoints.
 Implements the get_status MCP tool and additional monitoring endpoints.
 """
 
+import asyncio
 import logging
-from typing import Optional, Dict, Any
 from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-import json
-import asyncio
 
+from pdf_to_markdown_mcp.api.streaming import create_sse_response, format_sse_data
+from pdf_to_markdown_mcp.core.streaming import get_streaming_stats
+from pdf_to_markdown_mcp.db.session import get_db
 from pdf_to_markdown_mcp.models.response import (
-    StatusResponse,
     ErrorResponse,
     ErrorType,
     JobStatus,
+    StatusResponse,
 )
-from pdf_to_markdown_mcp.db.session import get_db
 from pdf_to_markdown_mcp.worker.celery import create_celery_app
-from pdf_to_markdown_mcp.api.streaming import format_sse_data, create_sse_response
-from pdf_to_markdown_mcp.core.streaming import get_streaming_stats
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -31,7 +30,7 @@ router = APIRouter()
 
 @router.get("/status", response_model=StatusResponse)
 async def get_processing_status(
-    job_id: Optional[str] = Query(None, description="Specific job ID to query"),
+    job_id: str | None = Query(None, description="Specific job ID to query"),
     include_stats: bool = Query(True, description="Include system statistics"),
     db: Session = Depends(get_db),
 ) -> StatusResponse:
@@ -127,8 +126,10 @@ async def get_processing_status(
 
                 # Calculate processing rate (simplified - documents processed in last hour)
                 from datetime import datetime, timedelta
-                from pdf_to_markdown_mcp.db.models import Document
+
                 from sqlalchemy import and_
+
+                from pdf_to_markdown_mcp.db.models import Document
 
                 one_hour_ago = datetime.utcnow() - timedelta(hours=1)
                 recent_completed = (
@@ -167,13 +168,13 @@ async def get_processing_status(
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
-                error=ErrorType.SYSTEM, message=f"Failed to retrieve status: {str(e)}"
+                error=ErrorType.SYSTEM, message=f"Failed to retrieve status: {e!s}"
             ).dict(),
         )
 
 
 @router.get("/queue/stats")
-async def get_queue_statistics(db: Session = Depends(get_db)) -> Dict[str, Any]:
+async def get_queue_statistics(db: Session = Depends(get_db)) -> dict[str, Any]:
     """
     Get detailed queue statistics and worker information.
     """
@@ -214,7 +215,7 @@ async def get_queue_statistics(db: Session = Depends(get_db)) -> Dict[str, Any]:
             status_code=500,
             detail=ErrorResponse(
                 error=ErrorType.SYSTEM,
-                message=f"Failed to retrieve queue statistics: {str(e)}",
+                message=f"Failed to retrieve queue statistics: {e!s}",
             ).dict(),
         )
 
@@ -223,7 +224,7 @@ async def get_queue_statistics(db: Session = Depends(get_db)) -> Dict[str, Any]:
 async def get_job_logs(
     job_id: str,
     limit: int = Query(100, ge=1, le=1000, description="Maximum log entries to return"),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Get detailed logs for a specific job.
     """
@@ -276,13 +277,13 @@ async def get_job_logs(
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
-                error=ErrorType.SYSTEM, message=f"Failed to retrieve job logs: {str(e)}"
+                error=ErrorType.SYSTEM, message=f"Failed to retrieve job logs: {e!s}"
             ).dict(),
         )
 
 
 @router.post("/jobs/{job_id}/cancel")
-async def cancel_job(job_id: str) -> Dict[str, Any]:
+async def cancel_job(job_id: str) -> dict[str, Any]:
     """
     Cancel a running or queued job.
     """
@@ -306,19 +307,19 @@ async def cancel_job(job_id: str) -> Dict[str, Any]:
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
-                error=ErrorType.SYSTEM, message=f"Failed to cancel job: {str(e)}"
+                error=ErrorType.SYSTEM, message=f"Failed to cancel job: {e!s}"
             ).dict(),
         )
 
 
 @router.get("/system/performance")
-async def get_system_performance(db: Session = Depends(get_db)) -> Dict[str, Any]:
+async def get_system_performance(db: Session = Depends(get_db)) -> dict[str, Any]:
     """
     Get system performance metrics and health indicators.
     """
     try:
+
         import psutil
-        import time
 
         # System metrics
         cpu_percent = psutil.cpu_percent(interval=1)
@@ -392,7 +393,7 @@ async def get_system_performance(db: Session = Depends(get_db)) -> Dict[str, Any
             status_code=500,
             detail=ErrorResponse(
                 error=ErrorType.SYSTEM,
-                message=f"Failed to retrieve performance metrics: {str(e)}",
+                message=f"Failed to retrieve performance metrics: {e!s}",
             ).dict(),
         )
 
@@ -424,7 +425,7 @@ async def stream_job_progress(job_id: str) -> StreamingResponse:
             status_code=500,
             detail=ErrorResponse(
                 error=ErrorType.SYSTEM,
-                message=f"Failed to create progress stream: {str(e)}",
+                message=f"Failed to create progress stream: {e!s}",
             ).dict(),
         )
 
@@ -528,7 +529,7 @@ async def stream_batch_progress(batch_id: str) -> StreamingResponse:
             status_code=500,
             detail=ErrorResponse(
                 error=ErrorType.SYSTEM,
-                message=f"Failed to create batch progress stream: {str(e)}",
+                message=f"Failed to create batch progress stream: {e!s}",
             ).dict(),
         )
 
@@ -571,13 +572,13 @@ async def stream_system_metrics(
             status_code=500,
             detail=ErrorResponse(
                 error=ErrorType.SYSTEM,
-                message=f"Failed to create system metrics stream: {str(e)}",
+                message=f"Failed to create system metrics stream: {e!s}",
             ).dict(),
         )
 
 
 @router.get("/streaming/status")
-async def get_streaming_status_endpoint() -> Dict[str, Any]:
+async def get_streaming_status_endpoint() -> dict[str, Any]:
     """
     Get comprehensive streaming system status and capabilities.
 
@@ -630,13 +631,13 @@ async def get_streaming_status_endpoint() -> Dict[str, Any]:
             status_code=500,
             detail=ErrorResponse(
                 error=ErrorType.SYSTEM,
-                message=f"Failed to retrieve streaming status: {str(e)}",
+                message=f"Failed to retrieve streaming status: {e!s}",
             ).dict(),
         )
 
 
 @router.post("/streaming/operations/{operation_id}/cancel")
-async def cancel_streaming_operation(operation_id: str) -> Dict[str, Any]:
+async def cancel_streaming_operation(operation_id: str) -> dict[str, Any]:
     """
     Cancel an active streaming operation.
 
@@ -673,6 +674,6 @@ async def cancel_streaming_operation(operation_id: str) -> Dict[str, Any]:
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
-                error=ErrorType.SYSTEM, message=f"Failed to cancel operation: {str(e)}"
+                error=ErrorType.SYSTEM, message=f"Failed to cancel operation: {e!s}"
             ).dict(),
         )

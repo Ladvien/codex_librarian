@@ -8,12 +8,13 @@ and database utilities for PostgreSQL with PGVector extension.
 import logging
 import os
 import time
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Generator, Optional, Dict, Any
+from typing import Any
 
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import Engine
-from sqlalchemy.exc import SQLAlchemyError, DisconnectionError, OperationalError
+from sqlalchemy.exc import DisconnectionError, OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import QueuePool
 
@@ -235,7 +236,7 @@ class DatabaseManager:
         self.engine = engine
         self.SessionLocal = SessionLocal
 
-    def health_check(self) -> Dict[str, Any]:
+    def health_check(self) -> dict[str, Any]:
         """
         Comprehensive database connectivity and health check.
 
@@ -306,7 +307,7 @@ class DatabaseManager:
             health_info.update({"status": "unhealthy", "error": str(e)})
             return health_info
 
-    def get_connection_info(self) -> Dict[str, Any]:
+    def get_connection_info(self) -> dict[str, Any]:
         """
         Get detailed database connection information.
 
@@ -394,7 +395,7 @@ class DatabaseManager:
             logger.error(f"Maintenance SQL execution failed for {operation}: {e}")
             raise
 
-    def get_database_size(self) -> Optional[str]:
+    def get_database_size(self) -> str | None:
         """
         Get current database size.
 
@@ -415,7 +416,7 @@ class DatabaseManager:
             logger.error(f"Failed to get database size: {e}")
             return None
 
-    def get_table_sizes(self) -> Dict[str, str]:
+    def get_table_sizes(self) -> dict[str, str]:
         """
         Get sizes of all tables in the database.
 
@@ -443,7 +444,7 @@ class DatabaseManager:
             logger.error(f"Failed to get table sizes: {e}")
             return {}
 
-    def optimize_database(self) -> Dict[str, Any]:
+    def optimize_database(self) -> dict[str, Any]:
         """
         Perform database optimization operations.
 

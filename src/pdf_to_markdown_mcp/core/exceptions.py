@@ -5,7 +5,7 @@ This module defines all custom exceptions used throughout the application
 with proper error categorization for retry logic and error handling.
 """
 
-from typing import Optional, Dict, Any
+from typing import Any
 
 
 class PDFToMarkdownError(Exception):
@@ -14,15 +14,15 @@ class PDFToMarkdownError(Exception):
     def __init__(
         self,
         message: str,
-        error_code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
+        error_code: str | None = None,
+        details: dict[str, Any] | None = None,
     ):
         super().__init__(message)
         self.message = message
         self.error_code = error_code
         self.details = details or {}
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert exception to dictionary for serialization."""
         return {
             "error_type": self.__class__.__name__,
@@ -35,13 +35,12 @@ class PDFToMarkdownError(Exception):
 class ValidationError(PDFToMarkdownError):
     """Raised when input validation fails."""
 
-    pass
 
 
 class ProcessingError(PDFToMarkdownError):
     """Raised when PDF processing fails."""
 
-    def __init__(self, message: str, pdf_path: Optional[str] = None, **kwargs):
+    def __init__(self, message: str, pdf_path: str | None = None, **kwargs):
         super().__init__(message, **kwargs)
         self.pdf_path = pdf_path
         if pdf_path:
@@ -54,8 +53,8 @@ class EmbeddingError(PDFToMarkdownError):
     def __init__(
         self,
         message: str,
-        provider: Optional[str] = None,
-        model: Optional[str] = None,
+        provider: str | None = None,
+        model: str | None = None,
         **kwargs,
     ):
         super().__init__(message, **kwargs)
@@ -70,7 +69,7 @@ class EmbeddingError(PDFToMarkdownError):
 class DatabaseError(PDFToMarkdownError):
     """Raised when database operations fail."""
 
-    def __init__(self, message: str, operation: Optional[str] = None, **kwargs):
+    def __init__(self, message: str, operation: str | None = None, **kwargs):
         super().__init__(message, **kwargs)
         self.operation = operation
         if operation:
@@ -80,13 +79,12 @@ class DatabaseError(PDFToMarkdownError):
 class ConfigurationError(PDFToMarkdownError):
     """Raised when configuration is invalid or missing."""
 
-    pass
 
 
 class ResourceError(PDFToMarkdownError):
     """Raised when system resources are exhausted."""
 
-    def __init__(self, message: str, resource_type: Optional[str] = None, **kwargs):
+    def __init__(self, message: str, resource_type: str | None = None, **kwargs):
         super().__init__(message, **kwargs)
         self.resource_type = resource_type
         if resource_type:
@@ -99,8 +97,8 @@ class WorkerError(PDFToMarkdownError):
     def __init__(
         self,
         message: str,
-        worker_id: Optional[str] = None,
-        task_id: Optional[str] = None,
+        worker_id: str | None = None,
+        task_id: str | None = None,
         **kwargs,
     ):
         super().__init__(message, **kwargs)
@@ -118,8 +116,8 @@ class FileSystemError(PDFToMarkdownError):
     def __init__(
         self,
         message: str,
-        file_path: Optional[str] = None,
-        operation: Optional[str] = None,
+        file_path: str | None = None,
+        operation: str | None = None,
         **kwargs,
     ):
         super().__init__(message, **kwargs)
@@ -134,7 +132,7 @@ class FileSystemError(PDFToMarkdownError):
 class OCRError(ProcessingError):
     """Raised when OCR processing fails."""
 
-    def __init__(self, message: str, language: Optional[str] = None, **kwargs):
+    def __init__(self, message: str, language: str | None = None, **kwargs):
         super().__init__(message, **kwargs)
         self.language = language
         if language:
@@ -147,8 +145,8 @@ class ChunkingError(ProcessingError):
     def __init__(
         self,
         message: str,
-        chunk_size: Optional[int] = None,
-        overlap: Optional[int] = None,
+        chunk_size: int | None = None,
+        overlap: int | None = None,
         **kwargs,
     ):
         super().__init__(message, **kwargs)
@@ -166,8 +164,8 @@ class SearchError(PDFToMarkdownError):
     def __init__(
         self,
         message: str,
-        query: Optional[str] = None,
-        search_type: Optional[str] = None,
+        query: str | None = None,
+        search_type: str | None = None,
         **kwargs,
     ):
         super().__init__(message, **kwargs)
@@ -185,8 +183,8 @@ class APIError(PDFToMarkdownError):
     def __init__(
         self,
         message: str,
-        status_code: Optional[int] = None,
-        endpoint: Optional[str] = None,
+        status_code: int | None = None,
+        endpoint: str | None = None,
         **kwargs,
     ):
         super().__init__(message, **kwargs)
@@ -201,7 +199,7 @@ class APIError(PDFToMarkdownError):
 class QueueError(WorkerError):
     """Raised when task queue operations fail."""
 
-    def __init__(self, message: str, queue_name: Optional[str] = None, **kwargs):
+    def __init__(self, message: str, queue_name: str | None = None, **kwargs):
         super().__init__(message, **kwargs)
         self.queue_name = queue_name
         if queue_name:
@@ -214,8 +212,8 @@ class RetryableError(PDFToMarkdownError):
     def __init__(
         self,
         message: str,
-        retry_after: Optional[int] = None,
-        max_retries: Optional[int] = None,
+        retry_after: int | None = None,
+        max_retries: int | None = None,
         **kwargs,
     ):
         super().__init__(message, **kwargs)
@@ -230,14 +228,13 @@ class RetryableError(PDFToMarkdownError):
 class NonRetryableError(PDFToMarkdownError):
     """Base class for errors that should not be retried."""
 
-    pass
 
 
 # Convenience functions for creating specific error types
 
 
 def validation_error(
-    message: str, field: Optional[str] = None, value: Optional[Any] = None
+    message: str, field: str | None = None, value: Any | None = None
 ) -> ValidationError:
     """Create a validation error with field information."""
     details = {}
@@ -249,7 +246,7 @@ def validation_error(
 
 
 def processing_error(
-    message: str, pdf_path: str, stage: Optional[str] = None
+    message: str, pdf_path: str, stage: str | None = None
 ) -> ProcessingError:
     """Create a processing error with context information."""
     details = {}
@@ -259,7 +256,7 @@ def processing_error(
 
 
 def embedding_error(
-    message: str, provider: str, model: str, text_length: Optional[int] = None
+    message: str, provider: str, model: str, text_length: int | None = None
 ) -> EmbeddingError:
     """Create an embedding error with provider information."""
     details = {}
@@ -269,7 +266,7 @@ def embedding_error(
 
 
 def database_error(
-    message: str, operation: str, table: Optional[str] = None
+    message: str, operation: str, table: str | None = None
 ) -> DatabaseError:
     """Create a database error with operation information."""
     details = {}
@@ -281,8 +278,8 @@ def database_error(
 def resource_error(
     message: str,
     resource_type: str,
-    current_usage: Optional[str] = None,
-    limit: Optional[str] = None,
+    current_usage: str | None = None,
+    limit: str | None = None,
 ) -> ResourceError:
     """Create a resource error with usage information."""
     details = {}

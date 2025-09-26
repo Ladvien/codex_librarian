@@ -8,14 +8,13 @@ async operations with PostgreSQL and PGVector extension.
 import asyncio
 import logging
 import os
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator, Optional, Dict, Any
+from typing import Any
 
 from sqlalchemy import event, text
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from sqlalchemy.engine import Engine
-from sqlalchemy.exc import SQLAlchemyError, DisconnectionError, OperationalError
-from sqlalchemy.pool import QueuePool, StaticPool
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from ..core.performance import get_performance_monitor
 
@@ -141,7 +140,7 @@ class AsyncDatabaseManager:
     async def execute_async_query(
         self,
         query: str,
-        parameters: Optional[Dict[str, Any]] = None,
+        parameters: dict[str, Any] | None = None,
         fetch_results: bool = True,
     ) -> Any:
         """
@@ -231,7 +230,7 @@ class AsyncDatabaseManager:
             logger.error(f"Async PGVector extension check failed: {e}")
             return False
 
-    async def get_async_connection_stats(self) -> Dict[str, Any]:
+    async def get_async_connection_stats(self) -> dict[str, Any]:
         """
         Get async connection pool statistics.
 
@@ -283,14 +282,14 @@ class AsyncVectorSearchResult:
     def __init__(
         self,
         document_id: int,
-        chunk_id: Optional[int],
+        chunk_id: int | None,
         filename: str,
         source_path: str,
         content: str,
         similarity_score: float,
-        page_number: Optional[int] = None,
-        chunk_index: Optional[int] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        page_number: int | None = None,
+        chunk_index: int | None = None,
+        metadata: dict[str, Any] | None = None,
     ):
         self.document_id = document_id
         self.chunk_id = chunk_id
@@ -302,7 +301,7 @@ class AsyncVectorSearchResult:
         self.chunk_index = chunk_index
         self.metadata = metadata or {}
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary format."""
         return {
             "document_id": self.document_id,
@@ -317,7 +316,7 @@ class AsyncVectorSearchResult:
         }
 
 
-async def health_check_async() -> Dict[str, Any]:
+async def health_check_async() -> dict[str, Any]:
     """
     Perform async database health check.
 
@@ -345,9 +344,9 @@ async def health_check_async() -> Dict[str, Any]:
             )
 
         # Get connection pool stats
-        health_status["connection_pool"] = (
-            await async_db_manager.get_async_connection_stats()
-        )
+        health_status[
+            "connection_pool"
+        ] = await async_db_manager.get_async_connection_stats()
 
     except Exception as e:
         logger.error(f"Async health check failed: {e}")

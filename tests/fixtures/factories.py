@@ -8,18 +8,16 @@ with realistic data for testing various components of the system.
 import hashlib
 import uuid
 from datetime import datetime, timedelta
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from .test_data import (
-    SAMPLE_PDF_CONTENT,
-    SAMPLE_MARKDOWN_CONTENT,
-    SAMPLE_PLAIN_TEXT,
     SAMPLE_CHUNKS,
-    SAMPLE_TABLES,
     SAMPLE_FORMULAS,
     SAMPLE_IMAGES,
-    SAMPLE_EMBEDDINGS,
+    SAMPLE_MARKDOWN_CONTENT,
+    SAMPLE_PDF_CONTENT,
+    SAMPLE_PLAIN_TEXT,
+    SAMPLE_TABLES,
     create_sample_embeddings,
 )
 
@@ -33,10 +31,10 @@ class BaseFactory:
         return str(uuid.uuid4())
 
     @staticmethod
-    def _generate_hash(content: Union[str, bytes]) -> str:
+    def _generate_hash(content: str | bytes) -> str:
         """Generate SHA256 hash for content."""
         if isinstance(content, str):
-            content = content.encode('utf-8')
+            content = content.encode("utf-8")
         return hashlib.sha256(content).hexdigest()
 
     @staticmethod
@@ -54,15 +52,15 @@ class DocumentFactory(BaseFactory):
     @classmethod
     def create(
         self,
-        file_path: Optional[str] = None,
-        file_name: Optional[str] = None,
-        file_size: Optional[int] = None,
+        file_path: str | None = None,
+        file_name: str | None = None,
+        file_size: int | None = None,
         status: str = "pending",
         created_days_ago: int = 0,
-        **kwargs
-    ) -> Dict[str, Any]:
+        **kwargs,
+    ) -> dict[str, Any]:
         """Create a document dictionary with realistic data."""
-        doc_id = kwargs.get('id', 1)
+        doc_id = kwargs.get("id", 1)
         unique_id = self._generate_uuid()
 
         if not file_path:
@@ -96,28 +94,25 @@ class DocumentFactory(BaseFactory):
     def create_batch(
         self,
         count: int = 3,
-        status_distribution: Optional[Dict[str, int]] = None,
-        **kwargs
-    ) -> List[Dict[str, Any]]:
+        status_distribution: dict[str, int] | None = None,
+        **kwargs,
+    ) -> list[dict[str, Any]]:
         """Create multiple documents with varied statuses."""
         if status_distribution is None:
             status_distribution = {
                 "completed": count // 2,
                 "processing": count // 4,
                 "pending": count // 4,
-                "failed": max(1, count - (count // 2) - (count // 4) - (count // 4))
+                "failed": max(1, count - (count // 2) - (count // 4) - (count // 4)),
             }
 
         documents = []
-        doc_id = kwargs.pop('start_id', 1)
+        doc_id = kwargs.pop("start_id", 1)
 
         for status, status_count in status_distribution.items():
             for i in range(status_count):
                 doc = self.create(
-                    id=doc_id,
-                    status=status,
-                    created_days_ago=i,
-                    **kwargs
+                    id=doc_id, status=status, created_days_ago=i, **kwargs
                 )
                 documents.append(doc)
                 doc_id += 1
@@ -135,9 +130,9 @@ class ProcessingResultFactory(BaseFactory):
         include_tables: bool = True,
         include_formulas: bool = True,
         include_images: bool = True,
-        chunk_count: Optional[int] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
+        chunk_count: int | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
         """Create a processing result with configurable content."""
         if chunk_count is None:
             chunk_count = len(SAMPLE_CHUNKS)
@@ -148,8 +143,8 @@ class ProcessingResultFactory(BaseFactory):
         images = SAMPLE_IMAGES.copy() if success and include_images else []
 
         word_count = len(SAMPLE_PLAIN_TEXT.split()) if success else 0
-        processing_time = kwargs.get('processing_time', 2.5)
-        confidence = kwargs.get('confidence', 0.95 if success else 0.0)
+        processing_time = kwargs.get("processing_time", 2.5)
+        confidence = kwargs.get("confidence", 0.95 if success else 0.0)
 
         result = {
             "success": success,
@@ -167,13 +162,12 @@ class ProcessingResultFactory(BaseFactory):
                 "confidence": confidence,
                 "file_size": len(SAMPLE_PDF_CONTENT),
                 "file_hash": self._generate_hash(SAMPLE_PDF_CONTENT),
-            }
+            },
         }
 
         if not success:
             result["error_message"] = kwargs.get(
-                'error_message',
-                "Processing failed: Invalid PDF format"
+                "error_message", "Processing failed: Invalid PDF format"
             )
 
         result.update(kwargs)
@@ -184,14 +178,18 @@ class ProcessingResultFactory(BaseFactory):
         self,
         error_message: str = "Processing failed",
         partial_content: bool = False,
-        **kwargs
-    ) -> Dict[str, Any]:
+        **kwargs,
+    ) -> dict[str, Any]:
         """Create a failed processing result."""
         result = self.create(success=False, error_message=error_message, **kwargs)
 
         if partial_content:
-            result["markdown_content"] = "# Partially Processed\n\nSome content was extracted..."
-            result["plain_text"] = "Partially Processed\n\nSome content was extracted..."
+            result["markdown_content"] = (
+                "# Partially Processed\n\nSome content was extracted..."
+            )
+            result["plain_text"] = (
+                "Partially Processed\n\nSome content was extracted..."
+            )
             result["metadata"]["confidence"] = 0.3
 
         return result
@@ -202,21 +200,15 @@ class EmbeddingFactory(BaseFactory):
 
     @classmethod
     def create_embedding(
-        self,
-        dimensions: int = 1536,
-        base_value: float = 0.1,
-        **kwargs
-    ) -> List[float]:
+        self, dimensions: int = 1536, base_value: float = 0.1, **kwargs
+    ) -> list[float]:
         """Create a single embedding vector."""
         return [base_value + i * 0.0001 for i in range(dimensions)]
 
     @classmethod
     def create_batch(
-        self,
-        count: int = 4,
-        dimensions: int = 1536,
-        **kwargs
-    ) -> List[List[float]]:
+        self, count: int = 4, dimensions: int = 1536, **kwargs
+    ) -> list[list[float]]:
         """Create multiple embedding vectors."""
         return create_sample_embeddings(count, dimensions)
 
@@ -225,10 +217,10 @@ class EmbeddingFactory(BaseFactory):
         self,
         document_id: int = 1,
         chunk_index: int = 0,
-        chunk_text: Optional[str] = None,
-        embedding: Optional[List[float]] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
+        chunk_text: str | None = None,
+        embedding: list[float] | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
         """Create a document embedding database record."""
         if chunk_text is None:
             chunk_text = SAMPLE_CHUNKS[chunk_index % len(SAMPLE_CHUNKS)]["text"]
@@ -239,7 +231,7 @@ class EmbeddingFactory(BaseFactory):
         chunk_data = SAMPLE_CHUNKS[chunk_index % len(SAMPLE_CHUNKS)]
 
         record = {
-            "id": kwargs.get('id', chunk_index + 1),
+            "id": kwargs.get("id", chunk_index + 1),
             "document_id": document_id,
             "chunk_index": chunk_index,
             "chunk_text": chunk_text,
@@ -260,12 +252,12 @@ class ChunkFactory(BaseFactory):
     @classmethod
     def create(
         self,
-        text: Optional[str] = None,
+        text: str | None = None,
         chunk_index: int = 0,
-        start_char: Optional[int] = None,
-        end_char: Optional[int] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
+        start_char: int | None = None,
+        end_char: int | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
         """Create a text chunk with realistic properties."""
         if text is None:
             text = SAMPLE_CHUNKS[chunk_index % len(SAMPLE_CHUNKS)]["text"]
@@ -291,11 +283,8 @@ class ChunkFactory(BaseFactory):
 
     @classmethod
     def create_batch(
-        self,
-        count: int = 4,
-        base_text: Optional[str] = None,
-        **kwargs
-    ) -> List[Dict[str, Any]]:
+        self, count: int = 4, base_text: str | None = None, **kwargs
+    ) -> list[dict[str, Any]]:
         """Create multiple chunks from text or sample data."""
         if base_text:
             # Split text into chunks
@@ -314,7 +303,7 @@ class ChunkFactory(BaseFactory):
                     chunk_index=i,
                     start_char=base_text.find(chunk_text),
                     end_char=base_text.find(chunk_text) + len(chunk_text),
-                    **kwargs
+                    **kwargs,
                 )
                 chunks.append(chunk)
 
@@ -333,18 +322,18 @@ class TableFactory(BaseFactory):
     @classmethod
     def create(
         self,
-        headers: Optional[List[str]] = None,
-        rows: Optional[List[List[str]]] = None,
+        headers: list[str] | None = None,
+        rows: list[list[str]] | None = None,
         table_index: int = 0,
-        **kwargs
-    ) -> Dict[str, Any]:
+        **kwargs,
+    ) -> dict[str, Any]:
         """Create table data with headers and rows."""
         if headers is None:
-            headers = [f"Column {i+1}" for i in range(3)]
+            headers = [f"Column {i + 1}" for i in range(3)]
 
         if rows is None:
             rows = [
-                [f"Row {i+1}, Col {j+1}" for j in range(len(headers))]
+                [f"Row {i + 1}, Col {j + 1}" for j in range(len(headers))]
                 for i in range(3)
             ]
 
@@ -367,7 +356,7 @@ class TableFactory(BaseFactory):
                 "x": 100,
                 "y": 400,
                 "width": len(headers) * 100,
-                "height": (len(rows) + 1) * 20
+                "height": (len(rows) + 1) * 20,
             },
             "confidence": 0.92,
         }
@@ -382,17 +371,26 @@ class FormulaFactory(BaseFactory):
     @classmethod
     def create(
         self,
-        latex: Optional[str] = None,
-        text: Optional[str] = None,
+        latex: str | None = None,
+        text: str | None = None,
         formula_index: int = 0,
-        **kwargs
-    ) -> Dict[str, Any]:
+        **kwargs,
+    ) -> dict[str, Any]:
         """Create formula data with LaTeX and text representations."""
         formulas = [
             {"latex": "E = mc^2", "text": "E = mc^2"},
-            {"latex": "x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}", "text": "x = (-b ± √(b²-4ac)) / 2a"},
-            {"latex": "\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}", "text": "∫_{-∞}^{∞} e^{-x²} dx = √π"},
-            {"latex": "\\sum_{n=1}^{\\infty} \\frac{1}{n^2} = \\frac{\\pi^2}{6}", "text": "Σ_{n=1}^{∞} 1/n² = π²/6"},
+            {
+                "latex": "x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}",
+                "text": "x = (-b ± √(b²-4ac)) / 2a",
+            },
+            {
+                "latex": "\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}",
+                "text": "∫_{-∞}^{∞} e^{-x²} dx = √π",
+            },
+            {
+                "latex": "\\sum_{n=1}^{\\infty} \\frac{1}{n^2} = \\frac{\\pi^2}{6}",
+                "text": "Σ_{n=1}^{∞} 1/n² = π²/6",
+            },
         ]
 
         formula_data = formulas[formula_index % len(formulas)]
@@ -412,7 +410,7 @@ class FormulaFactory(BaseFactory):
                 "x": 150 + formula_index * 10,
                 "y": 300 - formula_index * 20,
                 "width": len(text) * 8,
-                "height": 20
+                "height": 20,
             },
             "confidence": 0.95,
         }
@@ -428,10 +426,10 @@ class ImageFactory(BaseFactory):
     def create(
         self,
         image_index: int = 0,
-        description: Optional[str] = None,
-        ocr_text: Optional[str] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
+        description: str | None = None,
+        ocr_text: str | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
         """Create image data with OCR text and metadata."""
         if description is None:
             description = f"Image {image_index + 1} extracted from PDF"
@@ -449,7 +447,7 @@ class ImageFactory(BaseFactory):
                 "x": 100,
                 "y": 200 - image_index * 150,
                 "width": 300,
-                "height": 200
+                "height": 200,
             },
             "format": "PNG",
             "size_bytes": 12345 + image_index * 1000,
@@ -466,26 +464,26 @@ class TaskFactory(BaseFactory):
     @classmethod
     def create(
         self,
-        task_id: Optional[str] = None,
+        task_id: str | None = None,
         document_id: int = 1,
         task_type: str = "pdf_processing",
         status: str = "pending",
-        **kwargs
-    ) -> Dict[str, Any]:
+        **kwargs,
+    ) -> dict[str, Any]:
         """Create task queue entry."""
         if task_id is None:
             task_id = f"task-{self._generate_uuid()}"
 
         task = {
-            "id": kwargs.get('id', 1),
+            "id": kwargs.get("id", 1),
             "task_id": task_id,
             "document_id": document_id,
             "task_type": task_type,
             "status": status,
-            "priority": kwargs.get('priority', 5),
-            "progress": kwargs.get('progress', 0.0),
-            "error_message": kwargs.get('error_message'),
-            "retry_count": kwargs.get('retry_count', 0),
+            "priority": kwargs.get("priority", 5),
+            "progress": kwargs.get("progress", 0.0),
+            "error_message": kwargs.get("error_message"),
+            "retry_count": kwargs.get("retry_count", 0),
             "created_at": self._random_timestamp(),
             "updated_at": self._random_timestamp(),
         }
@@ -497,20 +495,20 @@ class TaskFactory(BaseFactory):
     def create_batch(
         self,
         count: int = 5,
-        status_distribution: Optional[Dict[str, int]] = None,
-        **kwargs
-    ) -> List[Dict[str, Any]]:
+        status_distribution: dict[str, int] | None = None,
+        **kwargs,
+    ) -> list[dict[str, Any]]:
         """Create multiple tasks with varied statuses."""
         if status_distribution is None:
             status_distribution = {
                 "completed": count // 3,
                 "running": count // 3,
                 "pending": count // 3,
-                "failed": max(1, count - 3 * (count // 3))
+                "failed": max(1, count - 3 * (count // 3)),
             }
 
         tasks = []
-        task_id = kwargs.pop('start_id', 1)
+        task_id = kwargs.pop("start_id", 1)
 
         for status, status_count in status_distribution.items():
             for i in range(status_count):
@@ -518,7 +516,7 @@ class TaskFactory(BaseFactory):
                     id=task_id,
                     document_id=task_id,  # Simple mapping
                     status=status,
-                    **kwargs
+                    **kwargs,
                 )
                 tasks.append(task)
                 task_id += 1

@@ -12,7 +12,8 @@ Supports:
 import asyncio
 import logging
 from enum import Enum
-from typing import List, Dict, Any, Optional, Tuple
+from typing import Any
+
 import numpy as np
 from pydantic import BaseModel, Field
 
@@ -48,7 +49,6 @@ class EmbeddingProvider(str, Enum):
 class EmbeddingError(Exception):
     """Base exception for embedding-related errors."""
 
-    pass
 
 
 class EmbeddingConfig(BaseModel):
@@ -62,7 +62,7 @@ class EmbeddingConfig(BaseModel):
     max_retries: int = Field(default=3, ge=0)
     embedding_dimensions: int = Field(default=1536, gt=0)
     ollama_base_url: str = "http://localhost:11434"
-    openai_api_key: Optional[str] = None
+    openai_api_key: str | None = None
 
     class Config:
         """Pydantic configuration."""
@@ -73,10 +73,10 @@ class EmbeddingConfig(BaseModel):
 class EmbeddingResult(BaseModel):
     """Result from embedding generation."""
 
-    embeddings: List[List[float]]
+    embeddings: list[list[float]]
     provider: EmbeddingProvider
     model: str
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
     class Config:
         """Pydantic configuration."""
@@ -102,7 +102,7 @@ class OllamaEmbedder:
         self.base_url = base_url
         self.client = ollama.AsyncClient(host=base_url)
 
-    async def embed_texts(self, texts: List[str]) -> List[List[float]]:
+    async def embed_texts(self, texts: list[str]) -> list[list[float]]:
         """
         Generate embeddings for list of texts using Ollama.
 
@@ -134,16 +134,16 @@ class OllamaEmbedder:
 
         except Exception as e:
             logger.error(
-                f"Ollama embedding failed: error={str(e)}, model={self.model_name}, text_count={len(texts)}"
+                f"Ollama embedding failed: error={e!s}, model={self.model_name}, text_count={len(texts)}"
             )
-            raise EmbeddingError(f"Ollama embedding failed: {str(e)}")
+            raise EmbeddingError(f"Ollama embedding failed: {e!s}")
 
 
 class OpenAIEmbedder:
     """OpenAI API embedding provider."""
 
     def __init__(
-        self, model_name: str = "text-embedding-3-small", api_key: Optional[str] = None
+        self, model_name: str = "text-embedding-3-small", api_key: str | None = None
     ):
         """Initialize OpenAI embedder."""
         if AsyncOpenAI is None:
@@ -155,8 +155,8 @@ class OpenAIEmbedder:
         self.client = AsyncOpenAI(api_key=api_key)
 
     async def embed_texts(
-        self, texts: List[str], dimensions: int = 1536
-    ) -> List[List[float]]:
+        self, texts: list[str], dimensions: int = 1536
+    ) -> list[list[float]]:
         """
         Generate embeddings for list of texts using OpenAI API.
 
@@ -187,9 +187,9 @@ class OpenAIEmbedder:
 
         except Exception as e:
             logger.error(
-                f"OpenAI embedding failed: error={str(e)}, model={self.model_name}, text_count={len(texts)}"
+                f"OpenAI embedding failed: error={e!s}, model={self.model_name}, text_count={len(texts)}"
             )
-            raise EmbeddingError(f"OpenAI embedding failed: {str(e)}")
+            raise EmbeddingError(f"OpenAI embedding failed: {e!s}")
 
 
 class EmbeddingService:
@@ -225,7 +225,7 @@ class EmbeddingService:
             f"Embedding service initialized: provider={config.provider}, batch_size={config.batch_size}, max_retries={config.max_retries}"
         )
 
-    async def generate_embeddings(self, texts: List[str]) -> EmbeddingResult:
+    async def generate_embeddings(self, texts: list[str]) -> EmbeddingResult:
         """
         Generate embeddings for list of texts with batching and retry logic.
 
@@ -267,13 +267,13 @@ class EmbeddingService:
                 except EmbeddingError as e:
                     if attempt == self.config.max_retries:
                         raise EmbeddingError(
-                            f"Max retries ({self.config.max_retries}) exceeded: {str(e)}"
+                            f"Max retries ({self.config.max_retries}) exceeded: {e!s}"
                         )
 
                     # Exponential backoff
                     await asyncio.sleep(2**attempt)
                     logger.warning(
-                        f"Embedding retry: attempt={attempt + 1}, error={str(e)}"
+                        f"Embedding retry: attempt={attempt + 1}, error={e!s}"
                     )
 
         return EmbeddingResult(
@@ -299,16 +299,16 @@ class EmbeddingService:
             await self.generate_embeddings(["health check"])
             return True
         except Exception as e:
-            logger.warning(f"Embedding service health check failed: error={str(e)}")
+            logger.warning(f"Embedding service health check failed: error={e!s}")
             return False
 
     async def similarity_search(
         self,
-        query_embedding: List[float],
-        candidate_embeddings: List[List[float]],
+        query_embedding: list[float],
+        candidate_embeddings: list[list[float]],
         top_k: int = 10,
         metric: str = "cosine",
-    ) -> List[Tuple[int, float]]:
+    ) -> list[tuple[int, float]]:
         """
         Perform similarity search using embeddings.
 
@@ -357,8 +357,8 @@ class EmbeddingService:
         return results
 
     async def normalize_embeddings(
-        self, embeddings: List[List[float]]
-    ) -> List[List[float]]:
+        self, embeddings: list[list[float]]
+    ) -> list[list[float]]:
         """
         Normalize embeddings to unit vectors.
 

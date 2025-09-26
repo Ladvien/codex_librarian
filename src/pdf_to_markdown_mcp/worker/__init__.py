@@ -7,16 +7,16 @@ for background processing of PDF documents.
 
 from .celery import app as celery_app
 from .tasks import (
-    process_pdf_document,
-    generate_embeddings,
     cleanup_temp_files,
+    generate_embeddings,
     health_check,
+    process_pdf_document,
 )
 
 __all__ = [
     "celery_app",
-    "process_pdf_document",
-    "generate_embeddings",
     "cleanup_temp_files",
+    "generate_embeddings",
     "health_check",
+    "process_pdf_document",
 ]

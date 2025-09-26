@@ -5,20 +5,18 @@ This module provides common query patterns, search operations,
 and database utilities for efficient data access.
 """
 
-from typing import Any, Dict, List, Optional, Tuple
 import logging
+from typing import Any
 
-from sqlalchemy import and_, func, or_, text
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, func, text
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
 from .models import (
     Document,
-    DocumentContent,
     DocumentEmbedding,
-    DocumentImage,
     ProcessingQueue,
 )
 
@@ -58,7 +56,7 @@ def _validate_string(value: Any, field_name: str, max_length: int = 1000) -> str
     return value
 
 
-def _validate_embedding(embedding: List[float], expected_dim: int) -> List[float]:
+def _validate_embedding(embedding: list[float], expected_dim: int) -> list[float]:
     """Validate embedding dimensions and values."""
     if not isinstance(embedding, list):
         raise ValueError("Embedding must be a list of floats")
@@ -75,17 +73,17 @@ class DocumentQueries:
     """Query utilities for document operations."""
 
     @staticmethod
-    def get_by_id(db: Session, document_id: int) -> Optional[Document]:
+    def get_by_id(db: Session, document_id: int) -> Document | None:
         """Get document by ID."""
         return db.query(Document).filter(Document.id == document_id).first()
 
     @staticmethod
-    def get_by_path(db: Session, source_path: str) -> Optional[Document]:
+    def get_by_path(db: Session, source_path: str) -> Document | None:
         """Get document by source path."""
         return db.query(Document).filter(Document.source_path == source_path).first()
 
     @staticmethod
-    def get_by_hash(db: Session, file_hash: str) -> Optional[Document]:
+    def get_by_hash(db: Session, file_hash: str) -> Document | None:
         """Get document by file hash."""
         return db.query(Document).filter(Document.file_hash == file_hash).first()
 
@@ -93,9 +91,9 @@ class DocumentQueries:
     def get_by_status(
         db: Session,
         status: str,
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
-    ) -> List[Document]:
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> list[Document]:
         """Get documents by conversion status."""
         query = db.query(Document).filter(Document.conversion_status == status)
 
@@ -108,8 +106,8 @@ class DocumentQueries:
 
     @staticmethod
     def get_recent(
-        db: Session, limit: int = 50, offset: Optional[int] = None
-    ) -> List[Document]:
+        db: Session, limit: int = 50, offset: int | None = None
+    ) -> list[Document]:
         """Get recent documents by creation date."""
         query = db.query(Document).order_by(Document.created_at.desc())
 
@@ -121,7 +119,7 @@ class DocumentQueries:
         return query.all()
 
     @staticmethod
-    def get_statistics(db: Session) -> Dict[str, Any]:
+    def get_statistics(db: Session) -> dict[str, Any]:
         """Get document processing statistics."""
         total = db.query(Document).count()
         by_status = (
@@ -148,10 +146,10 @@ class SearchQueries:
         db: Session,
         query: str,
         limit: int = 10,
-        offset: Optional[int] = None,
-        filters: Optional[Dict[str, Any]] = None,
+        offset: int | None = None,
+        filters: dict[str, Any] | None = None,
         include_content: bool = True,
-    ) -> List[Any]:
+    ) -> list[Any]:
         """
         Perform full-text search on document content with input validation.
 
@@ -240,12 +238,12 @@ class SearchQueries:
     @staticmethod
     def vector_similarity_search(
         db: Session,
-        query_embedding: List[float],
+        query_embedding: list[float],
         limit: int = 10,
         threshold: float = 0.7,
-        filters: Optional[Dict[str, Any]] = None,
+        filters: dict[str, Any] | None = None,
         include_content: bool = True,
-    ) -> List[Any]:
+    ) -> list[Any]:
         """
         Perform vector similarity search with input validation.
 
@@ -332,11 +330,11 @@ class SearchQueries:
     def hybrid_search(
         db: Session,
         query: str,
-        query_embedding: List[float],
+        query_embedding: list[float],
         limit: int = 10,
         semantic_weight: float = 0.7,
         keyword_weight: float = 0.3,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Perform optimized hybrid search combining semantic and keyword search.
 
@@ -528,8 +526,8 @@ class SearchQueries:
 
     @staticmethod
     def _fallback_vector_search(
-        db: Session, query_embedding: List[float], limit: int, weight: float = 0.7
-    ) -> List[Dict[str, Any]]:
+        db: Session, query_embedding: list[float], limit: int, weight: float = 0.7
+    ) -> list[dict[str, Any]]:
         """
         Fallback vector search if hybrid search fails.
 
@@ -597,7 +595,7 @@ class SearchQueries:
     @staticmethod
     def get_document_embeddings(
         db: Session, document_id: int
-    ) -> List[DocumentEmbedding]:
+    ) -> list[DocumentEmbedding]:
         """Get all embeddings for a document."""
         return (
             db.query(DocumentEmbedding)
@@ -608,11 +606,11 @@ class SearchQueries:
     @staticmethod
     def find_similar_documents(
         db: Session,
-        reference_embedding: List[float],
-        reference_doc_id: Optional[int] = None,
+        reference_embedding: list[float],
+        reference_doc_id: int | None = None,
         top_k: int = 5,
         threshold: float = 0.6,
-    ) -> List[Any]:
+    ) -> list[Any]:
         """
         Find documents similar to a reference embedding.
 
@@ -676,7 +674,7 @@ class QueueQueries:
     """Query utilities for processing queue operations."""
 
     @staticmethod
-    def get_next_job(db: Session, worker_id: str) -> Optional[ProcessingQueue]:
+    def get_next_job(db: Session, worker_id: str) -> ProcessingQueue | None:
         """
         Get next job from queue for processing with proper transaction isolation.
 
@@ -725,7 +723,7 @@ class QueueQueries:
             raise
 
     @staticmethod
-    def get_queue_stats(db: Session) -> Dict[str, Any]:
+    def get_queue_stats(db: Session) -> dict[str, Any]:
         """Get processing queue statistics."""
         total = db.query(ProcessingQueue).count()
         by_status = (
@@ -790,7 +788,7 @@ class QueueQueries:
         return count
 
     @staticmethod
-    def get_by_document_id(db: Session, document_id: int) -> Optional[ProcessingQueue]:
+    def get_by_document_id(db: Session, document_id: int) -> ProcessingQueue | None:
         """Get queue entry by document ID (via document path lookup)."""
         # First get the document to find its path
         document = db.query(Document).filter(Document.id == document_id).first()
@@ -805,7 +803,7 @@ class QueueQueries:
         )
 
     @staticmethod
-    def get_by_file_path(db: Session, file_path: str) -> Optional[ProcessingQueue]:
+    def get_by_file_path(db: Session, file_path: str) -> ProcessingQueue | None:
         """Get queue entry by file path."""
         return (
             db.query(ProcessingQueue)
@@ -814,7 +812,7 @@ class QueueQueries:
         )
 
     @staticmethod
-    def get_queue_statistics(db: Session) -> Dict[str, int]:
+    def get_queue_statistics(db: Session) -> dict[str, int]:
         """Get queue statistics by status."""
         stats = (
             db.query(ProcessingQueue.status, func.count(ProcessingQueue.id))

@@ -5,19 +5,18 @@ Implements the semantic_search, hybrid_search, and find_similar MCP tools.
 """
 
 import logging
-from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from pdf_to_markdown_mcp.models.request import (
-    SemanticSearchRequest,
-    HybridSearchRequest,
-    FindSimilarRequest,
-)
-from pdf_to_markdown_mcp.models.response import SearchResponse, ErrorResponse, ErrorType
-from pdf_to_markdown_mcp.db.session import get_db
 from pdf_to_markdown_mcp.core.search_engine import SearchEngine
+from pdf_to_markdown_mcp.db.session import get_db
+from pdf_to_markdown_mcp.models.request import (
+    FindSimilarRequest,
+    HybridSearchRequest,
+    SemanticSearchRequest,
+)
+from pdf_to_markdown_mcp.models.response import ErrorResponse, ErrorType, SearchResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -70,7 +69,7 @@ async def semantic_search(
             status_code=400,
             detail=ErrorResponse(
                 error=ErrorType.VALIDATION,
-                message=f"Invalid search parameters: {str(e)}",
+                message=f"Invalid search parameters: {e!s}",
             ).dict(),
         )
 
@@ -79,7 +78,7 @@ async def semantic_search(
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
-                error=ErrorType.EMBEDDING, message=f"Search failed: {str(e)}"
+                error=ErrorType.EMBEDDING, message=f"Search failed: {e!s}"
             ).dict(),
         )
 
@@ -133,7 +132,7 @@ async def hybrid_search(
             status_code=400,
             detail=ErrorResponse(
                 error=ErrorType.VALIDATION,
-                message=f"Invalid search parameters: {str(e)}",
+                message=f"Invalid search parameters: {e!s}",
             ).dict(),
         )
 
@@ -142,7 +141,7 @@ async def hybrid_search(
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
-                error=ErrorType.EMBEDDING, message=f"Hybrid search failed: {str(e)}"
+                error=ErrorType.EMBEDDING, message=f"Hybrid search failed: {e!s}"
             ).dict(),
         )
 
@@ -193,7 +192,7 @@ async def find_similar_documents(
             status_code=400,
             detail=ErrorResponse(
                 error=ErrorType.VALIDATION,
-                message=f"Invalid similarity search parameters: {str(e)}",
+                message=f"Invalid similarity search parameters: {e!s}",
             ).dict(),
         )
 
@@ -202,7 +201,7 @@ async def find_similar_documents(
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
-                error=ErrorType.DATABASE, message=f"Similarity search failed: {str(e)}"
+                error=ErrorType.DATABASE, message=f"Similarity search failed: {e!s}"
             ).dict(),
         )
 
@@ -213,7 +212,7 @@ async def find_similar_documents(
 @router.get("/search/suggestions")
 async def get_search_suggestions(
     query: str, limit: int = 5, db: Session = Depends(get_db)
-) -> List[str]:
+) -> list[str]:
     """
     Get search query suggestions based on existing content.
 
@@ -221,8 +220,8 @@ async def get_search_suggestions(
     """
     try:
         # Get document titles and content for suggestions
-        from pdf_to_markdown_mcp.db.models import Document, DocumentContent
-        from sqlalchemy import func
+
+        from pdf_to_markdown_mcp.db.models import Document
 
         suggestions = []
 
@@ -264,7 +263,7 @@ async def get_search_suggestions(
             status_code=500,
             detail=ErrorResponse(
                 error=ErrorType.SYSTEM,
-                message=f"Failed to generate suggestions: {str(e)}",
+                message=f"Failed to generate suggestions: {e!s}",
             ).dict(),
         )
 
@@ -275,13 +274,13 @@ async def get_search_stats(db: Session = Depends(get_db)) -> dict:
     Get search-related statistics and corpus information.
     """
     try:
-        from pdf_to_markdown_mcp.db.queries import DocumentQueries
-        from pdf_to_markdown_mcp.db.models import (
-            Document,
-            DocumentEmbedding,
-            DocumentContent,
-        )
         from sqlalchemy import func, text
+
+        from pdf_to_markdown_mcp.db.models import (
+            DocumentContent,
+            DocumentEmbedding,
+        )
+        from pdf_to_markdown_mcp.db.queries import DocumentQueries
 
         # Get document statistics
         doc_stats = DocumentQueries.get_statistics(db)
@@ -330,6 +329,6 @@ async def get_search_stats(db: Session = Depends(get_db)) -> dict:
             status_code=500,
             detail=ErrorResponse(
                 error=ErrorType.DATABASE,
-                message=f"Failed to retrieve search statistics: {str(e)}",
+                message=f"Failed to retrieve search statistics: {e!s}",
             ).dict(),
         )

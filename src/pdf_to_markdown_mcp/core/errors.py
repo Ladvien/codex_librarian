@@ -21,19 +21,16 @@ CORE-006 Implementation - Security Auditor
 """
 
 import asyncio
-import time
-import hashlib
 import logging
-import uuid
-from datetime import datetime, timedelta
-from enum import Enum, auto
-from typing import Dict, Any, Optional, List, Union, Callable, TypeVar, Generic
-from dataclasses import dataclass, field
-from abc import ABC, abstractmethod
-from contextlib import asynccontextmanager
-import functools
 import threading
+import time
+import uuid
 from collections import defaultdict, deque
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum, auto
+from typing import Any, TypeVar
 
 # Type variables for generic retry mechanisms
 T = TypeVar("T")
@@ -121,11 +118,11 @@ class PDFToMarkdownError(Exception):
     def __init__(
         self,
         message: str,
-        error_code: Optional[str] = None,
-        correlation_id: Optional[str] = None,
-        internal_details: Optional[str] = None,
-        user_message: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        error_code: str | None = None,
+        correlation_id: str | None = None,
+        internal_details: str | None = None,
+        user_message: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ):
         super().__init__(message)
         self.message = message
@@ -135,13 +132,13 @@ class PDFToMarkdownError(Exception):
         self.user_message = user_message  # Pre-approved safe message
         self.metadata = metadata or {}
         self.timestamp = datetime.utcnow()
-        self.sensitive_data: List[str] = []  # Track sensitive data to redact
+        self.sensitive_data: list[str] = []  # Track sensitive data to redact
 
     def get_user_message(self) -> str:
         """Get sanitized message safe for user consumption."""
         return self.user_message or sanitize_error_for_user(self)
 
-    def to_structured_log(self) -> Dict[str, Any]:
+    def to_structured_log(self) -> dict[str, Any]:
         """Convert to structured log format with sensitive data removed."""
         log_data = {
             "error_type": self.__class__.__name__,
@@ -155,7 +152,7 @@ class PDFToMarkdownError(Exception):
         # Never include internal_details in logs
         return log_data
 
-    def _sanitize_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+    def _sanitize_metadata(self, metadata: dict[str, Any]) -> dict[str, Any]:
         """Remove sensitive information from metadata."""
         sanitized = {}
         sensitive_keys = {
@@ -208,7 +205,7 @@ class SecurityError(PDFToMarkdownError):
 class AuthenticationError(SecurityError):
     """Authentication failures. Monitor for potential attacks."""
 
-    def __init__(self, message: str, user_identifier: Optional[str] = None, **kwargs):
+    def __init__(self, message: str, user_identifier: str | None = None, **kwargs):
         super().__init__(
             message, security_event_type="authentication_failure", **kwargs
         )
@@ -219,7 +216,7 @@ class AuthenticationError(SecurityError):
 class AuthorizationError(SecurityError):
     """Authorization failures. Monitor for privilege escalation attempts."""
 
-    def __init__(self, message: str, resource: Optional[str] = None, **kwargs):
+    def __init__(self, message: str, resource: str | None = None, **kwargs):
         super().__init__(message, security_event_type="authorization_failure", **kwargs)
         self.resource = resource
 
@@ -230,8 +227,8 @@ class InputValidationError(SecurityError):
     def __init__(
         self,
         message: str,
-        input_value: Optional[str] = None,
-        validation_rule: Optional[str] = None,
+        input_value: str | None = None,
+        validation_rule: str | None = None,
         **kwargs,
     ):
         super().__init__(message, security_event_type="validation_failure", **kwargs)
@@ -241,7 +238,7 @@ class InputValidationError(SecurityError):
         # Check for potential injection attempts
         if input_value and self._detect_injection_attempt(input_value):
             logger.error(
-                f"Potential injection attempt detected",
+                "Potential injection attempt detected",
                 extra={
                     "security_alert": True,
                     "validation_rule": validation_rule,
@@ -276,7 +273,7 @@ class RateLimitError(SecurityError):
     def __init__(
         self,
         message: str,
-        user_id: Optional[str] = None,
+        user_id: str | None = None,
         retry_after: int = 60,
         **kwargs,
     ):
@@ -284,7 +281,7 @@ class RateLimitError(SecurityError):
         self.user_id = user_id
         self.retry_after = retry_after
 
-    def get_security_headers(self) -> Dict[str, str]:
+    def get_security_headers(self) -> dict[str, str]:
         """Get security headers for HTTP responses."""
         return {
             "Retry-After": str(self.retry_after),
@@ -301,7 +298,6 @@ class RateLimitError(SecurityError):
 class ValidationError(PDFToMarkdownError):
     """Input validation errors. Never retried."""
 
-    pass
 
 
 class TransientError(PDFToMarkdownError):
@@ -315,13 +311,12 @@ class TransientError(PDFToMarkdownError):
 class PermanentError(PDFToMarkdownError):
     """Permanent errors that should never be retried."""
 
-    pass
 
 
 class ProcessingError(PDFToMarkdownError):
     """PDF processing errors. May be retryable depending on cause."""
 
-    def __init__(self, message: str, file_path: Optional[str] = None, **kwargs):
+    def __init__(self, message: str, file_path: str | None = None, **kwargs):
         super().__init__(message, **kwargs)
         self.file_path = file_path
 
@@ -329,7 +324,7 @@ class ProcessingError(PDFToMarkdownError):
 class OCRError(ProcessingError):
     """OCR processing errors. Usually retryable."""
 
-    def __init__(self, message: str, language: Optional[str] = None, **kwargs):
+    def __init__(self, message: str, language: str | None = None, **kwargs):
         super().__init__(message, **kwargs)
         self.language = language
 
@@ -340,8 +335,8 @@ class EmbeddingError(TransientError):
     def __init__(
         self,
         message: str,
-        provider: Optional[str] = None,
-        model: Optional[str] = None,
+        provider: str | None = None,
+        model: str | None = None,
         **kwargs,
     ):
         super().__init__(message, **kwargs)
@@ -352,7 +347,7 @@ class EmbeddingError(TransientError):
 class DatabaseError(TransientError):
     """Database errors. Usually retryable with backoff."""
 
-    def __init__(self, message: str, operation: Optional[str] = None, **kwargs):
+    def __init__(self, message: str, operation: str | None = None, **kwargs):
         super().__init__(message, **kwargs)
         self.operation = operation
 
@@ -360,7 +355,7 @@ class DatabaseError(TransientError):
 class ResourceError(TransientError):
     """Resource exhaustion errors. Retryable with longer backoff."""
 
-    def __init__(self, message: str, resource_type: Optional[str] = None, **kwargs):
+    def __init__(self, message: str, resource_type: str | None = None, **kwargs):
         super().__init__(message, **kwargs)
         self.resource_type = resource_type
 
@@ -368,13 +363,11 @@ class ResourceError(TransientError):
 class ConfigurationError(PermanentError):
     """Configuration errors. Not retryable until config is fixed."""
 
-    pass
 
 
 class TimeoutError(TransientError):
     """Operation timeout errors. Usually retryable."""
 
-    pass
 
 
 class CircuitBreakerError(TransientError):
@@ -450,7 +443,7 @@ class RetryConfig:
     max_delay: float = 60.0
     backoff_multiplier: float = 2.0
     jitter: bool = True
-    timeout: Optional[float] = None
+    timeout: float | None = None
 
 
 class ExponentialBackoffRetry:
@@ -485,9 +478,7 @@ def get_retry_strategy(error: Exception) -> RetryConfig:
     """Get appropriate retry configuration based on error type."""
     category = categorize_error(error)
 
-    if category == ErrorCategory.VALIDATION:
-        return RetryConfig(max_retries=0)
-    elif category == ErrorCategory.SECURITY:
+    if category == ErrorCategory.VALIDATION or category == ErrorCategory.SECURITY:
         return RetryConfig(max_retries=0)
     elif category == ErrorCategory.RATE_LIMIT:
         # Special handling for rate limits
@@ -535,7 +526,7 @@ class CircuitBreaker:
         self._state = CircuitBreakerState.CLOSED
         self._failure_count = 0
         self._success_count = 0
-        self._last_failure_time: Optional[float] = None
+        self._last_failure_time: float | None = None
         self._lock = threading.Lock()
 
     @property
@@ -560,7 +551,7 @@ class CircuitBreaker:
             result = func()
             self._on_success()
             return result
-        except Exception as e:
+        except Exception:
             self._on_failure()
             raise
 
@@ -607,7 +598,7 @@ class RetryManager:
     """Manages retry logic with circuit breakers and error tracking."""
 
     def __init__(self):
-        self.circuit_breakers: Dict[str, CircuitBreaker] = {}
+        self.circuit_breakers: dict[str, CircuitBreaker] = {}
         self.error_tracker = None  # Will be set later to avoid circular imports
 
     def get_circuit_breaker(self, service_name: str) -> CircuitBreaker:
@@ -620,8 +611,8 @@ class RetryManager:
         self,
         operation: Callable[[], T],
         operation_name: str,
-        service_name: Optional[str] = None,
-        retry_config: Optional[RetryConfig] = None,
+        service_name: str | None = None,
+        retry_config: RetryConfig | None = None,
     ) -> T:
         """Execute operation with retry logic and circuit breaker protection."""
         last_error = None
@@ -635,11 +626,10 @@ class RetryManager:
                         return await circuit_breaker.call(operation)
                     else:
                         return circuit_breaker.call(operation)
+                elif asyncio.iscoroutinefunction(operation):
+                    return await operation()
                 else:
-                    if asyncio.iscoroutinefunction(operation):
-                        return await operation()
-                    else:
-                        return operation()
+                    return operation()
 
             except Exception as e:
                 last_error = e
@@ -685,10 +675,10 @@ class ErrorMetrics:
     """Error metrics for monitoring and alerting."""
 
     total_errors: int = 0
-    errors_by_type: Dict[str, int] = field(default_factory=dict)
-    errors_by_category: Dict[str, int] = field(default_factory=dict)
-    errors_by_operation: Dict[str, int] = field(default_factory=dict)
-    error_rate_by_user: Dict[str, float] = field(default_factory=dict)
+    errors_by_type: dict[str, int] = field(default_factory=dict)
+    errors_by_category: dict[str, int] = field(default_factory=dict)
+    errors_by_operation: dict[str, int] = field(default_factory=dict)
+    error_rate_by_user: dict[str, float] = field(default_factory=dict)
 
     def should_rate_limit(self, user_id: str, threshold: float = 0.5) -> bool:
         """Check if user should be rate limited based on error rate."""
@@ -713,7 +703,7 @@ class ErrorTracker:
         error: Exception,
         operation: str,
         component: str = "unknown",
-        user_context: Optional[Dict[str, Any]] = None,
+        user_context: dict[str, Any] | None = None,
     ):
         """Record error for tracking and metrics."""
         now = time.time()
@@ -837,7 +827,7 @@ class TimeoutManager:
         self.timeout_seconds = timeout_seconds
 
     def execute_with_timeout(
-        self, operation: Callable[[], T], resource_manager: Optional[Any] = None
+        self, operation: Callable[[], T], resource_manager: Any | None = None
     ) -> T:
         """Execute operation with timeout and resource cleanup."""
         import signal
@@ -857,7 +847,7 @@ class TimeoutManager:
             result = operation()
             signal.alarm(0)  # Cancel timeout
             return result
-        except Exception as e:
+        except Exception:
             signal.alarm(0)  # Cancel timeout
             if resource_manager and hasattr(resource_manager, "cleanup"):
                 resource_manager.cleanup()
@@ -868,9 +858,9 @@ class TimeoutManager:
 class PartialSuccessResult:
     """Result of batch operations with partial success."""
 
-    successful_items: List[Any]
-    failed_items: List[Any]
-    errors: List[Exception]
+    successful_items: list[Any]
+    failed_items: list[Any]
+    errors: list[Exception]
     success_count: int
     error_count: int
     success_rate: float
@@ -881,8 +871,8 @@ class PartialSuccessHandler:
 
     def handle_batch_operation(
         self,
-        items: List[Any],
-        processor: Callable[[List[Any]], tuple[List[Any], List[Exception]]],
+        items: list[Any],
+        processor: Callable[[list[Any]], tuple[list[Any], list[Exception]]],
         min_success_rate: float = 0.5,
     ) -> PartialSuccessResult:
         """Handle batch operation with partial success support."""
@@ -920,16 +910,16 @@ class DeadLetterQueueManager:
     """Manages failed tasks for later recovery."""
 
     def __init__(self):
-        self.failed_tasks: List[Dict[str, Any]] = []
+        self.failed_tasks: list[dict[str, Any]] = []
         self._lock = threading.Lock()
 
-    def add_failed_task(self, task_data: Dict[str, Any]):
+    def add_failed_task(self, task_data: dict[str, Any]):
         """Add failed task to dead letter queue."""
         with self._lock:
             task_data["dlq_timestamp"] = datetime.utcnow().isoformat()
             self.failed_tasks.append(task_data)
 
-    def get_failed_tasks(self) -> List[Dict[str, Any]]:
+    def get_failed_tasks(self) -> list[dict[str, Any]]:
         """Get all failed tasks."""
         with self._lock:
             return self.failed_tasks.copy()
@@ -951,7 +941,7 @@ class RecoveryStrategy:
     strategy_type: str
     retry_delay: int = 0
     max_attempts: int = 0
-    recovery_action: Optional[str] = None
+    recovery_action: str | None = None
 
 
 class RecoveryStrategyManager:
@@ -1005,7 +995,7 @@ def track_error(
     error: Exception,
     operation: str,
     component: str = "unknown",
-    user_context: Optional[Dict[str, Any]] = None,
+    user_context: dict[str, Any] | None = None,
 ):
     """Convenience function to track errors globally."""
     global_error_tracker.record_error(error, operation, component, user_context)
@@ -1014,8 +1004,8 @@ def track_error(
 async def retry_async_operation(
     operation: Callable[[], T],
     operation_name: str,
-    service_name: Optional[str] = None,
-    retry_config: Optional[RetryConfig] = None,
+    service_name: str | None = None,
+    retry_config: RetryConfig | None = None,
 ) -> T:
     """Convenience function for retrying async operations."""
     return await global_retry_manager.execute_with_retry(
@@ -1031,7 +1021,6 @@ async def retry_async_operation(
 def validate_file_path(file_path: str) -> str:
     """Validate and sanitize file path to prevent directory traversal."""
     import os
-    from pathlib import Path
 
     if not file_path:
         raise InputValidationError(

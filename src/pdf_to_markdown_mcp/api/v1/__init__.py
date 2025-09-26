@@ -7,8 +7,8 @@ organized in a modular structure.
 
 from fastapi import APIRouter
 
+from pdf_to_markdown_mcp.api import config, convert, search, status
 from pdf_to_markdown_mcp.api.versioning import APIVersion, VersionedAPIRouter
-from pdf_to_markdown_mcp.api import convert, search, status, config
 
 
 def create_v1_router() -> APIRouter:
@@ -43,4 +43,4 @@ def create_v1_router() -> APIRouter:
 # Export the V1 router
 v1_router = create_v1_router()
 
-__all__ = ["v1_router", "create_v1_router"]
+__all__ = ["create_v1_router", "v1_router"]

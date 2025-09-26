@@ -5,36 +5,30 @@ This module defines all background tasks for PDF processing, embedding generatio
 and system maintenance with proper error handling and progress tracking.
 """
 
-import os
-import time
 import hashlib
 import logging
+import os
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Union
-from celery import current_task
-from celery.exceptions import Retry, WorkerLostError
+from typing import Any
 
-from .celery import app
 from ..config import settings
 from ..core.errors import (
-    ValidationError,
-    ProcessingError,
-    EmbeddingError,
     DatabaseError,
-    TransientError,
+    EmbeddingError,
+    ProcessingError,
     ResourceError,
     SecurityError,
-    TimeoutError,
-    CircuitBreakerError,
-    global_error_tracker,
-    global_retry_manager,
-    track_error,
-    retry_async_operation,
-    get_retry_strategy,
-    sanitize_log_message,
+    TransientError,
+    ValidationError,
     create_correlation_id,
+    get_retry_strategy,
+    global_retry_manager,
+    sanitize_log_message,
+    track_error,
 )
+from .celery import app
 
 logger = logging.getLogger(__name__)
 
@@ -108,8 +102,8 @@ class ProgressTracker:
     def _recover_progress_state(self):
         """Attempt to recover progress state from Redis on worker restart."""
         try:
-            from .celery import app as celery_app
             from ..core.circuit_breaker import get_redis_cache_circuit_breaker
+            from .celery import app as celery_app
 
             circuit_breaker = get_redis_cache_circuit_breaker()
 
@@ -140,8 +134,8 @@ class ProgressTracker:
     def _persist_progress_state(self, progress_meta: dict):
         """Persist progress state to Redis for recovery."""
         try:
-            from .celery import app as celery_app
             from ..core.circuit_breaker import get_redis_cache_circuit_breaker
+            from .celery import app as celery_app
 
             circuit_breaker = get_redis_cache_circuit_breaker()
 
@@ -173,8 +167,8 @@ class ProgressTracker:
     def _cleanup_progress_state(self):
         """Clean up persistent progress state after task completion."""
         try:
-            from .celery import app as celery_app
             from ..core.circuit_breaker import get_redis_cache_circuit_breaker
+            from .celery import app as celery_app
 
             circuit_breaker = get_redis_cache_circuit_breaker()
 
@@ -192,8 +186,8 @@ def process_pdf_document(
     self,
     document_id: int,
     file_path: str,
-    processing_options: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+    processing_options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """
     Process PDF document with MinerU and coordinate the complete pipeline.
 
@@ -248,7 +242,7 @@ def process_pdf_document(
         try:
             validated_path = validate_file_path(str(file_path))
             file_path = Path(validated_path)
-        except Exception as path_error:
+        except Exception:
             error = SecurityError(
                 "Invalid file path detected",
                 correlation_id=correlation_id,
@@ -281,7 +275,7 @@ def process_pdf_document(
         max_size = settings.processing.max_file_size_mb * 1024 * 1024
         if file_size > max_size:
             error = ResourceError(
-                f"File size ({file_size / (1024*1024):.1f}MB) exceeds limit "
+                f"File size ({file_size / (1024 * 1024):.1f}MB) exceeds limit "
                 f"({settings.processing.max_file_size_mb}MB)",
                 resource_type="file_size",
                 correlation_id=correlation_id,
@@ -294,8 +288,8 @@ def process_pdf_document(
 
         # Import services here to avoid circular imports
         from ..services.database import get_db_session
-        from ..services.mineru import MinerUService
         from ..services.embeddings import EmbeddingService
+        from ..services.mineru import MinerUService
 
         # Initialize services
         progress.update(message="Initializing processing services")
@@ -556,7 +550,7 @@ def process_pdf_document(
 
     except SecurityError as e:
         logger.error(
-            f"Security error in PDF processing",
+            "Security error in PDF processing",
             extra={
                 "correlation_id": correlation_id,
                 "security_event": True,
@@ -617,7 +611,7 @@ def process_pdf_document(
 
     except Exception as e:
         logger.exception(
-            f"Unexpected error in PDF processing",
+            "Unexpected error in PDF processing",
             extra={
                 "correlation_id": correlation_id,
                 "document_id": document_id,
@@ -690,7 +684,7 @@ def process_pdf_document(
                     )
         except Exception as db_error:
             logger.error(
-                f"Failed to update document error status",
+                "Failed to update document error status",
                 extra={
                     "correlation_id": correlation_id,
                     "document_id": document_id,
@@ -711,10 +705,10 @@ def generate_embeddings(
     self,
     document_id: int,
     content: str,
-    chunks: List[Dict[str, Any]],
-    correlation_id: Optional[str] = None,
-    parent_task_id: Optional[str] = None,
-) -> Dict[str, Any]:
+    chunks: list[dict[str, Any]],
+    correlation_id: str | None = None,
+    parent_task_id: str | None = None,
+) -> dict[str, Any]:
     """
     Generate embeddings for document chunks with enhanced error handling and progress tracking.
 
@@ -773,8 +767,8 @@ def generate_embeddings(
 
         # Import services with error handling
         try:
-            from ..services.embeddings import create_embedding_service
             from ..services.database import get_db_session
+            from ..services.embeddings import create_embedding_service
         except ImportError as e:
             error = ProcessingError(
                 "Failed to import required services",
@@ -817,19 +811,19 @@ def generate_embeddings(
                 # Generate embeddings for batch with retry
                 embeddings = global_retry_manager.execute_with_retry(
                     lambda: embedding_service.generate_embeddings(batch_texts),
-                    operation_name=f"embedding_generation_batch_{i//batch_size + 1}",
+                    operation_name=f"embedding_generation_batch_{i // batch_size + 1}",
                     correlation_id=correlation_id,
                 )
 
                 if not embeddings or len(embeddings) != len(batch_texts):
                     raise EmbeddingError(
-                        f"Embedding generation returned invalid result for batch {i//batch_size + 1}",
+                        f"Embedding generation returned invalid result for batch {i // batch_size + 1}",
                         correlation_id=correlation_id,
                         error_code="EMB005",
                     )
 
                 # Prepare embedding records
-                for chunk, embedding in zip(batch_chunks, embeddings):
+                for chunk, embedding in zip(batch_chunks, embeddings, strict=False):
                     embedding_record = {
                         "document_id": document_id,
                         "page_number": chunk.get("page_number"),
@@ -845,13 +839,13 @@ def generate_embeddings(
 
                 progress.update(
                     current=1 + (i // batch_size + 1),
-                    message=f"Processed batch {i//batch_size + 1}/{(len(chunks)-1)//batch_size + 1} "
+                    message=f"Processed batch {i // batch_size + 1}/{(len(chunks) - 1) // batch_size + 1} "
                     f"({embeddings_generated}/{len(chunks)} embeddings)",
                 )
 
             except Exception as batch_error:
                 logger.error(
-                    f"Error processing embedding batch {i//batch_size + 1}: {batch_error}",
+                    f"Error processing embedding batch {i // batch_size + 1}: {batch_error}",
                     extra={
                         "correlation_id": correlation_id,
                         "document_id": document_id,
@@ -979,10 +973,10 @@ def generate_embeddings(
 def process_document_images(
     self,
     document_id: int,
-    images: List[Dict[str, Any]],
-    correlation_id: Optional[str] = None,
-    parent_task_id: Optional[str] = None,
-) -> Dict[str, Any]:
+    images: list[dict[str, Any]],
+    correlation_id: str | None = None,
+    parent_task_id: str | None = None,
+) -> dict[str, Any]:
     """
     Process and store document images with OCR and embeddings.
 
@@ -1057,7 +1051,7 @@ def process_document_images(
 
 
 @app.task(bind=True)
-def cleanup_temp_files(self) -> Dict[str, Any]:
+def cleanup_temp_files(self) -> dict[str, Any]:
     """
     Clean up temporary files older than specified threshold.
 
@@ -1105,7 +1099,7 @@ def cleanup_temp_files(self) -> Dict[str, Any]:
 
 
 @app.task(bind=True)
-def health_check(self) -> Dict[str, Any]:
+def health_check(self) -> dict[str, Any]:
     """
     Perform health check of worker and connected services.
 
@@ -1183,8 +1177,8 @@ def health_check(self) -> Dict[str, Any]:
 # Task for handling batch processing
 @app.task(bind=True)
 def process_pdf_batch(
-    self, file_paths: List[str], processing_options: Optional[Dict[str, Any]] = None
-) -> Dict[str, Any]:
+    self, file_paths: list[str], processing_options: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """
     Process multiple PDF files as a batch.
 
@@ -1281,7 +1275,7 @@ def _calculate_file_hash(file_path: Path) -> str:
 
 
 def _validate_processing_result(
-    processing_result: Dict[str, Any], correlation_id: str
+    processing_result: dict[str, Any], correlation_id: str
 ) -> None:
     """
     Validate MinerU processing result to ensure it contains expected data.
@@ -1387,7 +1381,7 @@ def _validate_processing_result(
 
 
 @app.task(bind=True, max_retries=2)
-def cleanup_task_results(self) -> Dict[str, Any]:
+def cleanup_task_results(self) -> dict[str, Any]:
     """
     Clean up expired task results to prevent Redis memory leak.
 
@@ -1398,8 +1392,8 @@ def cleanup_task_results(self) -> Dict[str, Any]:
         Dict containing cleanup statistics
     """
     try:
-        from .celery import app as celery_app
         from ..core.circuit_breaker import get_redis_result_backend_circuit_breaker
+        from .celery import app as celery_app
 
         circuit_breaker = get_redis_result_backend_circuit_breaker()
         results_cleaned = 0
@@ -1499,7 +1493,7 @@ def cleanup_task_results(self) -> Dict[str, Any]:
 
 
 @app.task(bind=True, max_retries=1)
-def monitor_redis_connections(self) -> Dict[str, Any]:
+def monitor_redis_connections(self) -> dict[str, Any]:
     """
     Monitor Redis connection pool utilization and circuit breaker status.
 
@@ -1510,12 +1504,11 @@ def monitor_redis_connections(self) -> Dict[str, Any]:
         Dict containing connection monitoring data
     """
     try:
+        from ..core.circuit_breaker import redis_circuit_breaker_manager
         from .celery import (
-            app as celery_app,
             get_redis_connection_info,
             get_worker_health,
         )
-        from ..core.circuit_breaker import redis_circuit_breaker_manager
 
         monitoring_data = {
             "timestamp": datetime.utcnow().isoformat(),

@@ -6,9 +6,9 @@ Provides intelligent text segmentation for optimal embedding generation.
 
 import logging
 import re
-from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +30,8 @@ class TextChunk:
     start_index: int
     end_index: int
     chunk_index: int
-    page_number: Optional[int] = None
-    metadata: Optional[Dict[str, Any]] = None
+    page_number: int | None = None
+    metadata: dict[str, Any] | None = None
 
     @property
     def char_count(self) -> int:
@@ -81,11 +81,11 @@ class TextChunker:
     async def create_chunks(
         self,
         text: str,
-        chunk_size: Optional[int] = None,
-        chunk_overlap: Optional[int] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        chunk_size: int | None = None,
+        chunk_overlap: int | None = None,
+        metadata: dict[str, Any] | None = None,
         preserve_formatting: bool = True,
-    ) -> List[TextChunk]:
+    ) -> list[TextChunk]:
         """
         Create text chunks from input text.
 
@@ -171,7 +171,7 @@ class TextChunker:
 
     async def _create_chunks_with_boundaries(
         self, text: str, chunk_size: int, overlap: int, boundary_type: ChunkBoundary
-    ) -> List[TextChunk]:
+    ) -> list[TextChunk]:
         """
         Create chunks respecting text boundaries.
 
@@ -233,7 +233,7 @@ class TextChunker:
 
         return chunks
 
-    def _find_boundaries(self, text: str, boundary_type: ChunkBoundary) -> List[int]:
+    def _find_boundaries(self, text: str, boundary_type: ChunkBoundary) -> list[int]:
         """
         Find boundary positions in text.
 
@@ -270,7 +270,7 @@ class TextChunker:
         return sorted(set(boundaries))
 
     def _find_best_boundary(
-        self, boundaries: List[int], target_pos: int, min_pos: int, max_chunk_size: int
+        self, boundaries: list[int], target_pos: int, min_pos: int, max_chunk_size: int
     ) -> int:
         """
         Find the best boundary near target position.
@@ -300,7 +300,7 @@ class TextChunker:
         return best_boundary
 
     def _find_overlap_boundary(
-        self, boundaries: List[int], overlap_start: int, chunk_end: int
+        self, boundaries: list[int], overlap_start: int, chunk_end: int
     ) -> int:
         """
         Find appropriate boundary for overlap start position.
@@ -325,8 +325,8 @@ class TextChunker:
         return overlap_boundaries[0]
 
     async def merge_chunks(
-        self, chunks: List[TextChunk], max_merged_size: int = 2000
-    ) -> List[TextChunk]:
+        self, chunks: list[TextChunk], max_merged_size: int = 2000
+    ) -> list[TextChunk]:
         """
         Merge small adjacent chunks if they would fit within size limit.
 
@@ -375,7 +375,7 @@ class TextChunker:
         logger.info(f"Merged {len(chunks)} chunks into {len(merged_chunks)} chunks")
         return merged_chunks
 
-    def get_chunk_statistics(self, chunks: List[TextChunk]) -> Dict[str, Any]:
+    def get_chunk_statistics(self, chunks: list[TextChunk]) -> dict[str, Any]:
         """
         Calculate statistics for a list of chunks.
 
@@ -409,7 +409,7 @@ class TextChunker:
             "chunk_size_std": self._calculate_std_dev(char_counts),
         }
 
-    def _calculate_std_dev(self, values: List[int]) -> float:
+    def _calculate_std_dev(self, values: list[int]) -> float:
         """Calculate standard deviation of values."""
         if len(values) <= 1:
             return 0.0

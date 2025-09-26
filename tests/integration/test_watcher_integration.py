@@ -1,11 +1,11 @@
 """Integration tests for file system monitoring."""
 
-import pytest
-from unittest.mock import Mock
-import tempfile
-from pathlib import Path
-import time
 import shutil
+import tempfile
+import time
+from pathlib import Path
+
+import pytest
 
 from pdf_to_markdown_mcp.core.watcher import DirectoryWatcher, WatcherConfig
 
@@ -26,11 +26,9 @@ class MockTaskQueue:
             metadata: File validation metadata
         """
         self.call_count += 1
-        self.queued_files.append({
-            'file_path': file_path,
-            'metadata': metadata,
-            'timestamp': time.time()
-        })
+        self.queued_files.append(
+            {"file_path": file_path, "metadata": metadata, "timestamp": time.time()}
+        )
 
 
 @pytest.mark.integration
@@ -56,7 +54,7 @@ class TestWatcherIntegration:
             watch_directories=[temp_directory],
             recursive=True,
             stability_timeout=0.1,  # Short timeout for testing
-            max_file_size_mb=1  # Small limit for testing
+            max_file_size_mb=1,  # Small limit for testing
         )
 
     @pytest.fixture
@@ -76,7 +74,7 @@ class TestWatcherIntegration:
         """
         file_path = Path(directory) / filename
         # Create a minimal PDF header to pass basic validation
-        with open(file_path, 'wb') as f:
+        with open(file_path, "wb") as f:
             f.write(b"%PDF-1.4\n")
             f.write(b"1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n")
             f.write(b"2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n")
@@ -101,7 +99,9 @@ class TestWatcherIntegration:
         watcher.stop()
         assert not watcher.is_running()
 
-    def test_file_detection_and_processing(self, watcher, mock_task_queue, temp_directory):
+    def test_file_detection_and_processing(
+        self, watcher, mock_task_queue, temp_directory
+    ):
         """Test that watcher detects new PDF files and queues them for processing."""
         # Given (Arrange)
         watcher.start()
@@ -138,12 +138,12 @@ class TestWatcherIntegration:
             status = watcher.get_status()
 
             # Then (Assert)
-            assert status['is_running'] is True
-            assert temp_directory in status['watch_directories']
-            assert status['recursive'] is True
-            assert '*.pdf' in status['patterns']
-            assert status['stability_timeout'] == 0.1
-            assert status['max_file_size_mb'] == 1
+            assert status["is_running"] is True
+            assert temp_directory in status["watch_directories"]
+            assert status["recursive"] is True
+            assert "*.pdf" in status["patterns"]
+            assert status["stability_timeout"] == 0.1
+            assert status["max_file_size_mb"] == 1
 
         finally:
             watcher.stop()
@@ -174,7 +174,7 @@ class TestWatcherIntegration:
         new_config = WatcherConfig(
             watch_directories=["/tmp/new_test"],
             stability_timeout=10.0,
-            patterns=["*.pdf", "*.docx"]
+            patterns=["*.pdf", "*.docx"],
         )
 
         # When (Act)
@@ -190,8 +190,7 @@ class TestWatcherIntegration:
         """Test watcher behavior with non-existent watch directory."""
         # Given (Arrange)
         config = WatcherConfig(
-            watch_directories=["/nonexistent/directory"],
-            recursive=True
+            watch_directories=["/nonexistent/directory"], recursive=True
         )
         watcher = DirectoryWatcher(mock_task_queue, config)
 
@@ -214,7 +213,7 @@ class TestWatcherIntegration:
         try:
             # When (Act) - Create non-PDF file
             txt_file = Path(temp_directory) / "document.txt"
-            with open(txt_file, 'w') as f:
+            with open(txt_file, "w") as f:
                 f.write("This is not a PDF")
 
             # Create PDF file

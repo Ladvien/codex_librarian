@@ -5,37 +5,28 @@ This module tests all Pydantic models for validation,
 serialization, and edge cases following TDD principles.
 """
 
-import pytest
-from typing import Optional, List
-from pydantic import ValidationError
 import json
 
+import pytest
+from pydantic import ValidationError
+
+from src.pdf_to_markdown_mcp.models.document import (
+    DocumentContentModel,
+    DocumentEmbeddingModel,
+    DocumentModel,
+)
 from src.pdf_to_markdown_mcp.models.request import (
-    ConversionRequest,
     BatchConversionRequest,
-    SearchRequest,
+    ConversionRequest,
     HybridSearchRequest,
-    SimilarDocumentsRequest,
-    ConfigurationRequest,
     ProcessingOptions,
+    SearchRequest,
 )
 from src.pdf_to_markdown_mcp.models.response import (
     ConversionResponse,
-    BatchConversionResponse,
     SearchResponse,
     SearchResult,
-    HybridSearchResult,
-    StatusResponse,
-    HealthResponse,
-    ConfigurationResponse,
-    ProcessingMetadata,
 )
-from src.pdf_to_markdown_mcp.models.document import (
-    DocumentModel,
-    DocumentContentModel,
-    DocumentEmbeddingModel,
-)
-
 from tests.fixtures import (
     DocumentFactory,
     create_sample_embeddings,
@@ -108,7 +99,7 @@ class TestProcessingOptions:
         # Given
         invalid_data = {
             "chunk_size": 500,
-            "chunk_overlap": 600  # Larger than chunk_size
+            "chunk_overlap": 600,  # Larger than chunk_size
         }
 
         # When/Then
@@ -127,9 +118,7 @@ class TestConversionRequest:
         pdf_path = temp_directory / "test.pdf"
         pdf_path.write_bytes(b"dummy pdf content")
 
-        request_data = {
-            "file_path": str(pdf_path)
-        }
+        request_data = {"file_path": str(pdf_path)}
 
         # When
         request = ConversionRequest(**request_data)
@@ -151,8 +140,8 @@ class TestConversionRequest:
             "processing_options": {
                 "language": "fr",
                 "chunk_size": 1200,
-                "extract_tables": False
-            }
+                "extract_tables": False,
+            },
         }
 
         # When
@@ -168,9 +157,7 @@ class TestConversionRequest:
     def test_conversion_request_nonexistent_file(self):
         """Test ConversionRequest with non-existent file."""
         # Given
-        request_data = {
-            "file_path": "/nonexistent/file.pdf"
-        }
+        request_data = {"file_path": "/nonexistent/file.pdf"}
 
         # When/Then
         with pytest.raises(ValidationError) as exc_info:
@@ -184,9 +171,7 @@ class TestConversionRequest:
         txt_path = temp_directory / "test.txt"
         txt_path.write_text("not a pdf")
 
-        request_data = {
-            "file_path": str(txt_path)
-        }
+        request_data = {"file_path": str(txt_path)}
 
         # When/Then
         with pytest.raises(ValidationError) as exc_info:
@@ -200,10 +185,7 @@ class TestConversionRequest:
         pdf_path = temp_directory / "test.pdf"
         pdf_path.write_bytes(b"dummy pdf content")
 
-        request_data = {
-            "file_path": str(pdf_path),
-            "store_embeddings": True
-        }
+        request_data = {"file_path": str(pdf_path), "store_embeddings": True}
 
         # When
         request = ConversionRequest(**request_data)
@@ -228,10 +210,7 @@ class TestBatchConversionRequest:
             pdf_path.write_bytes(b"dummy pdf content")
             pdf_paths.append(str(pdf_path))
 
-        request_data = {
-            "file_paths": pdf_paths,
-            "store_embeddings": True
-        }
+        request_data = {"file_paths": pdf_paths, "store_embeddings": True}
 
         # When
         request = BatchConversionRequest(**request_data)
@@ -244,9 +223,7 @@ class TestBatchConversionRequest:
     def test_batch_conversion_request_empty_list(self):
         """Test BatchConversionRequest with empty file list."""
         # Given
-        request_data = {
-            "file_paths": []
-        }
+        request_data = {"file_paths": []}
 
         # When/Then
         with pytest.raises(ValidationError) as exc_info:
@@ -260,9 +237,7 @@ class TestBatchConversionRequest:
         pdf_path = temp_directory / "test.pdf"
         pdf_path.write_bytes(b"dummy pdf content")
 
-        request_data = {
-            "file_paths": [str(pdf_path), str(pdf_path), str(pdf_path)]
-        }
+        request_data = {"file_paths": [str(pdf_path), str(pdf_path), str(pdf_path)]}
 
         # When
         request = BatchConversionRequest(**request_data)
@@ -281,7 +256,7 @@ class TestBatchConversionRequest:
             "file_paths": [
                 str(valid_pdf),
                 "/nonexistent/file.pdf",  # Invalid
-                str(temp_directory / "another.pdf")  # Invalid (doesn't exist)
+                str(temp_directory / "another.pdf"),  # Invalid (doesn't exist)
             ]
         }
 
@@ -298,9 +273,7 @@ class TestSearchRequest:
     def test_search_request_minimal(self):
         """Test SearchRequest with minimal required fields."""
         # Given
-        request_data = {
-            "query": "machine learning algorithms"
-        }
+        request_data = {"query": "machine learning algorithms"}
 
         # When
         request = SearchRequest(**request_data)
@@ -318,7 +291,7 @@ class TestSearchRequest:
             "limit": 20,
             "threshold": 0.8,
             "document_ids": [1, 2, 3],
-            "language_filter": "en"
+            "language_filter": "en",
         }
 
         # When
@@ -373,9 +346,7 @@ class TestHybridSearchRequest:
     def test_hybrid_search_request_default_weights(self):
         """Test HybridSearchRequest with default weights."""
         # Given
-        request_data = {
-            "query": "artificial intelligence"
-        }
+        request_data = {"query": "artificial intelligence"}
 
         # When
         request = HybridSearchRequest(**request_data)
@@ -392,7 +363,7 @@ class TestHybridSearchRequest:
         request_data = {
             "query": "deep learning",
             "semantic_weight": 0.8,
-            "keyword_weight": 0.2
+            "keyword_weight": 0.2,
         }
 
         # When
@@ -408,7 +379,7 @@ class TestHybridSearchRequest:
         request_data = {
             "query": "test",
             "semantic_weight": 0.6,
-            "keyword_weight": 0.5  # Total = 1.1
+            "keyword_weight": 0.5,  # Total = 1.1
         }
 
         # When/Then
@@ -428,7 +399,7 @@ class TestConversionResponse:
             "success": True,
             "task_id": "task-123",
             "document_id": 1,
-            "message": "Processing started"
+            "message": "Processing started",
         }
 
         # When
@@ -444,10 +415,7 @@ class TestConversionResponse:
     def test_conversion_response_failure(self):
         """Test failed ConversionResponse."""
         # Given
-        response_data = {
-            "success": False,
-            "error": "File not found"
-        }
+        response_data = {"success": False, "error": "File not found"}
 
         # When
         response = ConversionResponse(**response_data)
@@ -466,14 +434,14 @@ class TestConversionResponse:
             "page_count": 5,
             "word_count": 1000,
             "language": "en",
-            "confidence": 0.95
+            "confidence": 0.95,
         }
 
         response_data = {
             "success": True,
             "task_id": "task-456",
             "document_id": 2,
-            "processing_metadata": metadata
+            "processing_metadata": metadata,
         }
 
         # When
@@ -498,15 +466,15 @@ class TestSearchResponse:
                 "chunk_text": "Machine learning is a subset of AI",
                 "similarity_score": 0.92,
                 "document_title": "AI Introduction",
-                "chunk_index": 0
+                "chunk_index": 0,
             },
             {
                 "document_id": 2,
                 "chunk_text": "Neural networks are powerful models",
                 "similarity_score": 0.85,
                 "document_title": "Neural Networks Guide",
-                "chunk_index": 1
-            }
+                "chunk_index": 1,
+            },
         ]
 
         response_data = {
@@ -514,7 +482,7 @@ class TestSearchResponse:
             "results": results,
             "total_results": 2,
             "query": "machine learning",
-            "search_time": 0.045
+            "search_time": 0.045,
         }
 
         # When
@@ -540,7 +508,7 @@ class TestSearchResponse:
             "success": True,
             "results": [],
             "total_results": 0,
-            "query": "nonexistent topic"
+            "query": "nonexistent topic",
         }
 
         # When
@@ -558,7 +526,7 @@ class TestSearchResponse:
             "success": False,
             "results": [],
             "total_results": 0,
-            "error": "Embedding service unavailable"
+            "error": "Embedding service unavailable",
         }
 
         # When
@@ -576,10 +544,7 @@ class TestDocumentModels:
     def test_document_model_creation(self):
         """Test DocumentModel creation and validation."""
         # Given
-        document_data = DocumentFactory.create(
-            file_name="test.pdf",
-            status="completed"
-        )
+        document_data = DocumentFactory.create(file_name="test.pdf", status="completed")
 
         # When
         document_model = DocumentModel(**document_data)
@@ -607,7 +572,7 @@ class TestDocumentModels:
             "markdown_content": "# Test Document\n\nContent here",
             "plain_text": "Test Document\n\nContent here",
             "word_count": 4,
-            "language": "en"
+            "language": "en",
         }
 
         # When
@@ -631,7 +596,7 @@ class TestDocumentModels:
             "embedding": embedding_vector,
             "start_char": 0,
             "end_char": 17,
-            "token_count": 3
+            "token_count": 3,
         }
 
         # When
@@ -655,7 +620,7 @@ class TestDocumentModels:
             "embedding": [0.1] * 100,  # Wrong dimension (should be 1536)
             "start_char": 0,
             "end_char": 11,
-            "token_count": 2
+            "token_count": 2,
         }
 
         # When/Then
@@ -677,10 +642,7 @@ class TestModelSerialization:
         original_request = ConversionRequest(
             file_path=str(pdf_path),
             store_embeddings=True,
-            processing_options=ProcessingOptions(
-                language="fr",
-                chunk_size=1200
-            )
+            processing_options=ProcessingOptions(language="fr", chunk_size=1200),
         )
 
         # When - Serialize to JSON and back
@@ -690,9 +652,17 @@ class TestModelSerialization:
 
         # Then
         assert reconstructed_request.file_path == original_request.file_path
-        assert reconstructed_request.store_embeddings == original_request.store_embeddings
-        assert reconstructed_request.processing_options.language == original_request.processing_options.language
-        assert reconstructed_request.processing_options.chunk_size == original_request.processing_options.chunk_size
+        assert (
+            reconstructed_request.store_embeddings == original_request.store_embeddings
+        )
+        assert (
+            reconstructed_request.processing_options.language
+            == original_request.processing_options.language
+        )
+        assert (
+            reconstructed_request.processing_options.chunk_size
+            == original_request.processing_options.chunk_size
+        )
 
     def test_search_response_roundtrip(self):
         """Test SearchResponse serialization roundtrip."""
@@ -705,12 +675,12 @@ class TestModelSerialization:
                     chunk_text="Test content",
                     similarity_score=0.95,
                     document_title="Test Doc",
-                    chunk_index=0
+                    chunk_index=0,
                 )
             ],
             total_results=1,
             query="test query",
-            search_time=0.123
+            search_time=0.123,
         )
 
         # When - Serialize to JSON and back
@@ -721,5 +691,8 @@ class TestModelSerialization:
         # Then
         assert reconstructed_response.success == original_response.success
         assert len(reconstructed_response.results) == len(original_response.results)
-        assert reconstructed_response.results[0].similarity_score == original_response.results[0].similarity_score
+        assert (
+            reconstructed_response.results[0].similarity_score
+            == original_response.results[0].similarity_score
+        )
         assert reconstructed_response.query == original_response.query

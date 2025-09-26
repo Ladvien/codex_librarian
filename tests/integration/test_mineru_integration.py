@@ -3,25 +3,26 @@ Integration tests for MinerU PDF processing service.
 
 Tests the integration between MinerU service and the core processing pipeline.
 """
-import pytest
-import asyncio
-from pathlib import Path
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-import tempfile
-import os
 
-from pdf_to_markdown_mcp.services.mineru import MinerUService
+import asyncio
+import os
+import tempfile
+from pathlib import Path
+
+import pytest
+
+from pdf_to_markdown_mcp.core.exceptions import ValidationError
+from pdf_to_markdown_mcp.models.processing import ProcessingMetadata, ProcessingResult
 from pdf_to_markdown_mcp.models.request import ProcessingOptions
-from pdf_to_markdown_mcp.models.processing import ProcessingResult, ProcessingMetadata
-from pdf_to_markdown_mcp.core.exceptions import ValidationError, ProcessingError
+from pdf_to_markdown_mcp.services.mineru import MinerUService
 
 
 @pytest.fixture
 def sample_pdf_file():
     """Create a temporary PDF file for testing."""
-    with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
         # Write minimal PDF header
-        f.write(b'%PDF-1.4\n%EOF\n')
+        f.write(b"%PDF-1.4\n%EOF\n")
         pdf_path = Path(f.name)
 
     yield pdf_path
@@ -42,7 +43,7 @@ def processing_options():
         extract_images=True,
         chunk_for_embeddings=True,
         chunk_size=500,
-        chunk_overlap=100
+        chunk_overlap=100,
     )
 
 
@@ -56,7 +57,9 @@ class TestMinerUIntegration:
     """Integration tests for MinerU service within the processing pipeline."""
 
     @pytest.mark.asyncio
-    async def test_complete_processing_pipeline(self, mineru_service, sample_pdf_file, processing_options):
+    async def test_complete_processing_pipeline(
+        self, mineru_service, sample_pdf_file, processing_options
+    ):
         """Test complete processing pipeline from PDF to searchable content."""
         # Given (Arrange)
         # This test uses the mock implementation since MinerU library isn't installed
@@ -82,14 +85,16 @@ class TestMinerUIntegration:
                 assert chunk.chunk_index >= 0
 
     @pytest.mark.asyncio
-    async def test_processing_with_table_extraction(self, mineru_service, sample_pdf_file):
+    async def test_processing_with_table_extraction(
+        self, mineru_service, sample_pdf_file
+    ):
         """Test processing with table extraction enabled."""
         # Given (Arrange)
         options = ProcessingOptions(
             extract_tables=True,
             extract_formulas=False,
             extract_images=False,
-            chunk_for_embeddings=False
+            chunk_for_embeddings=False,
         )
 
         # When (Act)
@@ -101,14 +106,16 @@ class TestMinerUIntegration:
         assert isinstance(result.extracted_tables, list)
 
     @pytest.mark.asyncio
-    async def test_processing_with_formula_extraction(self, mineru_service, sample_pdf_file):
+    async def test_processing_with_formula_extraction(
+        self, mineru_service, sample_pdf_file
+    ):
         """Test processing with formula extraction enabled."""
         # Given (Arrange)
         options = ProcessingOptions(
             extract_tables=False,
             extract_formulas=True,
             extract_images=False,
-            chunk_for_embeddings=False
+            chunk_for_embeddings=False,
         )
 
         # When (Act)
@@ -120,14 +127,16 @@ class TestMinerUIntegration:
         assert isinstance(result.extracted_formulas, list)
 
     @pytest.mark.asyncio
-    async def test_processing_with_image_extraction(self, mineru_service, sample_pdf_file):
+    async def test_processing_with_image_extraction(
+        self, mineru_service, sample_pdf_file
+    ):
         """Test processing with image extraction enabled."""
         # Given (Arrange)
         options = ProcessingOptions(
             extract_tables=False,
             extract_formulas=False,
             extract_images=True,
-            chunk_for_embeddings=False
+            chunk_for_embeddings=False,
         )
 
         # When (Act)
@@ -139,7 +148,9 @@ class TestMinerUIntegration:
         assert isinstance(result.extracted_images, list)
 
     @pytest.mark.asyncio
-    async def test_processing_performance_metrics(self, mineru_service, sample_pdf_file, processing_options):
+    async def test_processing_performance_metrics(
+        self, mineru_service, sample_pdf_file, processing_options
+    ):
         """Test that processing generates performance metrics."""
         # When (Act)
         result = await mineru_service.process_pdf(sample_pdf_file, processing_options)
@@ -169,7 +180,7 @@ class TestMinerUIntegration:
         options = ProcessingOptions(
             chunk_for_embeddings=True,
             chunk_size=200,  # Small chunks for testing
-            chunk_overlap=50
+            chunk_overlap=50,
         )
 
         # When (Act)
@@ -182,7 +193,9 @@ class TestMinerUIntegration:
         for i, chunk in enumerate(result.chunk_data):
             assert chunk.chunk_index == i
             assert chunk.text
-            assert len(chunk.text) <= options.chunk_size + options.chunk_overlap  # Allow for overlap
+            assert (
+                len(chunk.text) <= options.chunk_size + options.chunk_overlap
+            )  # Allow for overlap
             assert chunk.end_char > chunk.start_char
             assert chunk.token_count > 0
 
@@ -194,19 +207,25 @@ class TestMinerUIntegration:
             # Second chunk should start before first chunk ends (overlap)
             overlap = chunk1.end_char - chunk2.start_char
             assert overlap > 0, "Chunks should overlap"
-            assert overlap <= options.chunk_overlap, "Overlap should not exceed configured amount"
+            assert overlap <= options.chunk_overlap, (
+                "Overlap should not exceed configured amount"
+            )
 
     @pytest.mark.asyncio
-    async def test_file_validation_integration(self, mineru_service, processing_options):
+    async def test_file_validation_integration(
+        self, mineru_service, processing_options
+    ):
         """Test file validation as part of processing pipeline."""
         # Test non-existent file
         with pytest.raises(ValidationError) as exc_info:
-            await mineru_service.process_pdf(Path("/nonexistent/file.pdf"), processing_options)
+            await mineru_service.process_pdf(
+                Path("/nonexistent/file.pdf"), processing_options
+            )
         assert "File not found" in str(exc_info.value)
 
         # Test non-PDF file
-        with tempfile.NamedTemporaryFile(suffix='.txt', delete=False) as f:
-            f.write(b'Not a PDF file')
+        with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as f:
+            f.write(b"Not a PDF file")
             txt_path = Path(f.name)
 
         try:
@@ -250,7 +269,7 @@ class TestMinerUIntegration:
         # Test with invalid processing options
         invalid_options = ProcessingOptions(
             chunk_size=50,
-            chunk_overlap=100  # Overlap > chunk_size should cause validation error
+            chunk_overlap=100,  # Overlap > chunk_size should cause validation error
         )
 
         # This should be caught during validation
@@ -258,7 +277,9 @@ class TestMinerUIntegration:
             invalid_options.chunk_overlap = 100  # This triggers Pydantic validation
 
     @pytest.mark.asyncio
-    async def test_concurrent_processing(self, mineru_service, sample_pdf_file, processing_options):
+    async def test_concurrent_processing(
+        self, mineru_service, sample_pdf_file, processing_options
+    ):
         """Test that service handles concurrent processing requests."""
         # Given (Arrange)
         # Create multiple processing tasks
@@ -288,7 +309,9 @@ class TestMinerUIntegration:
         assert "mineru_available" in repr_str
 
     @pytest.mark.asyncio
-    async def test_mock_vs_real_mineru_behavior(self, sample_pdf_file, processing_options):
+    async def test_mock_vs_real_mineru_behavior(
+        self, sample_pdf_file, processing_options
+    ):
         """Test that mock and real MinerU behavior are consistent."""
         # This test verifies that the mock implementation provides
         # consistent interface with real MinerU (when available)
@@ -299,18 +322,18 @@ class TestMinerUIntegration:
         result = await service.process_pdf(sample_pdf_file, processing_options)
 
         # Verify mock implementation provides complete interface
-        assert hasattr(result, 'markdown_content')
-        assert hasattr(result, 'plain_text')
-        assert hasattr(result, 'extracted_tables')
-        assert hasattr(result, 'extracted_formulas')
-        assert hasattr(result, 'extracted_images')
-        assert hasattr(result, 'chunk_data')
-        assert hasattr(result, 'processing_metadata')
+        assert hasattr(result, "markdown_content")
+        assert hasattr(result, "plain_text")
+        assert hasattr(result, "extracted_tables")
+        assert hasattr(result, "extracted_formulas")
+        assert hasattr(result, "extracted_images")
+        assert hasattr(result, "chunk_data")
+        assert hasattr(result, "processing_metadata")
 
         # Verify metadata completeness
         metadata = result.processing_metadata
-        assert hasattr(metadata, 'pages')
-        assert hasattr(metadata, 'processing_time_ms')
-        assert hasattr(metadata, 'ocr_confidence')
-        assert hasattr(metadata, 'file_size_bytes')
-        assert hasattr(metadata, 'file_hash')
+        assert hasattr(metadata, "pages")
+        assert hasattr(metadata, "processing_time_ms")
+        assert hasattr(metadata, "ocr_confidence")
+        assert hasattr(metadata, "file_size_bytes")
+        assert hasattr(metadata, "file_hash")

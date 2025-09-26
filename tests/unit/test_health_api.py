@@ -5,18 +5,16 @@ Following TDD principles, these tests define the expected behavior
 of the enhanced health check API endpoints.
 """
 
+from unittest.mock import AsyncMock, Mock, patch
+
 import pytest
-from unittest.mock import Mock, AsyncMock, patch
 from fastapi.testclient import TestClient
-import json
-from typing import Dict, Any
 
 from pdf_to_markdown_mcp.api.health import router
 from pdf_to_markdown_mcp.core.monitoring import (
-    HealthStatus,
     ComponentHealth,
-    SystemHealth,
-    MetricsCollector
+    HealthStatus,
+    MetricsCollector,
 )
 
 
@@ -38,6 +36,7 @@ class TestHealthEndpoints:
     def test_client(self, mock_health_monitor, mock_metrics_collector):
         """Create test client with mocked dependencies"""
         from fastapi import FastAPI
+
         app = FastAPI()
         app.include_router(router)
 
@@ -50,7 +49,12 @@ class TestHealthEndpoints:
         """Test that /health returns detailed health status for all components"""
         # Given
         expected_components = [
-            "database", "embeddings", "celery", "system", "redis", "mineru"
+            "database",
+            "embeddings",
+            "celery",
+            "system",
+            "redis",
+            "mineru",
         ]
 
         # When
@@ -74,14 +78,18 @@ class TestHealthEndpoints:
             assert "status" in component_data
             assert "last_check" in component_data
 
-    def test_health_endpoint_returns_unhealthy_when_critical_component_fails(self, test_client):
+    def test_health_endpoint_returns_unhealthy_when_critical_component_fails(
+        self, test_client
+    ):
         """Test that overall status is unhealthy when critical components fail"""
         # Given - mock database failure
-        with patch('pdf_to_markdown_mcp.api.health.health_monitor.check_database_health') as mock_db_check:
+        with patch(
+            "pdf_to_markdown_mcp.api.health.health_monitor.check_database_health"
+        ) as mock_db_check:
             mock_db_check.return_value = ComponentHealth(
                 status=HealthStatus.UNHEALTHY,
                 last_check=123456789,
-                details={"error": "Connection failed"}
+                details={"error": "Connection failed"},
             )
 
             # When
@@ -95,13 +103,12 @@ class TestHealthEndpoints:
     def test_readiness_endpoint_checks_essential_services(self, test_client):
         """Test that /ready endpoint checks only essential services for readiness"""
         # Given - all services ready
-        with patch('pdf_to_markdown_mcp.api.health.health_monitor.check_readiness') as mock_readiness:
+        with patch(
+            "pdf_to_markdown_mcp.api.health.health_monitor.check_readiness"
+        ) as mock_readiness:
             mock_readiness.return_value = {
                 "ready": True,
-                "checks": {
-                    "database": "ready",
-                    "configuration": "ready"
-                }
+                "checks": {"database": "ready", "configuration": "ready"},
             }
 
             # When
@@ -114,16 +121,17 @@ class TestHealthEndpoints:
             assert "checks" in data
             assert "database" in data["checks"]
 
-    def test_readiness_endpoint_returns_not_ready_when_essential_service_unavailable(self, test_client):
+    def test_readiness_endpoint_returns_not_ready_when_essential_service_unavailable(
+        self, test_client
+    ):
         """Test that readiness fails when essential services are unavailable"""
         # Given - database not ready
-        with patch('pdf_to_markdown_mcp.api.health.health_monitor.check_readiness') as mock_readiness:
+        with patch(
+            "pdf_to_markdown_mcp.api.health.health_monitor.check_readiness"
+        ) as mock_readiness:
             mock_readiness.return_value = {
                 "ready": False,
-                "checks": {
-                    "database": "not_ready",
-                    "configuration": "ready"
-                }
+                "checks": {"database": "not_ready", "configuration": "ready"},
             }
 
             # When
@@ -143,7 +151,7 @@ class TestHealthEndpoints:
             "search_queries_total",
             "system_resource_usage",
             "celery_active_tasks",
-            "processing_queue_depth"
+            "processing_queue_depth",
         ]
 
         # When
@@ -151,7 +159,10 @@ class TestHealthEndpoints:
 
         # Then
         assert response.status_code == 200
-        assert response.headers["content-type"] == "text/plain; version=0.0.4; charset=utf-8"
+        assert (
+            response.headers["content-type"]
+            == "text/plain; version=0.0.4; charset=utf-8"
+        )
 
         metrics_text = response.text
         for metric in expected_metrics:
@@ -193,7 +204,9 @@ class TestHealthEndpoints:
     def test_health_endpoint_handles_partial_failures_gracefully(self, test_client):
         """Test that health endpoint continues working even if some checks fail"""
         # Given - embedding service fails but others work
-        with patch('pdf_to_markdown_mcp.api.health.health_monitor.check_embedding_health') as mock_embed_check:
+        with patch(
+            "pdf_to_markdown_mcp.api.health.health_monitor.check_embedding_health"
+        ) as mock_embed_check:
             mock_embed_check.side_effect = Exception("Service unavailable")
 
             # When
@@ -214,7 +227,9 @@ class TestHealthEndpoints:
     def test_metrics_endpoint_handles_database_unavailability(self, test_client):
         """Test that metrics endpoint returns partial metrics when database is unavailable"""
         # Given - database unavailable
-        with patch('pdf_to_markdown_mcp.api.health.metrics_collector.get_database_metrics') as mock_db_metrics:
+        with patch(
+            "pdf_to_markdown_mcp.api.health.metrics_collector.get_database_metrics"
+        ) as mock_db_metrics:
             mock_db_metrics.side_effect = Exception("Database connection failed")
 
             # When

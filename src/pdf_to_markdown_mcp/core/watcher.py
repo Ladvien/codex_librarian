@@ -1,15 +1,15 @@
 """File system monitoring with Watchdog for automatic PDF processing."""
 
-import hashlib
-import time
-from pathlib import Path
-from typing import Dict, List, Optional, Any, Set
 import fnmatch
+import hashlib
 import logging
+import time
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
 
+from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler, FileSystemEvent
 
 # Try to import magic, fall back to basic validation if not available
 try:
@@ -27,10 +27,10 @@ logger = logging.getLogger(__name__)
 class WatcherConfig:
     """Configuration for the directory watcher."""
 
-    watch_directories: List[str] = field(default_factory=list)
+    watch_directories: list[str] = field(default_factory=list)
     recursive: bool = True
-    patterns: List[str] = field(default_factory=lambda: ["*.pdf", "*.PDF"])
-    ignore_patterns: List[str] = field(
+    patterns: list[str] = field(default_factory=lambda: ["*.pdf", "*.PDF"])
+    ignore_patterns: list[str] = field(
         default_factory=lambda: ["**/.*", "**/tmp/*", "**/temp/*"]
     )
     stability_timeout: float = 5.0
@@ -48,7 +48,7 @@ class FileValidator:
         else:
             self.mime = None
 
-    def validate_pdf(self, file_path: Path) -> Dict[str, Any]:
+    def validate_pdf(self, file_path: Path) -> dict[str, Any]:
         """Validate PDF file and extract metadata.
 
         Args:
@@ -76,7 +76,7 @@ class FileValidator:
                     return result
             else:
                 # Fallback validation - check file extension and basic PDF header
-                if not file_path.suffix.lower() in [".pdf"]:
+                if file_path.suffix.lower() not in [".pdf"]:
                     result["error"] = f"Invalid file extension: {file_path.suffix}"
                     return result
 
@@ -124,7 +124,7 @@ class SmartFileDetector:
         Args:
             stability_timeout: Time in seconds to wait for file stability
         """
-        self.stable_files: Dict[Path, tuple[int, float]] = {}
+        self.stable_files: dict[Path, tuple[int, float]] = {}
         self.stability_timeout = stability_timeout
 
     def is_file_stable(self, file_path: Path) -> bool:
@@ -158,17 +158,19 @@ class SmartFileDetector:
 class PDFFileHandler(FileSystemEventHandler):
     """Handles file system events for PDF files."""
 
-    def __init__(self, task_queue, config: WatcherConfig):
+    def __init__(self, task_queue, config: WatcherConfig, directory_mirror=None):
         """Initialize PDF file handler.
 
         Args:
             task_queue: Task queue for processing PDFs
             config: Watcher configuration
+            directory_mirror: Optional DirectoryMirror for structure preservation
         """
         super().__init__()
         self.task_queue = task_queue
         self.config = config
-        self.processed_files: Set[str] = set()
+        self.directory_mirror = directory_mirror
+        self.processed_files: set[str] = set()
         self.detector = SmartFileDetector(config.stability_timeout)
         self.validator = FileValidator()
 
@@ -243,9 +245,30 @@ class PDFFileHandler(FileSystemEventHandler):
                     return
                 self.processed_files.add(file_hash)
 
+            # Calculate mirror paths if directory mirror is available
+            mirror_info = None
+            if self.directory_mirror:
+                try:
+                    mirror_info = self.directory_mirror.process_file_for_mirroring(
+                        path_obj
+                    )
+                    if mirror_info:
+                        logger.info(
+                            f"Directory mirroring prepared: {file_path} -> {mirror_info['output_path']}"
+                        )
+                    else:
+                        logger.warning(
+                            f"Failed to prepare directory mirroring for {file_path}"
+                        )
+                except Exception as e:
+                    logger.error(f"Error in directory mirroring for {file_path}: {e}")
+                    # Continue without mirroring rather than failing completely
+
             # Queue the file for processing
             logger.info(f"Queuing PDF for processing: {file_path}")
-            self.task_queue.queue_pdf_processing(file_path, validation_result)
+            self.task_queue.queue_pdf_processing(
+                file_path, validation_result, mirror_info=mirror_info
+            )
 
         except Exception as e:
             logger.error(f"Error processing new PDF file {file_path}: {e}")
@@ -305,17 +328,19 @@ class PDFFileHandler(FileSystemEventHandler):
 class DirectoryWatcher:
     """Main directory watcher class that coordinates file monitoring."""
 
-    def __init__(self, task_queue, config: WatcherConfig):
+    def __init__(self, task_queue, config: WatcherConfig, directory_mirror=None):
         """Initialize directory watcher.
 
         Args:
             task_queue: Task queue for processing files
             config: Watcher configuration
+            directory_mirror: Optional DirectoryMirror for structure preservation
         """
         self.task_queue = task_queue
         self.config = config
-        self.observer: Optional[Observer] = None
-        self.handler = PDFFileHandler(task_queue, config)
+        self.directory_mirror = directory_mirror
+        self.observer: Observer | None = None
+        self.handler = PDFFileHandler(task_queue, config, directory_mirror)
 
     def start(self) -> None:
         """Start watching configured directories."""
@@ -425,7 +450,7 @@ class DirectoryWatcher:
 
         logger.info("Watcher configuration updated")
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         """Get current watcher status and statistics.
 
         Returns:

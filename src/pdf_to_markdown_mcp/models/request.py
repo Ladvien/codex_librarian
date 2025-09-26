@@ -4,11 +4,11 @@ Request models for all API endpoints.
 These Pydantic models handle validation of incoming API requests.
 """
 
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
-from pydantic import BaseModel, Field, validator, root_validator
-import re
 from enum import Enum
+from pathlib import Path
+from typing import Any
+
+from pydantic import BaseModel, Field, validator
 
 
 class SupportedLanguage(str, Enum):
@@ -81,8 +81,8 @@ class ProcessingOptions(BaseModel):
 class ConvertSingleRequest(BaseModel):
     """Request model for single PDF conversion."""
 
-    file_path: Union[str, Path] = Field(..., description="Path to PDF file")
-    output_dir: Optional[Union[str, Path]] = Field(
+    file_path: str | Path = Field(..., description="Path to PDF file")
+    output_dir: str | Path | None = Field(
         None, description="Output directory for markdown files"
     )
     store_embeddings: bool = Field(
@@ -114,8 +114,8 @@ class ConvertSingleRequest(BaseModel):
                 header = f.read(8)
                 if not header.startswith(b"%PDF-"):
                     raise ValueError("File does not appear to be a valid PDF")
-        except (IOError, OSError) as e:
-            raise ValueError(f"Cannot read file: {str(e)}")
+        except OSError as e:
+            raise ValueError(f"Cannot read file: {e!s}")
 
         return path
 
@@ -148,12 +148,12 @@ class ConvertSingleRequest(BaseModel):
 class BatchConvertRequest(BaseModel):
     """Request model for batch PDF conversion."""
 
-    directory: Union[str, Path] = Field(..., description="Directory to search for PDFs")
+    directory: str | Path = Field(..., description="Directory to search for PDFs")
     pattern: str = Field(default="**/*.pdf", description="File pattern to match")
     recursive: bool = Field(
         default=True, description="Search subdirectories recursively"
     )
-    output_base: Optional[Union[str, Path]] = Field(
+    output_base: str | Path | None = Field(
         None, description="Base output directory"
     )
     store_embeddings: bool = Field(
@@ -213,7 +213,7 @@ class SemanticSearchRequest(BaseModel):
         default=0.7, ge=0.0, le=1.0, description="Minimum similarity threshold"
     )
 
-    filter: Optional[Dict[str, Any]] = Field(None, description="Filter criteria")
+    filter: dict[str, Any] | None = Field(None, description="Filter criteria")
     include_content: bool = Field(
         default=True, description="Include chunk content in results"
     )
@@ -251,7 +251,7 @@ class HybridSearchRequest(BaseModel):
         default=10, ge=1, le=100, description="Number of results to return"
     )
 
-    filter: Optional[Dict[str, Any]] = Field(None, description="Filter criteria")
+    filter: dict[str, Any] | None = Field(None, description="Filter criteria")
     include_content: bool = Field(
         default=True, description="Include chunk content in results"
     )
@@ -313,16 +313,16 @@ class FindSimilarRequest(BaseModel):
 class ConfigurationRequest(BaseModel):
     """Request model for server configuration updates."""
 
-    watch_directories: Optional[List[Union[str, Path]]] = Field(
+    watch_directories: list[str | Path] | None = Field(
         None, description="Directories to monitor"
     )
-    embedding_config: Optional[Dict[str, Any]] = Field(
+    embedding_config: dict[str, Any] | None = Field(
         None, description="Embedding service configuration"
     )
-    ocr_settings: Optional[Dict[str, Any]] = Field(
+    ocr_settings: dict[str, Any] | None = Field(
         None, description="OCR processing settings"
     )
-    processing_limits: Optional[Dict[str, Any]] = Field(
+    processing_limits: dict[str, Any] | None = Field(
         None, description="Processing resource limits"
     )
 

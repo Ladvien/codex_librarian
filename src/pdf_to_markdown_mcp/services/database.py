@@ -7,24 +7,22 @@ Implements vector operations with proper indexing strategies and query optimizat
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple, Union
-import numpy as np
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
+from typing import Any, Optional
 
-from sqlalchemy import text, func, and_, or_
+import numpy as np
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import SQLAlchemyError
 
-from ..db.session import get_db, db_manager
+from ..core.exceptions import DatabaseError, ValidationError
 from ..db.models import (
     Document,
-    DocumentContent,
     DocumentEmbedding,
     DocumentImage,
     ProcessingQueue,
 )
-from ..core.exceptions import DatabaseError, ValidationError
+from ..db.session import db_manager, get_db
 
 logger = logging.getLogger(__name__)
 
@@ -34,14 +32,14 @@ class VectorSearchResult:
     """Result object for vector similarity search."""
 
     document_id: int
-    chunk_id: Optional[int]
+    chunk_id: int | None
     filename: str
     source_path: str
-    content: Optional[str]
+    content: str | None
     similarity_score: float
-    page_number: Optional[int]
-    chunk_index: Optional[int]
-    metadata: Dict[str, Any]
+    page_number: int | None
+    chunk_index: int | None
+    metadata: dict[str, Any]
     search_type: str = "vector"
 
 
@@ -50,16 +48,16 @@ class HybridSearchResult:
     """Result object for hybrid search combining vector and text search."""
 
     document_id: int
-    chunk_id: Optional[int]
+    chunk_id: int | None
     filename: str
     source_path: str
-    content: Optional[str]
+    content: str | None
     combined_score: float
     semantic_score: float
     keyword_score: float
-    page_number: Optional[int]
-    chunk_index: Optional[int]
-    metadata: Dict[str, Any]
+    page_number: int | None
+    chunk_index: int | None
+    metadata: dict[str, Any]
     search_type: str = "hybrid"
 
 
@@ -68,12 +66,12 @@ class DatabaseStats:
     """Database statistics and health information."""
 
     total_documents: int
-    processing_stats: Dict[str, int]
+    processing_stats: dict[str, int]
     total_embeddings: int
     total_images: int
     queue_depth: int
-    index_usage: Dict[str, Any]
-    connection_pool: Dict[str, Any]
+    index_usage: dict[str, Any]
+    connection_pool: dict[str, Any]
 
 
 class VectorDatabaseService:
@@ -84,7 +82,7 @@ class VectorDatabaseService:
     and performance optimization utilities for the PDF to Markdown MCP server.
     """
 
-    def __init__(self, db_session: Optional[Session] = None):
+    def __init__(self, db_session: Session | None = None):
         """
         Initialize database service.
 
@@ -140,12 +138,12 @@ class VectorDatabaseService:
 
     async def vector_similarity_search(
         self,
-        query_embedding: List[float],
+        query_embedding: list[float],
         top_k: int = 10,
         similarity_threshold: float = 0.7,
-        document_filters: Optional[Dict[str, Any]] = None,
+        document_filters: dict[str, Any] | None = None,
         distance_metric: str = "cosine",
-    ) -> List[VectorSearchResult]:
+    ) -> list[VectorSearchResult]:
         """
         Perform async vector similarity search using PGVector.
 
@@ -162,8 +160,8 @@ class VectorDatabaseService:
         Returns:
             List of VectorSearchResult objects ordered by similarity
         """
-        from ..db.async_session import async_db_manager
         from ..core.performance import get_performance_monitor
+        from ..db.async_session import async_db_manager
 
         try:
             # Performance monitoring
@@ -279,17 +277,17 @@ class VectorDatabaseService:
 
         except Exception as e:
             logger.error(f"Async vector similarity search failed: {e}")
-            raise DatabaseError(f"Vector similarity search failed: {str(e)}")
+            raise DatabaseError(f"Vector similarity search failed: {e!s}")
 
     async def hybrid_search(
         self,
         query_text: str,
-        query_embedding: List[float],
+        query_embedding: list[float],
         top_k: int = 10,
         semantic_weight: float = 0.7,
         keyword_weight: float = 0.3,
         similarity_threshold: float = 0.5,
-    ) -> List[HybridSearchResult]:
+    ) -> list[HybridSearchResult]:
         """
         Perform hybrid search combining vector similarity and full-text search.
 
@@ -413,7 +411,7 @@ class VectorDatabaseService:
 
         except Exception as e:
             logger.error(f"Hybrid search failed: {e}")
-            raise DatabaseError(f"Hybrid search failed: {str(e)}")
+            raise DatabaseError(f"Hybrid search failed: {e!s}")
 
     async def find_similar_documents(
         self,
@@ -421,7 +419,7 @@ class VectorDatabaseService:
         top_k: int = 5,
         similarity_threshold: float = 0.6,
         exclude_self: bool = True,
-    ) -> List[VectorSearchResult]:
+    ) -> list[VectorSearchResult]:
         """
         Find documents similar to a reference document using averaged embeddings.
 
@@ -501,7 +499,7 @@ class VectorDatabaseService:
 
         except Exception as e:
             logger.error(f"Similar documents search failed: {e}")
-            raise DatabaseError(f"Similar documents search failed: {str(e)}")
+            raise DatabaseError(f"Similar documents search failed: {e!s}")
 
     async def get_database_statistics(self) -> DatabaseStats:
         """
@@ -574,9 +572,9 @@ class VectorDatabaseService:
 
         except Exception as e:
             logger.error(f"Failed to get database statistics: {e}")
-            raise DatabaseError(f"Failed to get database statistics: {str(e)}")
+            raise DatabaseError(f"Failed to get database statistics: {e!s}")
 
-    async def optimize_vector_indexes(self) -> Dict[str, Any]:
+    async def optimize_vector_indexes(self) -> dict[str, Any]:
         """
         Optimize vector indexes for better performance.
 
@@ -637,9 +635,9 @@ class VectorDatabaseService:
 
         except Exception as e:
             logger.error(f"Vector index optimization failed: {e}")
-            raise DatabaseError(f"Vector index optimization failed: {str(e)}")
+            raise DatabaseError(f"Vector index optimization failed: {e!s}")
 
-    async def health_check(self) -> Dict[str, Any]:
+    async def health_check(self) -> dict[str, Any]:
         """
         Perform comprehensive database health check.
 
@@ -701,7 +699,6 @@ class VectorDatabaseService:
         Returns:
             DocumentDTO or None if not found
         """
-        from ..models.dto import DocumentDTO
 
         try:
             with self._get_session() as db:
@@ -727,7 +724,7 @@ class VectorDatabaseService:
         Returns:
             Created DocumentDTO
         """
-        from ..models.dto import DocumentDTO, ProcessingStatusType
+        from ..models.dto import ProcessingStatusType
 
         try:
             with self._get_session() as db:
@@ -769,7 +766,6 @@ class VectorDatabaseService:
         Returns:
             Updated DocumentDTO
         """
-        from ..models.dto import DocumentDTO
 
         try:
             with self._get_session() as db:
@@ -816,7 +812,6 @@ class VectorDatabaseService:
         Returns:
             DocumentDTO or None if not found
         """
-        from ..models.dto import DocumentDTO
 
         try:
             with self._get_session() as db:
@@ -889,7 +884,7 @@ class VectorDatabaseService:
 
 # Factory function for easy instantiation
 def create_database_service(
-    db_session: Optional[Session] = None,
+    db_session: Session | None = None,
 ) -> VectorDatabaseService:
     """
     Create a VectorDatabaseService instance.

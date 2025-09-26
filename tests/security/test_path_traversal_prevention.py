@@ -13,21 +13,18 @@ Security Test Categories:
 5. Platform-specific traversal patterns
 """
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
-from pathlib import Path
-from fastapi import HTTPException
-from fastapi.testclient import TestClient
-import tempfile
 import os
+import tempfile
+from unittest.mock import Mock, patch
+
+import pytest
+from fastapi import HTTPException
 
 from src.pdf_to_markdown_mcp.auth.security import (
-    validate_path_security,
     sanitize_error_message,
-    validate_file_security
+    validate_file_security,
+    validate_path_security,
 )
-from src.pdf_to_markdown_mcp.config import settings
-
 
 # Path Traversal Attack Patterns for Testing
 PATH_TRAVERSAL_PAYLOADS = [
@@ -35,64 +32,51 @@ PATH_TRAVERSAL_PAYLOADS = [
     "../../../etc/passwd",
     "..\\..\\..\\windows\\system32\\config\\sam",
     "../../../../root/.bashrc",
-
     # URL encoded traversal
     "%2e%2e%2f%2e%2e%2f%2e%2e%2f/etc/passwd",
     "..%2f..%2f..%2fetc%2fpasswd",
     "%2e%2e\\%2e%2e\\%2e%2e\\windows\\system32",
-
     # Double encoded
     "%252e%252e%252f%252e%252e%252f%252e%252e%252f/etc/passwd",
-
     # Mixed encoding
     "..%c0%af..%c0%af..%c0%af/etc/passwd",
     "..%c1%9c..%c1%9c..%c1%9c/etc/passwd",
-
     # Unicode traversal
     "\u002e\u002e\u002f\u002e\u002e\u002f\u002e\u002e\u002f/etc/passwd",
-
     # Null byte injection
     "../../../etc/passwd%00.pdf",
     "../../../etc/passwd\x00.pdf",
-
     # Filter bypass attempts
     "....//....//....//etc/passwd",
     "..//////../../../etc/passwd",
     "..\\\\..\\\\..\\\\/etc/passwd",
-
     # Absolute path attempts
     "/etc/passwd",
     "\\windows\\system32\\config\\sam",
     "C:\\windows\\system32\\config\\sam",
     "/proc/self/environ",
     "/var/log/auth.log",
-
     # Home directory traversal
     "~/../../etc/passwd",
     "~root/.ssh/id_rsa",
     "~admin/.bash_history",
-
     # Special device files (Linux/Unix)
     "/dev/random",
     "/dev/urandom",
     "/dev/zero",
     "/proc/cpuinfo",
     "/proc/meminfo",
-
     # Windows-specific paths
     "\\\\localhost\\c$\\windows\\system32\\config\\sam",
     "file:///c:/windows/system32/config/sam",
     "\\\\?\\c:\\windows\\system32\\config\\sam",
-
     # Network path attempts
     "//attacker.com/share/malicious.pdf",
     "\\\\attacker.com\\share\\malicious.pdf",
-
     # Server traversal (web-specific)
     "../../../var/www/html/config.php",
     "../../../etc/apache2/apache2.conf",
     "../../../etc/nginx/nginx.conf",
-
     # Application-specific traversal
     "../../config/database.yml",
     "../../../.env",
@@ -107,7 +91,6 @@ DANGEROUS_FILENAMES = [
     "resolv.conf",
     "fstab",
     "sudoers",
-
     # Application configs
     ".env",
     ".env.local",
@@ -115,13 +98,11 @@ DANGEROUS_FILENAMES = [
     "database.yml",
     "secrets.json",
     "private.key",
-
     # Windows system files
     "boot.ini",
     "ntuser.dat",
     "system.ini",
     "win.ini",
-
     # SSH and crypto
     "id_rsa",
     "id_dsa",
@@ -169,8 +150,7 @@ class TestPathTraversalPrevention:
         Then should reject all traversal attempts
         """
         # Given - Mock settings
-        with patch('src.pdf_to_markdown_mcp.auth.security.settings', mock_settings):
-
+        with patch("src.pdf_to_markdown_mcp.auth.security.settings", mock_settings):
             # When & Then
             with pytest.raises(HTTPException) as exc_info:
                 validate_path_security(malicious_path)
@@ -194,11 +174,11 @@ class TestPathTraversalPrevention:
         legitimate_paths = [
             os.path.join(safe_dir, "document.pdf"),
             os.path.join(safe_dir, "subdir", "file.pdf"),
-            test_pdf
+            test_pdf,
         ]
 
         # When & Then
-        with patch('src.pdf_to_markdown_mcp.auth.security.settings', mock_settings):
+        with patch("src.pdf_to_markdown_mcp.auth.security.settings", mock_settings):
             for legitimate_path in legitimate_paths:
                 try:
                     result = validate_path_security(legitimate_path)
@@ -221,13 +201,13 @@ class TestPathTraversalPrevention:
         # Given
         mock_settings.INPUT_DIRECTORY = safe_dir
         paths_requiring_normalization = [
-            os.path.join(safe_dir, ".", "document.pdf"),      # Current directory
+            os.path.join(safe_dir, ".", "document.pdf"),  # Current directory
             os.path.join(safe_dir, "subdir", "..", "document.pdf"),  # Back reference
-            os.path.join(safe_dir, "subdir", ".", "document.pdf"),   # Mixed references
+            os.path.join(safe_dir, "subdir", ".", "document.pdf"),  # Mixed references
         ]
 
         # When & Then
-        with patch('src.pdf_to_markdown_mcp.auth.security.settings', mock_settings):
+        with patch("src.pdf_to_markdown_mcp.auth.security.settings", mock_settings):
             for path_to_normalize in paths_requiring_normalization:
                 try:
                     result = validate_path_security(path_to_normalize)
@@ -235,8 +215,13 @@ class TestPathTraversalPrevention:
                     assert True, f"Path normalization handled: {path_to_normalize}"
                 except HTTPException as e:
                     # Should not fail due to path resolution issues
-                    if "path" in str(e.detail).lower() and "traversal" in str(e.detail).lower():
-                        pytest.fail(f"Path normalization incorrectly flagged as traversal: {path_to_normalize}")
+                    if (
+                        "path" in str(e.detail).lower()
+                        and "traversal" in str(e.detail).lower()
+                    ):
+                        pytest.fail(
+                            f"Path normalization incorrectly flagged as traversal: {path_to_normalize}"
+                        )
 
     # Advanced Traversal Technique Tests
 
@@ -258,12 +243,14 @@ class TestPathTraversalPrevention:
             malicious_symlink = os.path.join(safe_dir, "malicious_link.pdf")
             target_path = "/etc/passwd"  # Outside allowed directory
 
-            if os.name != 'nt':  # Unix-like systems
+            if os.name != "nt":  # Unix-like systems
                 try:
                     os.symlink(target_path, malicious_symlink)
 
                     # When & Then
-                    with patch('src.pdf_to_markdown_mcp.auth.security.settings', mock_settings):
+                    with patch(
+                        "src.pdf_to_markdown_mcp.auth.security.settings", mock_settings
+                    ):
                         with pytest.raises(HTTPException) as exc_info:
                             validate_path_security(malicious_symlink)
 
@@ -295,7 +282,7 @@ class TestPathTraversalPrevention:
         ]
 
         # When & Then
-        with patch('src.pdf_to_markdown_mcp.auth.security.settings', mock_settings):
+        with patch("src.pdf_to_markdown_mcp.auth.security.settings", mock_settings):
             for case_payload in case_variation_payloads:
                 with pytest.raises(HTTPException) as exc_info:
                     validate_path_security(case_payload)
@@ -318,7 +305,7 @@ class TestPathTraversalPrevention:
         ]
 
         # When & Then
-        with patch('src.pdf_to_markdown_mcp.auth.security.settings', mock_settings):
+        with patch("src.pdf_to_markdown_mcp.auth.security.settings", mock_settings):
             for long_pattern in long_traversal_patterns:
                 with pytest.raises(HTTPException) as exc_info:
                     validate_path_security(long_pattern)
@@ -328,7 +315,9 @@ class TestPathTraversalPrevention:
     # Filename Validation Tests
 
     @pytest.mark.parametrize("dangerous_filename", DANGEROUS_FILENAMES)
-    def test_dangerous_filename_detection(self, dangerous_filename, temp_safe_directory, mock_settings):
+    def test_dangerous_filename_detection(
+        self, dangerous_filename, temp_safe_directory, mock_settings
+    ):
         """
         Test detection of dangerous filenames
 
@@ -348,7 +337,7 @@ class TestPathTraversalPrevention:
                 f.write("test content")
 
             # When & Then
-            with patch('src.pdf_to_markdown_mcp.auth.security.settings', mock_settings):
+            with patch("src.pdf_to_markdown_mcp.auth.security.settings", mock_settings):
                 with pytest.raises(HTTPException) as exc_info:
                     validate_path_security(dangerous_path)
 
@@ -387,7 +376,9 @@ class TestPathTraversalPrevention:
                     f.write("test content")
 
                 # When & Then
-                with patch('src.pdf_to_markdown_mcp.auth.security.settings', mock_settings):
+                with patch(
+                    "src.pdf_to_markdown_mcp.auth.security.settings", mock_settings
+                ):
                     with pytest.raises(HTTPException) as exc_info:
                         validate_file_security(file_path)
 
@@ -427,12 +418,17 @@ class TestPathTraversalPrevention:
                     f.write(content)
 
                 # When & Then
-                with patch('src.pdf_to_markdown_mcp.auth.security.settings', mock_settings):
+                with patch(
+                    "src.pdf_to_markdown_mcp.auth.security.settings", mock_settings
+                ):
                     with pytest.raises(HTTPException) as exc_info:
                         validate_file_security(file_path)
 
                     assert exc_info.value.status_code == 400
-                    assert "pdf" in str(exc_info.value.detail).lower() or "header" in str(exc_info.value.detail).lower()
+                    assert (
+                        "pdf" in str(exc_info.value.detail).lower()
+                        or "header" in str(exc_info.value.detail).lower()
+                    )
 
             except (OSError, PermissionError):
                 continue
@@ -460,7 +456,7 @@ class TestPathTraversalPrevention:
                 f.write(b"x" * (2 * 1024 * 1024))  # 2 MB of padding
 
             # When & Then
-            with patch('src.pdf_to_markdown_mcp.auth.security.settings', mock_settings):
+            with patch("src.pdf_to_markdown_mcp.auth.security.settings", mock_settings):
                 with pytest.raises(HTTPException) as exc_info:
                     validate_file_security(large_file_path)
 
@@ -494,11 +490,22 @@ class TestPathTraversalPrevention:
             sanitized = sanitize_error_message(error_msg)
 
             # Should not contain sensitive paths
-            sensitive_patterns = ["/etc/", "/root/", "password", "secrets", "config", "system32"]
+            sensitive_patterns = [
+                "/etc/",
+                "/root/",
+                "password",
+                "secrets",
+                "config",
+                "system32",
+            ]
             for pattern in sensitive_patterns:
-                assert pattern.lower() not in sanitized.lower(), f"Sensitive pattern '{pattern}' found in: {sanitized}"
+                assert pattern.lower() not in sanitized.lower(), (
+                    f"Sensitive pattern '{pattern}' found in: {sanitized}"
+                )
 
-    def test_path_information_disclosure_prevention(self, temp_safe_directory, mock_settings):
+    def test_path_information_disclosure_prevention(
+        self, temp_safe_directory, mock_settings
+    ):
         """
         Test prevention of path information disclosure in errors
 
@@ -517,7 +524,7 @@ class TestPathTraversalPrevention:
         ]
 
         # When & Then
-        with patch('src.pdf_to_markdown_mcp.auth.security.settings', mock_settings):
+        with patch("src.pdf_to_markdown_mcp.auth.security.settings", mock_settings):
             for traversal_path in traversal_paths:
                 with pytest.raises(HTTPException) as exc_info:
                     validate_path_security(traversal_path)
@@ -525,12 +532,23 @@ class TestPathTraversalPrevention:
                 error_detail = str(exc_info.value.detail)
 
                 # Error message should not reveal the attempted traversal path
-                assert traversal_path not in error_detail, f"Path disclosed in error: {error_detail}"
+                assert traversal_path not in error_detail, (
+                    f"Path disclosed in error: {error_detail}"
+                )
 
                 # Should not reveal internal directory structure
-                internal_indicators = ["/etc/", "/root/", "/var/", "passwd", "bashrc", "config.php"]
+                internal_indicators = [
+                    "/etc/",
+                    "/root/",
+                    "/var/",
+                    "passwd",
+                    "bashrc",
+                    "config.php",
+                ]
                 for indicator in internal_indicators:
-                    assert indicator not in error_detail.lower(), f"Internal path indicator '{indicator}' disclosed"
+                    assert indicator not in error_detail.lower(), (
+                        f"Internal path indicator '{indicator}' disclosed"
+                    )
 
     # Integration Tests with API Endpoints
 
@@ -562,7 +580,9 @@ class TestPathTraversalPrevention:
 
             assert exc_info.value.status_code == 400
 
-    def test_batch_convert_directory_validation(self, temp_safe_directory, mock_settings):
+    def test_batch_convert_directory_validation(
+        self, temp_safe_directory, mock_settings
+    ):
         """
         Test directory validation for batch_convert endpoint
 
@@ -582,7 +602,7 @@ class TestPathTraversalPrevention:
         ]
 
         # When & Then
-        with patch('src.pdf_to_markdown_mcp.auth.security.settings', mock_settings):
+        with patch("src.pdf_to_markdown_mcp.auth.security.settings", mock_settings):
             for malicious_dir in malicious_directories:
                 with pytest.raises(HTTPException) as exc_info:
                     validate_path_security(malicious_dir)
@@ -602,7 +622,6 @@ class TestAdvancedPathTraversalScenarios:
         Then should maintain security guarantees under concurrency
         """
         import threading
-        import time
 
         temp_dir, safe_dir, test_pdf = temp_safe_directory
         mock_settings.INPUT_DIRECTORY = safe_dir
@@ -612,7 +631,7 @@ class TestAdvancedPathTraversalScenarios:
             "../../../etc/passwd",
             "legitimate.pdf",
             "../../../root/.ssh/id_rsa",
-            "another_legitimate.pdf"
+            "another_legitimate.pdf",
         ] * 10  # 40 total requests
 
         results = []
@@ -620,7 +639,9 @@ class TestAdvancedPathTraversalScenarios:
 
         def validate_path_worker(path):
             try:
-                with patch('src.pdf_to_markdown_mcp.auth.security.settings', mock_settings):
+                with patch(
+                    "src.pdf_to_markdown_mcp.auth.security.settings", mock_settings
+                ):
                     result = validate_path_security(path)
                     results.append((path, "success", result))
             except HTTPException as e:
@@ -640,15 +661,21 @@ class TestAdvancedPathTraversalScenarios:
             thread.join()
 
         # Then - Verify security was maintained
-        malicious_paths = [p for p in paths_to_test if "../" in p or "/etc/" in p or "/root/" in p]
+        malicious_paths = [
+            p for p in paths_to_test if "../" in p or "/etc/" in p or "/root/" in p
+        ]
 
         # All malicious paths should have been rejected
         malicious_exceptions = [exc for exc in exceptions if exc[0] in malicious_paths]
-        assert len(malicious_exceptions) >= len(set(malicious_paths)), "Not all malicious paths were rejected under concurrency"
+        assert len(malicious_exceptions) >= len(set(malicious_paths)), (
+            "Not all malicious paths were rejected under concurrency"
+        )
 
         # All exceptions for malicious paths should be 400 errors
         for path, status_code, detail in malicious_exceptions:
-            assert status_code == 400, f"Wrong status code for malicious path {path}: {status_code}"
+            assert status_code == 400, (
+                f"Wrong status code for malicious path {path}: {status_code}"
+            )
 
     def test_memory_exhaustion_path_validation(self, mock_settings):
         """
@@ -662,11 +689,11 @@ class TestAdvancedPathTraversalScenarios:
         memory_exhaustion_payloads = [
             "a" * 100000 + "/../../../etc/passwd",  # Very long path
             "../" * 10000 + "etc/passwd",  # Many traversal attempts
-            ("../" * 1000 + "etc/passwd\x00") * 100  # Many null bytes
+            ("../" * 1000 + "etc/passwd\x00") * 100,  # Many null bytes
         ]
 
         # When & Then
-        with patch('src.pdf_to_markdown_mcp.auth.security.settings', mock_settings):
+        with patch("src.pdf_to_markdown_mcp.auth.security.settings", mock_settings):
             for payload in memory_exhaustion_payloads:
                 start_time = time.time()
 
@@ -677,7 +704,9 @@ class TestAdvancedPathTraversalScenarios:
                 processing_time = end_time - start_time
 
                 # Should complete quickly even with large payloads
-                assert processing_time < 1.0, f"Path validation took too long: {processing_time:.3f}s"
+                assert processing_time < 1.0, (
+                    f"Path validation took too long: {processing_time:.3f}s"
+                )
                 assert exc_info.value.status_code == 400
 
     def test_encoding_bypass_comprehensive(self, mock_settings):
@@ -693,33 +722,30 @@ class TestAdvancedPathTraversalScenarios:
             # URL encoding variants
             "%2e%2e%2f%2e%2e%2f%2e%2e%2f/etc/passwd",
             "%2e%2e\\%2e%2e\\%2e%2e\\/etc/passwd",
-
             # Double URL encoding
             "%252e%252e%252f%252e%252e%252f%252e%252e%252f/etc/passwd",
-
             # Mixed encoding
             "..%2f..%2f..%2f/etc/passwd",
             "..\\..\\..\\%2fetc%2fpasswd",
-
             # Unicode encoding
             "\u002e\u002e\u002f\u002e\u002e\u002f\u002e\u002e\u002f/etc/passwd",
             "\u002e\u002e\u005c\u002e\u002e\u005c\u002e\u002e\u005c/etc/passwd",
-
             # Overlong UTF-8 encoding
             "%c0%ae%c0%ae%c0%af%c0%ae%c0%ae%c0%af%c0%ae%c0%ae%c0%af/etc/passwd",
-
             # Directory separator bypass
             "..;/..;/..;/etc/passwd",
             "..:/..:/..:/etc/passwd",
         ]
 
         # When & Then
-        with patch('src.pdf_to_markdown_mcp.auth.security.settings', mock_settings):
+        with patch("src.pdf_to_markdown_mcp.auth.security.settings", mock_settings):
             for bypass_payload in encoding_bypass_payloads:
                 with pytest.raises(HTTPException) as exc_info:
                     validate_path_security(bypass_payload)
 
-                assert exc_info.value.status_code == 400, f"Encoding bypass not prevented: {bypass_payload}"
+                assert exc_info.value.status_code == 400, (
+                    f"Encoding bypass not prevented: {bypass_payload}"
+                )
 
 
 class TestPathTraversalPerformanceImpact:
@@ -741,13 +767,13 @@ class TestPathTraversalPerformanceImpact:
             "../../../etc/passwd",
             "another_file.pdf",
             "..\\..\\..\\windows\\system32\\config\\sam",
-            "valid_document.pdf"
+            "valid_document.pdf",
         ] * 100  # 500 validations total
 
         # When
         start_time = time.time()
 
-        with patch('src.pdf_to_markdown_mcp.auth.security.settings', mock_settings):
+        with patch("src.pdf_to_markdown_mcp.auth.security.settings", mock_settings):
             for test_path in test_paths:
                 try:
                     validate_path_security(test_path)
@@ -759,10 +785,14 @@ class TestPathTraversalPerformanceImpact:
         total_time = end_time - start_time
 
         # Then - Should complete all validations quickly
-        assert total_time < 2.0, f"Path validation too slow: {total_time:.3f}s for {len(test_paths)} validations"
+        assert total_time < 2.0, (
+            f"Path validation too slow: {total_time:.3f}s for {len(test_paths)} validations"
+        )
 
         avg_time_per_validation = total_time / len(test_paths)
-        assert avg_time_per_validation < 0.01, f"Individual validation too slow: {avg_time_per_validation:.6f}s"
+        assert avg_time_per_validation < 0.01, (
+            f"Individual validation too slow: {avg_time_per_validation:.6f}s"
+        )
 
 
 if __name__ == "__main__":

@@ -13,15 +13,15 @@ import asyncio
 import os
 import tempfile
 import uuid
+from collections.abc import AsyncGenerator, Generator
 from pathlib import Path
-from typing import AsyncGenerator, Generator, Dict, Any, List
+from typing import Any
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-import pytest_asyncio
 from sqlalchemy import create_engine, text
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import Session, sessionmaker
 
 # Configure pytest for async testing
 pytest_plugins = ("pytest_asyncio",)
@@ -37,7 +37,9 @@ def event_loop():
 
 # Database Configuration
 TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", "sqlite:///./test_pdf_mcp.db")
-TEST_DATABASE_URL_ASYNC = os.getenv("TEST_DATABASE_URL_ASYNC", "sqlite+aiosqlite:///./test_pdf_mcp.db")
+TEST_DATABASE_URL_ASYNC = os.getenv(
+    "TEST_DATABASE_URL_ASYNC", "sqlite+aiosqlite:///./test_pdf_mcp.db"
+)
 
 
 @pytest.fixture(scope="session")
@@ -122,9 +124,7 @@ async def async_db_session(async_engine) -> AsyncGenerator[AsyncSession, None]:
     from sqlalchemy.ext.asyncio import AsyncSession as AsyncSessionClass
 
     AsyncSessionLocal = sessionmaker(
-        bind=async_engine,
-        class_=AsyncSessionClass,
-        expire_on_commit=False
+        bind=async_engine, class_=AsyncSessionClass, expire_on_commit=False
     )
 
     async with AsyncSessionLocal() as session:
@@ -140,7 +140,7 @@ async def async_db_session(async_engine) -> AsyncGenerator[AsyncSession, None]:
 def sample_pdf_content() -> bytes:
     """Sample PDF content for testing."""
     # Simple PDF content (not a real PDF, but sufficient for unit tests)
-    return b'%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\nxref\n0 4\n0000000000 65535 f\n0000000009 00000 n\n0000000058 00000 n\n0000000115 00000 n\ntrailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n192\n%%EOF'
+    return b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\nxref\n0 4\n0000000000 65535 f\n0000000009 00000 n\n0000000058 00000 n\n0000000115 00000 n\ntrailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n192\n%%EOF"
 
 
 @pytest.fixture
@@ -191,8 +191,9 @@ This is the end of the test document.
 @pytest.fixture
 def document_factory():
     """Factory for creating test Document instances."""
-    from src.pdf_to_markdown_mcp.db.models import Document
     from datetime import datetime
+
+    from src.pdf_to_markdown_mcp.db.models import Document
 
     def _create_document(**kwargs):
         defaults = {
@@ -214,7 +215,10 @@ def document_factory():
 @pytest.fixture
 def processing_result_factory():
     """Factory for creating test ProcessingResult instances."""
-    from src.pdf_to_markdown_mcp.models.processing import ProcessingResult, ProcessingMetadata
+    from src.pdf_to_markdown_mcp.models.processing import (
+        ProcessingMetadata,
+        ProcessingResult,
+    )
 
     def _create_processing_result(**kwargs):
         defaults = {
@@ -230,8 +234,8 @@ def processing_result_factory():
                 page_count=1,
                 word_count=100,
                 language="en",
-                confidence=0.95
-            )
+                confidence=0.95,
+            ),
         }
         defaults.update(kwargs)
         return ProcessingResult(**defaults)
@@ -257,8 +261,8 @@ def mock_mineru_service():
             page_count=1,
             word_count=100,
             language="en",
-            confidence=0.95
-        )
+            confidence=0.95,
+        ),
     )
     mock.health_check.return_value = True
     return mock
@@ -312,22 +316,18 @@ def test_config():
         "redis_url": "redis://localhost:6379/1",
         "celery_broker_url": "redis://localhost:6379/1",
         "celery_result_backend": "redis://localhost:6379/1",
-        "mineru_config": {
-            "device": "cpu",
-            "language": "en",
-            "timeout": 300
-        },
+        "mineru_config": {"device": "cpu", "language": "en", "timeout": 300},
         "embedding_config": {
             "provider": "ollama",
             "model": "nomic-embed-text",
-            "dimensions": 1536
-        }
+            "dimensions": 1536,
+        },
     }
 
 
 # Test Data Collections
 @pytest.fixture
-def sample_embeddings() -> List[List[float]]:
+def sample_embeddings() -> list[list[float]]:
     """Sample embedding vectors for testing."""
     return [
         [0.1] * 1536,  # Document 1 embedding
@@ -337,7 +337,7 @@ def sample_embeddings() -> List[List[float]]:
 
 
 @pytest.fixture
-def sample_chunks() -> List[Dict[str, Any]]:
+def sample_chunks() -> list[dict[str, Any]]:
     """Sample text chunks for testing."""
     return [
         {
@@ -357,7 +357,7 @@ def sample_chunks() -> List[Dict[str, Any]]:
             "start_char": 90,
             "end_char": 136,
             "token_count": 7,
-        }
+        },
     ]
 
 
@@ -369,14 +369,16 @@ def performance_metrics():
         "start_time": None,
         "end_time": None,
         "memory_usage": [],
-        "processing_times": []
+        "processing_times": [],
     }
     return metrics
 
 
 # Integration Test Helpers
 @pytest.fixture
-def integration_test_setup(async_db_session, mock_mineru_service, mock_embedding_service):
+def integration_test_setup(
+    async_db_session, mock_mineru_service, mock_embedding_service
+):
     """Setup for integration tests with all services."""
     return {
         "db_session": async_db_session,
@@ -407,7 +409,9 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "database: mark test as requiring database")
     config.addinivalue_line("markers", "redis: mark test as requiring Redis")
     config.addinivalue_line("markers", "mineru: mark test as requiring MinerU")
-    config.addinivalue_line("markers", "embeddings: mark test as requiring embedding service")
+    config.addinivalue_line(
+        "markers", "embeddings: mark test as requiring embedding service"
+    )
 
 
 def pytest_collection_modifyitems(config, items):
@@ -421,7 +425,10 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(pytest.mark.integration)
 
         # Add slow marker to tests that might be slow
-        if any(keyword in item.name.lower() for keyword in ["batch", "large", "stress", "performance"]):
+        if any(
+            keyword in item.name.lower()
+            for keyword in ["batch", "large", "stress", "performance"]
+        ):
             item.add_marker(pytest.mark.slow)
 
 
@@ -439,6 +446,7 @@ def validate_test_environment():
     # Validate test database connectivity
     try:
         from sqlalchemy import create_engine
+
         engine = create_engine(TEST_DATABASE_URL)
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
@@ -449,4 +457,3 @@ def validate_test_environment():
     yield  # Run tests
 
     # Cleanup after all tests
-    pass

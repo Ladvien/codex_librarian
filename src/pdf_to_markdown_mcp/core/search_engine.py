@@ -6,21 +6,19 @@ Provides vector similarity search and combined semantic + keyword search.
 
 import logging
 import time
-from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 from sqlalchemy.orm import Session
-from sqlalchemy import text
 
-from pdf_to_markdown_mcp.models.response import SearchResult
-from pdf_to_markdown_mcp.services.embeddings import EmbeddingService
-from pdf_to_markdown_mcp.db.queries import SearchQueries
 from pdf_to_markdown_mcp.core.exceptions import (
+    EmbeddingError,
     SearchError,
     ValidationError,
-    EmbeddingError,
 )
+from pdf_to_markdown_mcp.db.queries import SearchQueries
+from pdf_to_markdown_mcp.models.response import SearchResult
 
 logger = logging.getLogger(__name__)
 
@@ -50,11 +48,11 @@ class SearchOptions:
 class SearchResults:
     """Container for search results and metadata."""
 
-    results: List[SearchResult]
+    results: list[SearchResult]
     total_count: int
     search_time_ms: int
     search_type: SearchType
-    query_embedding: Optional[List[float]] = None
+    query_embedding: list[float] | None = None
 
 
 class SearchEngine:
@@ -74,9 +72,9 @@ class SearchEngine:
         query: str,
         top_k: int = 10,
         threshold: float = 0.7,
-        filters: Optional[Dict[str, Any]] = None,
+        filters: dict[str, Any] | None = None,
         include_content: bool = True,
-        options: Optional[SearchOptions] = None,
+        options: SearchOptions | None = None,
     ) -> SearchResults:
         """
         Perform semantic search using vector similarity.
@@ -182,7 +180,7 @@ class SearchEngine:
             raise  # Re-raise embedding errors
         except Exception as e:
             logger.exception("Error in semantic search")
-            raise SearchError(f"Semantic search failed: {str(e)}")
+            raise SearchError(f"Semantic search failed: {e!s}")
 
     async def hybrid_search(
         self,
@@ -190,9 +188,9 @@ class SearchEngine:
         semantic_weight: float = 0.7,
         keyword_weight: float = 0.3,
         top_k: int = 10,
-        filters: Optional[Dict[str, Any]] = None,
+        filters: dict[str, Any] | None = None,
         include_content: bool = True,
-        options: Optional[SearchOptions] = None,
+        options: SearchOptions | None = None,
     ) -> SearchResults:
         """
         Perform hybrid search combining semantic and keyword search.
@@ -286,15 +284,15 @@ class SearchEngine:
 
         except Exception as e:
             logger.exception("Error in hybrid search")
-            raise SearchError(f"Hybrid search failed: {str(e)}")
+            raise SearchError(f"Hybrid search failed: {e!s}")
 
     async def keyword_search(
         self,
         query: str,
         top_k: int = 10,
-        filters: Optional[Dict[str, Any]] = None,
+        filters: dict[str, Any] | None = None,
         include_content: bool = True,
-        options: Optional[SearchOptions] = None,
+        options: SearchOptions | None = None,
     ) -> SearchResults:
         """
         Perform full-text keyword search.
@@ -369,7 +367,7 @@ class SearchEngine:
 
         except Exception as e:
             logger.exception("Error in keyword search")
-            raise SearchError(f"Keyword search failed: {str(e)}")
+            raise SearchError(f"Keyword search failed: {e!s}")
 
     async def find_similar(
         self,
@@ -377,7 +375,7 @@ class SearchEngine:
         top_k: int = 5,
         min_similarity: float = 0.6,
         include_self: bool = False,
-        options: Optional[SearchOptions] = None,
+        options: SearchOptions | None = None,
     ) -> SearchResults:
         """
         Find documents similar to a reference document.
@@ -461,15 +459,15 @@ class SearchEngine:
             raise  # Re-raise validation errors
         except Exception as e:
             logger.exception("Error in similar document search")
-            raise SearchError(f"Similar document search failed: {str(e)}")
+            raise SearchError(f"Similar document search failed: {e!s}")
 
     def _combine_search_results(
         self,
-        semantic_results: List[SearchResult],
-        keyword_results: List[SearchResult],
+        semantic_results: list[SearchResult],
+        keyword_results: list[SearchResult],
         semantic_weight: float,
         keyword_weight: float,
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
         """
         Combine and rerank semantic and keyword search results.
 
@@ -529,7 +527,7 @@ class SearchEngine:
 
         return combined_results
 
-    def _extract_title(self, content: str) -> Optional[str]:
+    def _extract_title(self, content: str) -> str | None:
         """Extract title from content (first line or heading)."""
         if not content:
             return None
@@ -578,7 +576,7 @@ class SearchEngine:
 
     async def get_search_suggestions(
         self, partial_query: str, limit: int = 5
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Get search query suggestions based on content.
 

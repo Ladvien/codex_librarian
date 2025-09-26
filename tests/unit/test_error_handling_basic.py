@@ -5,27 +5,21 @@ This tests the core error handling functionality without requiring
 external dependencies like pytest-asyncio.
 """
 
+
 import pytest
-import time
-from datetime import datetime
-from unittest.mock import Mock, patch
+
 
 def test_basic_error_creation():
     """Test basic error creation and sanitization."""
     from src.pdf_to_markdown_mcp.core.errors import (
         PDFToMarkdownError,
-        ValidationError,
-        SecurityError,
-        sanitize_error_for_user,
-        create_correlation_id
+        create_correlation_id,
     )
 
     # Test basic error creation
     correlation_id = create_correlation_id()
     error = PDFToMarkdownError(
-        message="Test error",
-        correlation_id=correlation_id,
-        error_code="TEST001"
+        message="Test error", correlation_id=correlation_id, error_code="TEST001"
     )
 
     assert str(error) == "Test error"
@@ -43,38 +37,44 @@ def test_security_error_sanitization():
     """Test that security errors never expose sensitive information."""
     from src.pdf_to_markdown_mcp.core.errors import (
         SecurityError,
-        sanitize_error_for_user
+        sanitize_error_for_user,
     )
 
     # Create security error with sensitive internal details
     error = SecurityError(
-        message="Authentication failed",
-        internal_details="Database password: secret123"
+        message="Authentication failed", internal_details="Database password: secret123"
     )
 
     # Test sanitization
     user_message = sanitize_error_for_user(error)
     assert "secret123" not in user_message
     assert "password" not in user_message.lower()
-    assert "security error" in user_message.lower() or "authentication failed" in user_message.lower()
+    assert (
+        "security error" in user_message.lower()
+        or "authentication failed" in user_message.lower()
+    )
 
 
 def test_error_categorization():
     """Test error categorization for retry logic."""
     from src.pdf_to_markdown_mcp.core.errors import (
-        ValidationError,
+        ErrorCategory,
+        ResourceError,
         SecurityError,
         TransientError,
-        ResourceError,
+        ValidationError,
         categorize_error,
         is_retryable_error,
-        ErrorCategory
     )
 
     # Test categorization
-    assert categorize_error(ValidationError("Invalid input")) == ErrorCategory.VALIDATION
+    assert (
+        categorize_error(ValidationError("Invalid input")) == ErrorCategory.VALIDATION
+    )
     assert categorize_error(SecurityError("Access denied")) == ErrorCategory.SECURITY
-    assert categorize_error(TransientError("Temporary failure")) == ErrorCategory.TRANSIENT
+    assert (
+        categorize_error(TransientError("Temporary failure")) == ErrorCategory.TRANSIENT
+    )
     assert categorize_error(ResourceError("Out of memory")) == ErrorCategory.RESOURCE
 
     # Test retryable detection
@@ -99,12 +99,12 @@ def test_correlation_id_uniqueness():
 def test_retry_config_and_strategy():
     """Test retry configuration and strategy selection."""
     from src.pdf_to_markdown_mcp.core.errors import (
-        RetryConfig,
         ExponentialBackoffRetry,
-        get_retry_strategy,
-        ValidationError,
+        ResourceError,
+        RetryConfig,
         TransientError,
-        ResourceError
+        ValidationError,
+        get_retry_strategy,
     )
 
     # Test retry config
@@ -131,8 +131,8 @@ def test_error_tracking():
     """Test basic error tracking functionality."""
     from src.pdf_to_markdown_mcp.core.errors import (
         ErrorTracker,
+        TransientError,
         ValidationError,
-        TransientError
     )
 
     tracker = ErrorTracker(window_size=60)  # 1 minute window
@@ -141,13 +141,13 @@ def test_error_tracking():
     tracker.record_error(
         error=ValidationError("Invalid input"),
         operation="test_operation",
-        component="test_component"
+        component="test_component",
     )
 
     tracker.record_error(
         error=TransientError("Temporary failure"),
         operation="test_operation",
-        component="test_component"
+        component="test_component",
     )
 
     # Get metrics
@@ -160,10 +160,7 @@ def test_error_tracking():
 
 def test_circuit_breaker_basic():
     """Test basic circuit breaker functionality."""
-    from src.pdf_to_markdown_mcp.core.errors import (
-        CircuitBreaker,
-        CircuitBreakerError
-    )
+    from src.pdf_to_markdown_mcp.core.errors import CircuitBreaker, CircuitBreakerError
 
     circuit_breaker = CircuitBreaker(failure_threshold=2, name="test_service")
 
@@ -186,13 +183,13 @@ def test_structured_logging():
     """Test structured logging format."""
     from src.pdf_to_markdown_mcp.core.errors import (
         PDFToMarkdownError,
-        sanitize_log_message
+        sanitize_log_message,
     )
 
     error = PDFToMarkdownError(
         message="Test error with sensitive data: password=secret123",
         error_code="TEST001",
-        metadata={"connection_string": "postgres://user:pass@host/db"}
+        metadata={"connection_string": "postgres://user:pass@host/db"},
     )
 
     # Test structured log format
@@ -212,9 +209,9 @@ def test_structured_logging():
 def test_security_validation_helpers():
     """Test security validation helper functions."""
     from src.pdf_to_markdown_mcp.core.errors import (
+        InputValidationError,
         validate_file_path,
         validate_input_size,
-        InputValidationError
     )
 
     # Test valid file path

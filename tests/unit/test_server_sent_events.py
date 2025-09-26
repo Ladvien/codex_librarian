@@ -4,25 +4,22 @@ Unit tests for Server-Sent Events implementation (API-005).
 Testing real-time progress streaming functionality following TDD principles.
 """
 
-import pytest
 import asyncio
-import json
-from typing import AsyncGenerator, Dict, Any, List
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
 from datetime import datetime
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.responses import StreamingResponse
 
 from src.pdf_to_markdown_mcp.api.streaming import (
-    SSEProgress,
-    SSEEvent,
+    JobProgressMonitor,
+    ProgressStream,
     ProgressTracker,
+    SSEEvent,
+    SSEProgress,
     create_sse_response,
     format_sse_data,
-    ProgressStream,
-    JobProgressMonitor,
 )
 from src.pdf_to_markdown_mcp.models.response import JobStatus
 
@@ -37,7 +34,7 @@ class TestSSEDataStructures:
             "event": "progress",
             "data": {"progress": 50, "message": "Processing"},
             "event_id": "evt_123",
-            "retry": 5000
+            "retry": 5000,
         }
 
         # When
@@ -58,7 +55,7 @@ class TestSSEDataStructures:
             "current_step": "Generating embeddings",
             "status": JobStatus.RUNNING,
             "estimated_completion": datetime.utcnow().isoformat(),
-            "metadata": {"pages_processed": 15}
+            "metadata": {"pages_processed": 15},
         }
 
         # When
@@ -82,7 +79,7 @@ class TestSSEDataStructures:
                 SSEProgress(
                     job_id="test",
                     progress_percent=invalid_value,
-                    status=JobStatus.RUNNING
+                    status=JobStatus.RUNNING,
                 )
 
 
@@ -122,11 +119,7 @@ class TestSSEFormatting:
         retry_ms = 3000
 
         # When
-        formatted = format_sse_data(
-            data,
-            event_id=event_id,
-            retry_ms=retry_ms
-        )
+        formatted = format_sse_data(data, event_id=event_id, retry_ms=retry_ms)
 
         # Then
         assert "id: evt_456\n" in formatted
@@ -143,12 +136,12 @@ class TestSSEFormatting:
 
         # Then
         # Each line should be prefixed with 'data: '
-        lines = formatted.strip().split('\n')
-        data_lines = [line for line in lines if line.startswith('data: ')]
+        lines = formatted.strip().split("\n")
+        data_lines = [line for line in lines if line.startswith("data: ")]
 
         # Should properly handle multiline JSON
         assert len(data_lines) >= 1
-        assert formatted.endswith('\n\n')
+        assert formatted.endswith("\n\n")
 
 
 class TestProgressTracker:
@@ -174,7 +167,7 @@ class TestProgressTracker:
         tracker.update_progress(
             progress_percent=50.0,
             current_step="Processing PDF",
-            status=JobStatus.RUNNING
+            status=JobStatus.RUNNING,
         )
 
         # Then
@@ -353,7 +346,7 @@ class TestJobProgressMonitor:
             job_id="job_2",
             progress_percent=75.0,
             current_step="Almost done",
-            status=JobStatus.RUNNING
+            status=JobStatus.RUNNING,
         )
 
         # Then
@@ -371,6 +364,7 @@ class TestSSEResponse:
     @pytest.mark.asyncio
     async def test_create_sse_response(self):
         """Test create_sse_response creates proper StreamingResponse."""
+
         # Given
         async def mock_event_generator():
             yield format_sse_data({"progress": 25})
@@ -390,6 +384,7 @@ class TestSSEResponse:
     @pytest.mark.asyncio
     async def test_sse_response_content(self):
         """Test SSE response generates correct content."""
+
         # Given
         async def test_generator():
             yield format_sse_data({"message": "Hello"})
@@ -420,11 +415,13 @@ class TestSSEIntegration:
         async def stream_progress(job_id: str):
             async def progress_generator():
                 for i in range(0, 101, 25):
-                    yield format_sse_data({
-                        "job_id": job_id,
-                        "progress": i,
-                        "status": "running" if i < 100 else "completed"
-                    })
+                    yield format_sse_data(
+                        {
+                            "job_id": job_id,
+                            "progress": i,
+                            "status": "running" if i < 100 else "completed",
+                        }
+                    )
                     await asyncio.sleep(0.01)  # Small delay
 
             return create_sse_response(progress_generator())
@@ -435,7 +432,9 @@ class TestSSEIntegration:
         with client.stream("GET", "/stream/test_job") as response:
             # Then
             assert response.status_code == 200
-            assert response.headers["content-type"] == "text/event-stream; charset=utf-8"
+            assert (
+                response.headers["content-type"] == "text/event-stream; charset=utf-8"
+            )
 
     def test_sse_client_connection_handling(self):
         """Test SSE handles client connections properly."""

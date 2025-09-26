@@ -12,7 +12,6 @@ All models follow the schema specification in ARCHITECTURE.md.
 """
 
 from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import (
     BigInteger,
@@ -25,6 +24,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -82,11 +82,21 @@ class Document(Base):
     error_message = Column(Text)
     meta_data = Column("metadata", JSONB)  # Map to 'metadata' column in database
 
-    # Add check constraint for conversion status
+    # Directory mirroring fields
+    source_relative_path = Column(Text, index=True)  # Relative to watch directory
+    output_path = Column(Text, index=True)  # Absolute output markdown path
+    output_relative_path = Column(Text, index=True)  # Relative to output directory
+    directory_depth = Column(Integer)  # Directory depth level
+
+    # Add check constraint for conversion status and directory depth
     __table_args__ = (
         CheckConstraint(
             "conversion_status IN ('pending', 'processing', 'completed', 'failed')",
             name="check_conversion_status",
+        ),
+        CheckConstraint(
+            "directory_depth >= 0",
+            name="check_directory_depth_positive",
         ),
     )
 
@@ -265,3 +275,45 @@ class ProcessingQueue(Base):
 
     def __repr__(self) -> str:
         return f"<ProcessingQueue(id={self.id}, file='{self.file_path}', status='{self.status}')>"
+
+
+class PathMapping(Base):
+    """
+    Path mappings table for directory structure preservation.
+
+    This table maintains mappings between source PDF directories and
+    output Markdown directories, enabling automatic directory mirroring.
+    """
+
+    __tablename__ = "path_mappings"
+
+    id = Column(Integer, primary_key=True)
+    source_directory = Column(Text, nullable=False, index=True)
+    output_directory = Column(Text, nullable=False, index=True)
+    relative_path = Column(Text, nullable=False, index=True)
+    directory_level = Column(Integer, index=True)
+    files_count = Column(Integer, default=0)
+    last_scanned = Column(
+        DateTime, default=datetime.utcnow, server_default=text("CURRENT_TIMESTAMP")
+    )
+    created_at = Column(
+        DateTime, default=datetime.utcnow, server_default=text("CURRENT_TIMESTAMP")
+    )
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+
+    # Add constraints
+    __table_args__ = (
+        UniqueConstraint(
+            "source_directory", "relative_path", name="uq_path_mappings_source_relative"
+        ),
+        CheckConstraint("directory_level >= 0", name="check_directory_level_positive"),
+        CheckConstraint("files_count >= 0", name="check_files_count_non_negative"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<PathMapping(id={self.id}, source='{self.source_directory}', relative='{self.relative_path}')>"

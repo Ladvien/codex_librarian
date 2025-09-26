@@ -4,34 +4,32 @@ PDF conversion API endpoints.
 Implements the convert_single and batch_convert MCP tools.
 """
 
-import logging
-import hashlib
 import asyncio
+import hashlib
 import json
-from typing import Dict, Any
+import logging
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
 
-from pdf_to_markdown_mcp.models.request import ConvertSingleRequest, BatchConvertRequest
+from pdf_to_markdown_mcp.auth.security import (
+    RequireAuth,
+    validate_file_security,
+    validate_path_security,
+)
+from pdf_to_markdown_mcp.core.dependencies import get_database_service
+from pdf_to_markdown_mcp.core.processor import PDFProcessor
+from pdf_to_markdown_mcp.models.dto import CreateDocumentDTO
+from pdf_to_markdown_mcp.models.request import BatchConvertRequest, ConvertSingleRequest
 from pdf_to_markdown_mcp.models.response import (
-    ConvertSingleResponse,
     BatchConvertResponse,
+    ConvertSingleResponse,
     ErrorResponse,
     ErrorType,
 )
-from pdf_to_markdown_mcp.models.dto import CreateDocumentDTO, DocumentDTO
-from pdf_to_markdown_mcp.core.processor import PDFProcessor
-from pdf_to_markdown_mcp.core.dependencies import get_database_service
 from pdf_to_markdown_mcp.services.database import VectorDatabaseService
-from pdf_to_markdown_mcp.worker.tasks import process_pdf_document, process_pdf_batch
-from pdf_to_markdown_mcp.auth.security import (
-    RequireAuth,
-    validate_path_security,
-    validate_file_security,
-)
+from pdf_to_markdown_mcp.worker.tasks import process_pdf_batch, process_pdf_document
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -180,7 +178,7 @@ async def convert_single_pdf(
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
-                error=ErrorType.PROCESSING, message=f"Failed to process PDF: {str(e)}"
+                error=ErrorType.PROCESSING, message=f"Failed to process PDF: {e!s}"
             ).dict(),
         )
 
@@ -251,7 +249,7 @@ async def batch_convert_pdfs(
                 skipped_files.append(
                     {
                         "file": file_path.name,
-                        "reason": f"File validation error: {str(e)}",
+                        "reason": f"File validation error: {e!s}",
                     }
                 )
 
@@ -294,7 +292,7 @@ async def batch_convert_pdfs(
             status_code=500,
             detail=ErrorResponse(
                 error=ErrorType.PROCESSING,
-                message=f"Failed to initiate batch processing: {str(e)}",
+                message=f"Failed to initiate batch processing: {e!s}",
             ).dict(),
         )
 

@@ -10,19 +10,17 @@ This module provides tools for monitoring and optimizing:
 """
 
 import asyncio
-import time
-import psutil
 import logging
-from typing import Dict, Any, Optional, List, Callable, Union
-from contextlib import asynccontextmanager
-from functools import wraps
-from dataclasses import dataclass, field
+import time
 from collections import defaultdict
-import json
-from datetime import datetime, timedelta
+from collections.abc import Callable
+from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
+from functools import wraps
+from typing import Any
 
-import sqlalchemy
-from sqlalchemy import text, event
+import psutil
+from sqlalchemy import event, text
 from sqlalchemy.engine import Engine
 
 logger = logging.getLogger(__name__)
@@ -37,9 +35,9 @@ class PerformanceMetrics:
     memory_delta_mb: float
     cpu_usage_percent: float
     timestamp: float
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert metrics to dictionary format."""
         return {
             "operation_name": self.operation_name,
@@ -58,14 +56,14 @@ class QueryPerformanceMetrics:
     query_hash: str
     sql_statement: str
     execution_time_ms: float
-    rows_returned: Optional[int]
-    rows_examined: Optional[int]
-    plan_cost: Optional[float]
+    rows_returned: int | None
+    rows_examined: int | None
+    plan_cost: float | None
     cache_hit: bool
     timestamp: float
-    parameters: Dict[str, Any] = field(default_factory=dict)
+    parameters: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert query metrics to dictionary format."""
         return {
             "query_hash": self.query_hash,
@@ -84,8 +82,8 @@ class PerformanceMonitor:
     """Main performance monitoring system."""
 
     def __init__(self):
-        self.metrics: List[PerformanceMetrics] = []
-        self.query_metrics: List[QueryPerformanceMetrics] = []
+        self.metrics: list[PerformanceMetrics] = []
+        self.query_metrics: list[QueryPerformanceMetrics] = []
         self.thresholds = {
             "cpu_percent": 80.0,
             "memory_percent": 85.0,
@@ -93,8 +91,8 @@ class PerformanceMonitor:
             "query_time_ms": 500.0,
             "memory_delta_mb": 100.0,
         }
-        self.query_cache: Dict[str, Any] = {}
-        self.slow_queries: Dict[str, int] = defaultdict(int)
+        self.query_cache: dict[str, Any] = {}
+        self.slow_queries: dict[str, int] = defaultdict(int)
 
     def set_thresholds(self, **thresholds):
         """Update performance thresholds."""
@@ -102,7 +100,7 @@ class PerformanceMonitor:
 
     @asynccontextmanager
     async def measure_performance(
-        self, operation_name: str, metadata: Optional[Dict[str, Any]] = None
+        self, operation_name: str, metadata: dict[str, Any] | None = None
     ):
         """Context manager for measuring operation performance."""
         start_time = time.time()
@@ -135,7 +133,7 @@ class PerformanceMonitor:
             await self._check_thresholds(metrics)
 
     def performance_decorator(
-        self, operation_name: str, metadata: Optional[Dict[str, Any]] = None
+        self, operation_name: str, metadata: dict[str, Any] | None = None
     ):
         """Decorator for automatic performance monitoring."""
 
@@ -212,7 +210,7 @@ class PerformanceMonitor:
                 f"Performance alerts for {metrics.operation_name}: {'; '.join(alerts)}"
             )
 
-    def get_performance_summary(self, duration_minutes: int = 5) -> Dict[str, Any]:
+    def get_performance_summary(self, duration_minutes: int = 5) -> dict[str, Any]:
         """Generate performance summary for specified duration."""
         cutoff_time = time.time() - (duration_minutes * 60)
         recent_metrics = [m for m in self.metrics if m.timestamp > cutoff_time]
@@ -273,7 +271,7 @@ class PerformanceMonitor:
             "alerts": self._get_recent_alerts(cutoff_time),
         }
 
-    def _get_recent_alerts(self, cutoff_time: float) -> List[str]:
+    def _get_recent_alerts(self, cutoff_time: float) -> list[str]:
         """Get recent performance alerts."""
         alerts = []
 
@@ -363,8 +361,8 @@ class DatabasePerformanceOptimizer:
                 self.monitor.record_query_metrics(metrics)
 
     async def analyze_query_performance(
-        self, query: str, parameters: Dict[str, Any] = None
-    ) -> Dict[str, Any]:
+        self, query: str, parameters: dict[str, Any] = None
+    ) -> dict[str, Any]:
         """Analyze query performance with EXPLAIN ANALYZE."""
         explain_query = f"EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) {query}"
 
@@ -435,7 +433,7 @@ def get_performance_monitor() -> PerformanceMonitor:
 
 
 # Convenience decorators
-def monitor_performance(operation_name: str, metadata: Dict[str, Any] = None):
+def monitor_performance(operation_name: str, metadata: dict[str, Any] = None):
     """Decorator for monitoring function performance."""
     return performance_monitor.performance_decorator(operation_name, metadata)
 

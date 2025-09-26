@@ -5,19 +5,24 @@ Tests for SQL injection prevention, authentication, path traversal,
 and other security vulnerabilities.
 """
 
-import pytest
 import os
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch, AsyncMock
-from fastapi.testclient import TestClient
+from unittest.mock import Mock, patch
+
+import pytest
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from pdf_to_markdown_mcp.db.queries import SearchQueries, DocumentQueries
+from pdf_to_markdown_mcp.api.convert import batch_convert_pdfs
+from pdf_to_markdown_mcp.db.queries import SearchQueries
 from pdf_to_markdown_mcp.db.session import DatabaseManager
-from pdf_to_markdown_mcp.api.convert import convert_single_pdf, batch_convert_pdfs
-from pdf_to_markdown_mcp.models.request import ConvertSingleRequest, BatchConvertRequest, ProcessingOptions
+from pdf_to_markdown_mcp.models.request import (
+    BatchConvertRequest,
+    ConvertSingleRequest,
+    ProcessingOptions,
+)
 
 
 class TestSQLInjectionPrevention:
@@ -37,9 +42,7 @@ class TestSQLInjectionPrevention:
 
         # Then: Should use parameterized queries and not execute injection
         SearchQueries.fulltext_search(
-            db=mock_db,
-            query=malicious_query,
-            filters=malicious_filters
+            db=mock_db, query=malicious_query, filters=malicious_filters
         )
 
         # Verify parameterized query was used
@@ -63,16 +66,12 @@ class TestSQLInjectionPrevention:
         mock_db.execute.return_value = mock_result
 
         # When: Attempting SQL injection in filters
-        malicious_filters = {
-            "document_id": "1 UNION SELECT * FROM pg_user --"
-        }
+        malicious_filters = {"document_id": "1 UNION SELECT * FROM pg_user --"}
         query_embedding = [0.1] * 1536
 
         # Then: Should use parameterized queries
         SearchQueries.vector_similarity_search(
-            db=mock_db,
-            query_embedding=query_embedding,
-            filters=malicious_filters
+            db=mock_db, query_embedding=query_embedding, filters=malicious_filters
         )
 
         # Verify parameterized query was used
@@ -94,21 +93,19 @@ class TestSQLInjectionPrevention:
         mock_db.execute.return_value = mock_result
 
         # When: Providing non-integer document_id (potential injection)
-        malicious_filters = {
-            "document_id": "not_an_integer; DROP TABLE documents;"
-        }
+        malicious_filters = {"document_id": "not_an_integer; DROP TABLE documents;"}
 
         # Then: Should skip invalid filter (type validation)
         SearchQueries.fulltext_search(
-            db=mock_db,
-            query="test",
-            filters=malicious_filters
+            db=mock_db, query="test", filters=malicious_filters
         )
 
         # Verify that malicious filter was not included in parameters
         call_args = mock_db.execute.call_args
         params = call_args[0][1]
-        assert "document_id" not in params  # Should be filtered out due to type validation
+        assert (
+            "document_id" not in params
+        )  # Should be filtered out due to type validation
 
 
 class TestDatabaseCredentialSecurity:
@@ -120,10 +117,12 @@ class TestDatabaseCredentialSecurity:
         with patch.dict(os.environ, {}, clear=True):
             with pytest.raises(ValueError) as exc_info:
                 # When: Attempting to import session module
-                from pdf_to_markdown_mcp.db import session
+                pass
 
             # Then: Should raise ValueError about missing DATABASE_URL
-            assert "DATABASE_URL environment variable is required" in str(exc_info.value)
+            assert "DATABASE_URL environment variable is required" in str(
+                exc_info.value
+            )
 
     def test_no_hardcoded_credentials(self):
         """Test that no hardcoded credentials exist in session configuration."""
@@ -138,18 +137,20 @@ class TestDatabaseCredentialSecurity:
                 "password@",
                 ":password",
                 "postgres://user:password",
-                "postgresql://user:password"
+                "postgresql://user:password",
             ]
 
             for pattern in forbidden_patterns:
-                assert pattern not in content.lower(), f"Found hardcoded credential pattern: {pattern}"
+                assert pattern not in content.lower(), (
+                    f"Found hardcoded credential pattern: {pattern}"
+                )
 
     def test_connection_info_masks_password(self):
         """Test that connection info masks password in logs."""
         # Given: Database manager with connection containing password
-        with patch.dict(os.environ, {
-            "DATABASE_URL": "postgresql://user:secret123@localhost/test"
-        }):
+        with patch.dict(
+            os.environ, {"DATABASE_URL": "postgresql://user:secret123@localhost/test"}
+        ):
             db_manager = DatabaseManager()
 
             # When: Getting connection info
@@ -182,7 +183,7 @@ class TestPathTraversalPrevention:
                 pattern="*.pdf",
                 max_files=10,
                 recursive=False,
-                options=ProcessingOptions()
+                options=ProcessingOptions(),
             )
 
             mock_db = Mock(spec=Session)
@@ -190,7 +191,9 @@ class TestPathTraversalPrevention:
 
             # Then: Should validate and sanitize path
             with pytest.raises(HTTPException) as exc_info:
-                await batch_convert_pdfs(malicious_request, mock_background_tasks, mock_db)
+                await batch_convert_pdfs(
+                    malicious_request, mock_background_tasks, mock_db
+                )
 
             # Should reject traversal attempts
             assert exc_info.value.status_code in [400, 403]
@@ -198,18 +201,14 @@ class TestPathTraversalPrevention:
     def test_path_validation_helper(self):
         """Test path validation helper function."""
         # Given: Various path inputs
-        valid_paths = [
-            "/mnt/codex_fs/research/",
-            "/tmp/safe_dir/",
-            "./local_dir/"
-        ]
+        valid_paths = ["/mnt/codex_fs/research/", "/tmp/safe_dir/", "./local_dir/"]
 
         invalid_paths = [
             "../../../etc/passwd",
             "/etc/shadow",
             "~/../etc/hosts",
             "/mnt/codex_fs/research/../../../etc/",
-            "dir/../../../root/"
+            "dir/../../../root/",
         ]
 
         # When/Then: Valid paths should pass, invalid should fail
@@ -234,6 +233,7 @@ class TestAuthenticationSecurity:
         """Test that API calls without authentication are rejected."""
         # Given: FastAPI test client
         from pdf_to_markdown_mcp.main import app
+
         client = TestClient(app)
 
         # When: Making request without authentication
@@ -242,8 +242,8 @@ class TestAuthenticationSecurity:
             json={
                 "file_path": "/tmp/test.pdf",
                 "store_embeddings": False,
-                "options": {}
-            }
+                "options": {},
+            },
         )
 
         # Then: Should return 401 Unauthorized
@@ -256,6 +256,7 @@ class TestAuthenticationSecurity:
         """Test that invalid API keys are rejected."""
         # Given: FastAPI test client with invalid key
         from pdf_to_markdown_mcp.main import app
+
         client = TestClient(app)
 
         # When: Making request with invalid API key
@@ -264,25 +265,27 @@ class TestAuthenticationSecurity:
             json={
                 "file_path": "/tmp/test.pdf",
                 "store_embeddings": False,
-                "options": {}
+                "options": {},
             },
-            headers={"Authorization": "Bearer invalid_key"}
+            headers={"Authorization": "Bearer invalid_key"},
         )
 
         # Then: Should return 401 Unauthorized
         # Note: This will fail until authentication is implemented
         # assert response.status_code == 401
-        pass
 
     @patch.dict(os.environ, {"API_KEY": "test_secret_key", "REQUIRE_AUTH": "true"})
     def test_valid_api_key_acceptance(self):
         """Test that valid API keys are accepted."""
         # Given: FastAPI test client with valid key
         from pdf_to_markdown_mcp.main import app
+
         client = TestClient(app)
 
         # When: Making request with valid API key
-        with patch("pdf_to_markdown_mcp.api.convert.convert_single_pdf") as mock_convert:
+        with patch(
+            "pdf_to_markdown_mcp.api.convert.convert_single_pdf"
+        ) as mock_convert:
             mock_convert.return_value = {"success": True}
 
             response = client.post(
@@ -290,14 +293,13 @@ class TestAuthenticationSecurity:
                 json={
                     "file_path": "/tmp/test.pdf",
                     "store_embeddings": False,
-                    "options": {}
+                    "options": {},
                 },
-                headers={"Authorization": "Bearer test_secret_key"}
+                headers={"Authorization": "Bearer test_secret_key"},
             )
 
             # Then: Should allow request (implementation dependent)
             # Note: This will need actual authentication middleware
-            pass
 
 
 class TestCORSConfiguration:
@@ -309,6 +311,7 @@ class TestCORSConfiguration:
         with patch.dict(os.environ, {"ENVIRONMENT": "production"}):
             # When: Loading CORS configuration
             from pdf_to_markdown_mcp.config import Settings
+
             settings = Settings()
 
             # Then: Should not allow wildcard origins in production
@@ -318,6 +321,7 @@ class TestCORSConfiguration:
         """Test that CORS headers are properly restricted."""
         # Given: FastAPI test client
         from pdf_to_markdown_mcp.main import app
+
         client = TestClient(app)
 
         # When: Making OPTIONS request
@@ -342,7 +346,7 @@ class TestFileUploadSecurity:
             request = ConvertSingleRequest(
                 file_path=Path("/tmp/large_file.pdf"),
                 store_embeddings=False,
-                options=ProcessingOptions()
+                options=ProcessingOptions(),
             )
 
             # Then: Should validate file size before processing
@@ -356,7 +360,7 @@ class TestFileUploadSecurity:
             "/tmp/malicious.exe",
             "/tmp/script.sh",
             "/tmp/document.docx",
-            "/tmp/archive.zip"
+            "/tmp/archive.zip",
         ]
 
         for file_path in invalid_files:
@@ -364,12 +368,12 @@ class TestFileUploadSecurity:
             request = ConvertSingleRequest(
                 file_path=Path(file_path),
                 store_embeddings=False,
-                options=ProcessingOptions()
+                options=ProcessingOptions(),
             )
 
             # Then: Should validate file extension
             # Note: Implementation will need to add file type validation
-            assert not file_path.endswith('.pdf')
+            assert not file_path.endswith(".pdf")
 
 
 class TestErrorHandlingSecurity:
@@ -379,7 +383,9 @@ class TestErrorHandlingSecurity:
         """Test that database errors don't leak schema information."""
         # Given: Mock database session that raises exception
         mock_db = Mock(spec=Session)
-        mock_db.execute.side_effect = Exception("relation 'secret_table' does not exist")
+        mock_db.execute.side_effect = Exception(
+            "relation 'secret_table' does not exist"
+        )
 
         # When: Database operation fails
         with pytest.raises(Exception):
@@ -394,7 +400,7 @@ class TestErrorHandlingSecurity:
         request = ConvertSingleRequest(
             file_path=Path("/etc/passwd"),
             store_embeddings=False,
-            options=ProcessingOptions()
+            options=ProcessingOptions(),
         )
 
         # When: Processing fails
@@ -403,7 +409,6 @@ class TestErrorHandlingSecurity:
 
         # Then: Error message should not expose full system paths
         # Note: Implementation will need path sanitization in error messages
-        pass
 
 
 class TestInputValidationSecurity:
@@ -414,11 +419,11 @@ class TestInputValidationSecurity:
         # Given: Invalid request data
         invalid_data = {
             "file_path": "../../../etc/passwd",  # Path traversal
-            "store_embeddings": "not_boolean",   # Wrong type
+            "store_embeddings": "not_boolean",  # Wrong type
             "options": {
-                "chunk_size": -1000,             # Invalid value
-                "chunk_overlap": 2000            # Overlap > chunk_size
-            }
+                "chunk_size": -1000,  # Invalid value
+                "chunk_overlap": 2000,  # Overlap > chunk_size
+            },
         }
 
         # When: Creating request model
@@ -430,9 +435,9 @@ class TestInputValidationSecurity:
         # Given: Invalid processing options
         with pytest.raises(ValueError):
             ProcessingOptions(
-                chunk_size=0,           # Invalid
-                chunk_overlap=1000,     # Greater than chunk_size
-                max_file_size_mb=-1     # Invalid
+                chunk_size=0,  # Invalid
+                chunk_overlap=1000,  # Greater than chunk_size
+                max_file_size_mb=-1,  # Invalid
             )
 
 
@@ -448,8 +453,8 @@ def mock_secure_db():
 @pytest.fixture
 def temp_pdf_file():
     """Fixture providing temporary PDF file for testing."""
-    with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
-        f.write(b'%PDF-1.4\n%fake pdf content')
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
+        f.write(b"%PDF-1.4\n%fake pdf content")
         temp_path = Path(f.name)
 
     yield temp_path

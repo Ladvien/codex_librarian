@@ -5,10 +5,11 @@ This module implements API versioning functionality including version
 detection, routing, and middleware for handling multiple API versions.
 """
 
-from enum import Enum
-from typing import Optional, Any, Dict
 import re
-from fastapi import APIRouter, Request, Response
+from enum import Enum
+from typing import Any
+
+from fastapi import APIRouter, Request
 from starlette.middleware.base import BaseHTTPMiddleware
 
 
@@ -25,7 +26,7 @@ class VersionedAPIRouter(APIRouter):
         self,
         version: APIVersion,
         prefix: str = "",
-        tags: Optional[list] = None,
+        tags: list | None = None,
         **kwargs: Any,
     ):
         """Initialize versioned router with version prefix and tags."""
@@ -104,7 +105,7 @@ def create_versioned_openapi_schema(
     version: APIVersion,
     title: str = "PDF to Markdown MCP Server API",
     description: str = "API for converting PDFs to Markdown with vector search",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Create version-specific OpenAPI schema.
 
@@ -190,7 +191,7 @@ def is_version_deprecated(version: APIVersion) -> bool:
     return False
 
 
-def get_deprecation_info(version: APIVersion) -> Optional[Dict[str, Any]]:
+def get_deprecation_info(version: APIVersion) -> dict[str, Any] | None:
     """Get deprecation information for a version (for future use)."""
     if not is_version_deprecated(version):
         return None

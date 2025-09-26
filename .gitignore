@@ -324,6 +324,18 @@ test_*.sqlite
 test_output/
 test_results/
 
+# Manual testing directories (may contain copyrighted PDFs)
+watch_pdf_test/
+watch_pdf_test_output/
+*.pdf
+*.PDF
+
+# Test service files
+watch_test.pid
+watch_test.log
+watch_test_service.py
+.env.test
+
 # ==============================================================================
 # Performance & Profiling
 # ==============================================================================

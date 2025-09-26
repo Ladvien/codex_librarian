@@ -8,11 +8,11 @@ Contains external service integrations:
 """
 
 from .embeddings import (
-    EmbeddingProvider,
     EmbeddingConfig,
-    EmbeddingService,
-    EmbeddingResult,
     EmbeddingError,
+    EmbeddingProvider,
+    EmbeddingResult,
+    EmbeddingService,
     OllamaEmbedder,
     OpenAIEmbedder,
     create_embedding_service,

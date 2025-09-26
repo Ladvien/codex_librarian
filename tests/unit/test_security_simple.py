@@ -4,10 +4,9 @@ Simple security tests to verify current state without complex dependencies.
 
 import os
 import sys
-from unittest.mock import patch
 
 # Add src to Python path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 
 from fastapi.testclient import TestClient
 
@@ -26,7 +25,7 @@ def test_security_headers_missing():
         "X-Frame-Options",
         "X-XSS-Protection",
         "Strict-Transport-Security",
-        "Content-Security-Policy"
+        "Content-Security-Policy",
     ]
 
     missing_headers = []
@@ -35,7 +34,9 @@ def test_security_headers_missing():
             missing_headers.append(header)
 
     # Should have missing headers currently (this will pass initially, then fail after we implement)
-    assert len(missing_headers) > 0, f"Expected missing headers but found: {[h for h in expected_headers if h in response.headers]}"
+    assert len(missing_headers) > 0, (
+        f"Expected missing headers but found: {[h for h in expected_headers if h in response.headers]}"
+    )
     print(f"Missing security headers: {missing_headers}")
 
 
@@ -44,7 +45,9 @@ def test_cors_too_permissive():
     from pdf_to_markdown_mcp.config import settings
 
     # Should be permissive currently
-    assert "*" in settings.cors_origins, f"CORS origins should be permissive but got: {settings.cors_origins}"
+    assert "*" in settings.cors_origins, (
+        f"CORS origins should be permissive but got: {settings.cors_origins}"
+    )
     print(f"CORS origins: {settings.cors_origins}")
 
 

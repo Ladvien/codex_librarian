@@ -16,15 +16,12 @@ Test Categories:
 5. Production security scenario simulation
 """
 
-import pytest
-from unittest.mock import Mock, patch, AsyncMock
-from fastapi import HTTPException, status
-from fastapi.testclient import TestClient
-import tempfile
 import os
-import json
+import tempfile
 import time
-from typing import Dict, Any
+
+import pytest
+
 
 # Mock imports for testing (will be replaced by actual imports when dependencies are available)
 class MockHTTPException(Exception):
@@ -58,7 +55,7 @@ class TestCompleteAttackChainPrevention:
                 "temp_dir": temp_dir,
                 "safe_dir": safe_dir,
                 "malicious_dir": malicious_dir,
-                "test_pdf": test_pdf
+                "test_pdf": test_pdf,
             }
 
     def test_auth_bypass_plus_path_traversal_attack(self, temp_test_environment):
@@ -76,22 +73,22 @@ class TestCompleteAttackChainPrevention:
                 "auth_header": "Bearer fake_api_key_12345",
                 "file_path": "../../../etc/passwd",
                 "expected_auth_failure": True,
-                "expected_path_failure": True
+                "expected_path_failure": True,
             },
             {
                 "description": "No auth header + directory traversal",
                 "auth_header": None,
                 "file_path": "..\\..\\..\\windows\\system32\\config\\sam",
                 "expected_auth_failure": True,
-                "expected_path_failure": True
+                "expected_path_failure": True,
             },
             {
                 "description": "SQL injection in API key + path traversal",
                 "auth_header": "Bearer '; DROP TABLE users; --",
                 "file_path": "../../../../root/.ssh/id_rsa",
                 "expected_auth_failure": True,
-                "expected_path_failure": True
-            }
+                "expected_path_failure": True,
+            },
         ]
 
         # Mock security functions
@@ -101,7 +98,12 @@ class TestCompleteAttackChainPrevention:
             return True
 
         def mock_validate_path_security(file_path):
-            if ".." in file_path or "/etc/" in file_path or "/root/" in file_path or "system32" in file_path:
+            if (
+                ".." in file_path
+                or "/etc/" in file_path
+                or "/root/" in file_path
+                or "system32" in file_path
+            ):
                 raise MockHTTPException(400, "Invalid file path")
             return True
 
@@ -117,7 +119,9 @@ class TestCompleteAttackChainPrevention:
                 auth_failed = True
                 assert e.status_code == 401
 
-            assert auth_failed == scenario["expected_auth_failure"], f"Authentication should have failed for: {scenario['description']}"
+            assert auth_failed == scenario["expected_auth_failure"], (
+                f"Authentication should have failed for: {scenario['description']}"
+            )
 
             # Test path validation layer (even if auth passed)
             path_failed = False
@@ -127,7 +131,9 @@ class TestCompleteAttackChainPrevention:
                 path_failed = True
                 assert e.status_code == 400
 
-            assert path_failed == scenario["expected_path_failure"], f"Path validation should have failed for: {scenario['description']}"
+            assert path_failed == scenario["expected_path_failure"], (
+                f"Path validation should have failed for: {scenario['description']}"
+            )
 
     def test_sql_injection_plus_path_traversal_attack(self):
         """
@@ -142,23 +148,29 @@ class TestCompleteAttackChainPrevention:
             {
                 "search_query": "'; DROP TABLE documents; --",
                 "file_path": "../../../etc/passwd",
-                "description": "SQL injection + basic traversal"
+                "description": "SQL injection + basic traversal",
             },
             {
                 "search_query": "' UNION SELECT * FROM users --",
                 "file_path": "..\\..\\..\\windows\\system32\\config\\sam",
-                "description": "UNION injection + Windows traversal"
+                "description": "UNION injection + Windows traversal",
             },
             {
                 "search_query": "'; INSERT INTO documents (filename) VALUES ('hacked'); --",
                 "file_path": "/dev/null; rm -rf /",
-                "description": "INSERT injection + command injection attempt"
-            }
+                "description": "INSERT injection + command injection attempt",
+            },
         ]
 
         # Mock validation functions
         def mock_validate_search_query(query):
-            dangerous_patterns = ["DROP TABLE", "UNION SELECT", "INSERT INTO", "--", ";"]
+            dangerous_patterns = [
+                "DROP TABLE",
+                "UNION SELECT",
+                "INSERT INTO",
+                "--",
+                ";",
+            ]
             if any(pattern in query for pattern in dangerous_patterns):
                 raise MockHTTPException(400, "Invalid search query")
             return query.strip()
@@ -180,7 +192,9 @@ class TestCompleteAttackChainPrevention:
                 sql_blocked = True
                 assert e.status_code == 400
 
-            assert sql_blocked, f"SQL injection should be blocked: {payload['search_query']}"
+            assert sql_blocked, (
+                f"SQL injection should be blocked: {payload['search_query']}"
+            )
 
             # Test path traversal prevention
             path_blocked = False
@@ -190,7 +204,9 @@ class TestCompleteAttackChainPrevention:
                 path_blocked = True
                 assert e.status_code == 400
 
-            assert path_blocked, f"Path traversal should be blocked: {payload['file_path']}"
+            assert path_blocked, (
+                f"Path traversal should be blocked: {payload['file_path']}"
+            )
 
     def test_memory_exhaustion_plus_injection_attack(self):
         """
@@ -205,13 +221,13 @@ class TestCompleteAttackChainPrevention:
             {
                 "large_payload": "A" * 10000 + "'; DROP TABLE documents; --",
                 "file_size": 600 * 1024 * 1024,  # 600MB - over limit
-                "description": "Large text payload with SQL injection"
+                "description": "Large text payload with SQL injection",
             },
             {
                 "large_payload": "x" * 5000 + "../../../etc/passwd",
                 "file_size": 1000 * 1024 * 1024,  # 1GB - way over limit
-                "description": "Large payload with path traversal"
-            }
+                "description": "Large payload with path traversal",
+            },
         ]
 
         # Mock resource validation
@@ -220,7 +236,9 @@ class TestCompleteAttackChainPrevention:
                 raise MockHTTPException(413, "Payload too large")
             return payload
 
-        def mock_validate_file_size(file_size, max_size=500 * 1024 * 1024):  # 500MB limit
+        def mock_validate_file_size(
+            file_size, max_size=500 * 1024 * 1024
+        ):  # 500MB limit
             if file_size > max_size:
                 raise MockHTTPException(413, "File too large")
             return file_size
@@ -237,7 +255,9 @@ class TestCompleteAttackChainPrevention:
                 payload_blocked = True
                 assert e.status_code == 413
 
-            assert payload_blocked, f"Large payload should be blocked: {len(attack['large_payload'])} bytes"
+            assert payload_blocked, (
+                f"Large payload should be blocked: {len(attack['large_payload'])} bytes"
+            )
 
             # Test file size limits
             file_blocked = False
@@ -247,7 +267,9 @@ class TestCompleteAttackChainPrevention:
                 file_blocked = True
                 assert e.status_code == 413
 
-            assert file_blocked, f"Large file should be blocked: {attack['file_size']} bytes"
+            assert file_blocked, (
+                f"Large file should be blocked: {attack['file_size']} bytes"
+            )
 
     def test_encoding_bypass_attack_chain(self):
         """
@@ -263,19 +285,19 @@ class TestCompleteAttackChainPrevention:
                 "url_encoded_auth": "Bearer%20fake_key",
                 "double_encoded_path": "%252e%252e%252f%252e%252e%252f%252e%252e%252f/etc/passwd",
                 "unicode_query": "\u0027\u003b DROP TABLE documents\u003b\u002d\u002d",
-                "description": "Multi-layer encoding bypass"
+                "description": "Multi-layer encoding bypass",
             },
             {
                 "base64_auth": "QmVhcmVyIGZha2Vfa2V5",  # "Bearer fake_key" in base64
                 "mixed_encoded_path": "..%2f..%2f..%2f/etc/passwd",
                 "hex_query": "\x27\x3b DROP TABLE documents\x3b\x2d\x2d",
-                "description": "Mixed encoding techniques"
-            }
+                "description": "Mixed encoding techniques",
+            },
         ]
 
         # Mock decoding and validation functions
-        import urllib.parse
         import base64
+        import urllib.parse
 
         def mock_decode_and_validate_auth(auth_header):
             # URL decode
@@ -284,7 +306,7 @@ class TestCompleteAttackChainPrevention:
 
             # Base64 decode attempts
             try:
-                decoded = base64.b64decode(auth_header).decode('utf-8')
+                decoded = base64.b64decode(auth_header).decode("utf-8")
                 auth_header = decoded
             except:
                 pass
@@ -310,7 +332,7 @@ class TestCompleteAttackChainPrevention:
 
         def mock_decode_and_validate_query(query):
             # Unicode normalization
-            query = query.encode('utf-8').decode('unicode_escape')
+            query = query.encode("utf-8").decode("unicode_escape")
 
             if "DROP TABLE" in query or ";" in query:
                 raise MockHTTPException(400, "SQL injection detected")
@@ -389,17 +411,21 @@ class TestSecurityIncidentResponse:
         blocked = False
         for i, attempt in enumerate(attack_attempts):
             try:
-                mock_security_middleware(attack_source, attempt["type"], attempt["payload"])
+                mock_security_middleware(
+                    attack_source, attempt["type"], attempt["payload"]
+                )
             except MockHTTPException as e:
                 if e.status_code == 429:
                     blocked = True
-                    print(f"Source blocked after {i+1} attempts")
+                    print(f"Source blocked after {i + 1} attempts")
                     break
                 elif e.status_code == 400:
-                    print(f"Attack {i+1} detected and blocked: {attempt['type']}")
+                    print(f"Attack {i + 1} detected and blocked: {attempt['type']}")
 
         # Should eventually block the source
-        assert blocked or attack_source in blocked_sources, "Repeated attacks should trigger blocking"
+        assert blocked or attack_source in blocked_sources, (
+            "Repeated attacks should trigger blocking"
+        )
 
     def test_security_logging_and_alerting(self):
         """
@@ -418,7 +444,7 @@ class TestSecurityIncidentResponse:
                 "event_type": event_type,
                 "source_ip": source_ip,
                 "details": details,
-                "severity": severity
+                "severity": severity,
             }
             security_events.append(event)
 
@@ -428,10 +454,30 @@ class TestSecurityIncidentResponse:
 
         # Mock various security violations
         violations = [
-            ("sql_injection", "10.0.1.50", {"query": "'; DROP TABLE users; --", "endpoint": "/search"}, "critical"),
-            ("path_traversal", "10.0.1.51", {"path": "../../../etc/passwd", "endpoint": "/convert"}, "high"),
-            ("auth_bypass", "10.0.1.52", {"auth_header": "Bearer fake_token", "endpoint": "/api/v1/convert"}, "high"),
-            ("rate_limit_exceeded", "10.0.1.50", {"requests_per_minute": 150, "limit": 100}, "medium"),
+            (
+                "sql_injection",
+                "10.0.1.50",
+                {"query": "'; DROP TABLE users; --", "endpoint": "/search"},
+                "critical",
+            ),
+            (
+                "path_traversal",
+                "10.0.1.51",
+                {"path": "../../../etc/passwd", "endpoint": "/convert"},
+                "high",
+            ),
+            (
+                "auth_bypass",
+                "10.0.1.52",
+                {"auth_header": "Bearer fake_token", "endpoint": "/api/v1/convert"},
+                "high",
+            ),
+            (
+                "rate_limit_exceeded",
+                "10.0.1.50",
+                {"requests_per_minute": 150, "limit": 100},
+                "medium",
+            ),
         ]
 
         # When
@@ -466,7 +512,7 @@ class TestSecurityIncidentResponse:
             "blocked_requests": 0,
             "attack_types": {},
             "top_attack_sources": {},
-            "response_times": []
+            "response_times": [],
         }
 
         def mock_metrics_collector(request_info):
@@ -483,18 +529,34 @@ class TestSecurityIncidentResponse:
             if request_info.get("is_attack", False):
                 security_metrics["blocked_requests"] += 1
                 attack_type = request_info.get("attack_type", "unknown")
-                security_metrics["attack_types"][attack_type] = security_metrics["attack_types"].get(attack_type, 0) + 1
+                security_metrics["attack_types"][attack_type] = (
+                    security_metrics["attack_types"].get(attack_type, 0) + 1
+                )
 
                 source_ip = request_info.get("source_ip", "unknown")
-                security_metrics["top_attack_sources"][source_ip] = security_metrics["top_attack_sources"].get(source_ip, 0) + 1
+                security_metrics["top_attack_sources"][source_ip] = (
+                    security_metrics["top_attack_sources"].get(source_ip, 0) + 1
+                )
 
         # When - Simulate various requests
         test_requests = [
             {"source_ip": "192.168.1.10", "is_attack": False},
-            {"source_ip": "192.168.1.20", "is_attack": True, "attack_type": "sql_injection"},
+            {
+                "source_ip": "192.168.1.20",
+                "is_attack": True,
+                "attack_type": "sql_injection",
+            },
             {"source_ip": "192.168.1.30", "is_attack": False},
-            {"source_ip": "192.168.1.20", "is_attack": True, "attack_type": "path_traversal"},
-            {"source_ip": "192.168.1.40", "is_attack": True, "attack_type": "sql_injection"},
+            {
+                "source_ip": "192.168.1.20",
+                "is_attack": True,
+                "attack_type": "path_traversal",
+            },
+            {
+                "source_ip": "192.168.1.40",
+                "is_attack": True,
+                "attack_type": "sql_injection",
+            },
             {"source_ip": "192.168.1.10", "is_attack": False},
         ]
 
@@ -514,8 +576,12 @@ class TestSecurityIncidentResponse:
         assert security_metrics["top_attack_sources"]["192.168.1.40"] == 1
 
         # Check performance impact
-        avg_response_time = sum(security_metrics["response_times"]) / len(security_metrics["response_times"])
-        assert avg_response_time < 0.01, f"Security checks should be fast: {avg_response_time:.4f}s"
+        avg_response_time = sum(security_metrics["response_times"]) / len(
+            security_metrics["response_times"]
+        )
+        assert avg_response_time < 0.01, (
+            f"Security checks should be fast: {avg_response_time:.4f}s"
+        )
 
 
 class TestProductionSecurityScenarios:
@@ -530,12 +596,12 @@ class TestProductionSecurityScenarios:
         Then should detect and mitigate distributed attack
         """
         # Given - Simulate botnet attack
-        attack_network = [f"10.0.{i//10}.{i%10}" for i in range(100, 120)]  # 20 IPs
+        attack_network = [f"10.0.{i // 10}.{i % 10}" for i in range(100, 120)]  # 20 IPs
         attack_payloads = [
             "'; DROP TABLE documents; --",
             "../../../etc/passwd",
             "Bearer fake_api_key",
-            "' UNION SELECT * FROM users --"
+            "' UNION SELECT * FROM users --",
         ]
 
         blocked_ips = set()
@@ -574,8 +640,12 @@ class TestProductionSecurityScenarios:
 
         # Then - Verify distributed attack mitigation
         assert len(blocked_ips) > 0, "Should block some attacking IPs"
-        assert successful_blocks > total_attacks * 0.8, f"Should block most attacks: {successful_blocks}/{total_attacks}"
-        print(f"Blocked {len(blocked_ips)} IPs, stopped {successful_blocks}/{total_attacks} attacks")
+        assert successful_blocks > total_attacks * 0.8, (
+            f"Should block most attacks: {successful_blocks}/{total_attacks}"
+        )
+        print(
+            f"Blocked {len(blocked_ips)} IPs, stopped {successful_blocks}/{total_attacks} attacks"
+        )
 
     def test_production_performance_under_attack(self):
         """
@@ -611,11 +681,12 @@ class TestProductionSecurityScenarios:
 
         # When - Simulate mixed traffic under attack
         test_traffic = (
-            [("legitimate", "valid search query")] * 100 +  # 100 legitimate
-            [("attack", "'; DROP TABLE users; --")] * 500  # 500 attacks
+            [("legitimate", "valid search query")] * 100  # 100 legitimate
+            + [("attack", "'; DROP TABLE users; --")] * 500  # 500 attacks
         )
 
         import random
+
         random.shuffle(test_traffic)  # Mix traffic randomly
 
         for request_type, payload in test_traffic:
@@ -632,10 +703,14 @@ class TestProductionSecurityScenarios:
 
         # Performance analysis
         avg_response_time = sum(response_times) / len(response_times)
-        assert avg_response_time < 0.002, f"Response time should remain fast during attacks: {avg_response_time:.4f}s"
+        assert avg_response_time < 0.002, (
+            f"Response time should remain fast during attacks: {avg_response_time:.4f}s"
+        )
 
-        print(f"Processed {legitimate_requests} legitimate requests and blocked {attack_requests} attacks")
-        print(f"Average response time: {avg_response_time*1000:.2f}ms")
+        print(
+            f"Processed {legitimate_requests} legitimate requests and blocked {attack_requests} attacks"
+        )
+        print(f"Average response time: {avg_response_time * 1000:.2f}ms")
 
 
 if __name__ == "__main__":

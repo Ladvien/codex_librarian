@@ -5,35 +5,32 @@ Following TDD principles, this module tests all the enhanced validation,
 serialization, and error handling features for API-002 implementation.
 """
 
-import pytest
-from typing import Dict, Any, List, Optional
-from pydantic import ValidationError
-from pathlib import Path
 import json
 import tempfile
-import os
 from datetime import datetime
+from pathlib import Path
+
+import pytest
+from pydantic import ValidationError
 
 from src.pdf_to_markdown_mcp.models.request import (
-    ConvertSingleRequest,
     BatchConvertRequest,
-    SemanticSearchRequest,
-    HybridSearchRequest,
-    FindSimilarRequest,
     ConfigurationRequest,
+    ConvertSingleRequest,
+    HybridSearchRequest,
     ProcessingOptions,
+    SemanticSearchRequest,
 )
 from src.pdf_to_markdown_mcp.models.response import (
+    ConfigurationResponse,
     ConvertSingleResponse,
-    BatchConvertResponse,
+    ErrorResponse,
+    ErrorType,
+    HealthResponse,
+    JobStatus,
     SearchResponse,
     SearchResult,
     StatusResponse,
-    ConfigurationResponse,
-    ErrorResponse,
-    ErrorType,
-    JobStatus,
-    HealthResponse,
 )
 
 
@@ -44,7 +41,14 @@ class TestProcessingOptionsEnhanced:
         """Test ProcessingOptions accepts all supported OCR languages."""
         # Given - all supported languages
         supported_languages = [
-            "eng", "chi_sim", "chi_tra", "fra", "deu", "spa", "jpn", "kor"
+            "eng",
+            "chi_sim",
+            "chi_tra",
+            "fra",
+            "deu",
+            "spa",
+            "jpn",
+            "kor",
         ]
 
         # When/Then - all should be valid
@@ -68,7 +72,7 @@ class TestProcessingOptionsEnhanced:
         # Given - overlap >= chunk_size
         invalid_data = {
             "chunk_size": 1000,
-            "chunk_overlap": 1000  # Equal to chunk_size
+            "chunk_overlap": 1000,  # Equal to chunk_size
         }
 
         # When/Then
@@ -101,9 +105,7 @@ class TestProcessingOptionsEnhanced:
         """Test ProcessingOptions can be serialized and deserialized."""
         # Given
         original = ProcessingOptions(
-            ocr_language="fra",
-            chunk_size=1500,
-            extract_tables=False
+            ocr_language="fra", chunk_size=1500, extract_tables=False
         )
 
         # When
@@ -123,7 +125,7 @@ class TestConvertSingleRequestEnhanced:
     def test_valid_pdf_file_path(self):
         """Test ConvertSingleRequest accepts valid PDF path."""
         # Given - create temporary PDF file
-        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp_file:
             tmp_file.write(b"%PDF-1.4\n")  # Valid PDF header
             tmp_path = Path(tmp_file.name)
 
@@ -153,7 +155,7 @@ class TestConvertSingleRequestEnhanced:
     def test_non_pdf_file(self):
         """Test ConvertSingleRequest rejects non-PDF files."""
         # Given - create temporary non-PDF file
-        with tempfile.NamedTemporaryFile(suffix='.txt', delete=False) as tmp_file:
+        with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as tmp_file:
             tmp_file.write(b"This is not a PDF")
             tmp_path = Path(tmp_file.name)
 
@@ -171,7 +173,7 @@ class TestConvertSingleRequestEnhanced:
     def test_output_dir_validation(self):
         """Test output directory validation."""
         # Given - create valid input file and output directory
-        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp_file:
             tmp_file.write(b"%PDF-1.4\n")
             input_path = Path(tmp_file.name)
 
@@ -181,8 +183,7 @@ class TestConvertSingleRequestEnhanced:
             try:
                 # When
                 request = ConvertSingleRequest(
-                    file_path=input_path,
-                    output_dir=output_dir
+                    file_path=input_path, output_dir=output_dir
                 )
 
                 # Then
@@ -195,7 +196,7 @@ class TestConvertSingleRequestEnhanced:
     def test_invalid_output_dir(self):
         """Test output directory validation with file instead of directory."""
         # Given - create valid input file and invalid output (file instead of dir)
-        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as input_file:
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as input_file:
             input_file.write(b"%PDF-1.4\n")
             input_path = Path(input_file.name)
 
@@ -207,7 +208,7 @@ class TestConvertSingleRequestEnhanced:
             with pytest.raises(ValidationError) as exc_info:
                 ConvertSingleRequest(
                     file_path=input_path,
-                    output_dir=output_path  # File, not directory
+                    output_dir=output_path,  # File, not directory
                 )
 
             assert "not a directory" in str(exc_info.value)
@@ -228,7 +229,7 @@ class TestSearchRequestValidation:
             "query": "machine learning algorithms",
             "top_k": 10,
             "threshold": 0.8,
-            "include_content": True
+            "include_content": True,
         }
 
         # When
@@ -266,7 +267,7 @@ class TestSearchRequestValidation:
         invalid_data = {
             "query": "test query",
             "semantic_weight": 0.8,
-            "keyword_weight": 0.3  # Sum = 1.1
+            "keyword_weight": 0.3,  # Sum = 1.1
         }
 
         # When/Then
@@ -281,7 +282,7 @@ class TestSearchRequestValidation:
         valid_data = {
             "query": "neural networks",
             "semantic_weight": 0.7,
-            "keyword_weight": 0.3
+            "keyword_weight": 0.3,
         }
 
         # When
@@ -302,7 +303,7 @@ class TestResponseModelsEnhanced:
             "error": ErrorType.VALIDATION,
             "message": "Invalid input parameters",
             "details": {"field": "chunk_size", "value": -1},
-            "correlation_id": "req_123456789"
+            "correlation_id": "req_123456789",
         }
 
         # When
@@ -324,7 +325,7 @@ class TestResponseModelsEnhanced:
             "filename": "test.pdf",
             "content": "Sample content",
             "similarity_score": 0.89,
-            "rank": 1
+            "rank": 1,
         }
 
         # When
@@ -343,7 +344,7 @@ class TestResponseModelsEnhanced:
             "document_id": 1,
             "filename": "test.pdf",
             "similarity_score": 1.5,  # > 1.0
-            "rank": 1
+            "rank": 1,
         }
 
         # When/Then
@@ -360,7 +361,7 @@ class TestResponseModelsEnhanced:
             "current_step": "Generating embeddings",
             "queue_depth": 5,
             "active_jobs": 3,
-            "total_documents": 1247
+            "total_documents": 1247,
         }
 
         # When
@@ -383,10 +384,10 @@ class TestResponseModelsEnhanced:
                 "database": "healthy",
                 "celery": "healthy",
                 "embeddings": "degraded",
-                "storage": "healthy"
+                "storage": "healthy",
             },
             "uptime_seconds": 3600,
-            "memory_usage_mb": 256.5
+            "memory_usage_mb": 256.5,
         }
 
         # When
@@ -404,12 +405,13 @@ class TestConfigurationValidation:
     def test_configuration_request_valid_directories(self):
         """Test ConfigurationRequest with valid watch directories."""
         # Given - create temporary directories
-        with tempfile.TemporaryDirectory() as tmp_dir1, \
-             tempfile.TemporaryDirectory() as tmp_dir2:
-
+        with (
+            tempfile.TemporaryDirectory() as tmp_dir1,
+            tempfile.TemporaryDirectory() as tmp_dir2,
+        ):
             config_data = {
                 "watch_directories": [tmp_dir1, tmp_dir2],
-                "restart_watcher": True
+                "restart_watcher": True,
             }
 
             # When
@@ -422,9 +424,7 @@ class TestConfigurationValidation:
     def test_configuration_request_invalid_directory(self):
         """Test ConfigurationRequest rejects non-existent directories."""
         # Given
-        invalid_data = {
-            "watch_directories": ["/path/that/does/not/exist"]
-        }
+        invalid_data = {"watch_directories": ["/path/that/does/not/exist"]}
 
         # When/Then
         with pytest.raises(ValidationError) as exc_info:
@@ -440,8 +440,8 @@ class TestConfigurationValidation:
             "message": "Configuration update failed",
             "validation_errors": [
                 "Directory does not exist: /invalid/path",
-                "Invalid embedding provider: unknown"
-            ]
+                "Invalid embedding provider: unknown",
+            ],
         }
 
         # When
@@ -460,11 +460,7 @@ class TestBatchConversionValidation:
         """Test BatchConvertRequest with valid directory."""
         # Given - create temporary directory
         with tempfile.TemporaryDirectory() as tmp_dir:
-            batch_data = {
-                "directory": tmp_dir,
-                "pattern": "**/*.pdf",
-                "max_files": 50
-            }
+            batch_data = {"directory": tmp_dir, "pattern": "**/*.pdf", "max_files": 50}
 
             # When
             request = BatchConvertRequest(**batch_data)
@@ -478,22 +474,15 @@ class TestBatchConversionValidation:
         """Test BatchConvertRequest max_files validation."""
         # Given - create temporary directory
         with tempfile.TemporaryDirectory() as tmp_dir:
-
             # Test valid range
             for max_files in [1, 100, 1000]:
-                request = BatchConvertRequest(
-                    directory=tmp_dir,
-                    max_files=max_files
-                )
+                request = BatchConvertRequest(directory=tmp_dir, max_files=max_files)
                 assert request.max_files == max_files
 
             # Test invalid values
             for invalid_max in [0, 1001]:
                 with pytest.raises(ValidationError):
-                    BatchConvertRequest(
-                        directory=tmp_dir,
-                        max_files=invalid_max
-                    )
+                    BatchConvertRequest(directory=tmp_dir, max_files=invalid_max)
 
 
 class TestSerializationCompatibility:
@@ -507,7 +496,7 @@ class TestSerializationCompatibility:
             document_id=42,
             message="Success",
             source_path=Path("/test.pdf"),
-            file_size_bytes=1024
+            file_size_bytes=1024,
         )
 
         # When
@@ -524,10 +513,7 @@ class TestSerializationCompatibility:
         # Given
         results = [
             SearchResult(
-                document_id=1,
-                filename="test.pdf",
-                similarity_score=0.9,
-                rank=1
+                document_id=1, filename="test.pdf", similarity_score=0.9, rank=1
             )
         ]
 
@@ -537,7 +523,7 @@ class TestSerializationCompatibility:
             results=results,
             total_results=1,
             search_time_ms=50,
-            top_k=10
+            top_k=10,
         )
 
         # When
@@ -556,7 +542,7 @@ class TestSerializationCompatibility:
             error=ErrorType.PROCESSING,
             message="Processing failed",
             details={"file": "test.pdf"},
-            correlation_id="req_123"
+            correlation_id="req_123",
         )
 
         # When

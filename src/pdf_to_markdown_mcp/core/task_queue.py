@@ -1,17 +1,15 @@
 """Task queue interface for integrating file watcher with Celery tasks."""
 
 import logging
-from pathlib import Path
-from typing import Dict, Any, Optional
 from datetime import datetime
+from pathlib import Path
+from typing import Any
 
-from sqlalchemy.orm import Session
-
-from ..db.session import get_db_session
+from ..core.exceptions import QueueError, ValidationError
 from ..db.models import Document, ProcessingQueue
 from ..db.queries import DocumentQueries, QueueQueries
+from ..db.session import get_db_session
 from ..worker.tasks import process_pdf_document
-from ..core.exceptions import QueueError, DatabaseError, ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -37,9 +35,10 @@ class TaskQueue:
     def queue_pdf_processing(
         self,
         file_path: str,
-        validation_result: Dict[str, Any],
+        validation_result: dict[str, Any],
         priority: int = 5,
-        processing_options: Optional[Dict[str, Any]] = None,
+        processing_options: dict[str, Any] | None = None,
+        mirror_info: dict[str, Any] | None = None,
     ) -> int:
         """Queue a PDF file for background processing.
 
@@ -48,6 +47,7 @@ class TaskQueue:
             validation_result: File validation metadata from FileValidator
             priority: Processing priority (1=highest, 10=lowest)
             processing_options: Optional processing configuration
+            mirror_info: Optional directory mirroring information
 
         Returns:
             Document ID for tracking processing status
@@ -87,16 +87,30 @@ class TaskQueue:
                     document.conversion_status = "pending"
                     document.error_message = None
                 else:
-                    # Create new document record
+                    # Create new document record with mirror information
                     document = Document(
                         source_path=str(file_path_obj.absolute()),
                         filename=file_path_obj.name,
                         file_hash=validation_result.get("hash"),
                         file_size_bytes=validation_result.get("size_bytes"),
                         conversion_status="pending",
+                        # Directory mirroring fields
+                        source_relative_path=str(mirror_info["source_relative_path"])
+                        if mirror_info
+                        else None,
+                        output_path=str(mirror_info["output_path"])
+                        if mirror_info
+                        else None,
+                        output_relative_path=str(mirror_info["output_relative_path"])
+                        if mirror_info
+                        else None,
+                        directory_depth=mirror_info.get("directory_depth")
+                        if mirror_info
+                        else None,
                         metadata={
                             "mime_type": validation_result.get("mime_type"),
                             "discovered_at": datetime.utcnow().isoformat(),
+                            "mirror_info": mirror_info,  # Store full mirror info in metadata
                             "validator_info": {
                                 k: v
                                 for k, v in validation_result.items()
@@ -149,19 +163,19 @@ class TaskQueue:
                     # Update document status to reflect task creation failure
                     document.conversion_status = "failed"
                     document.error_message = (
-                        f"Failed to create processing task: {str(task_error)}"
+                        f"Failed to create processing task: {task_error!s}"
                     )
                     session.commit()
-                    raise QueueError(f"Failed to create Celery task: {str(task_error)}")
+                    raise QueueError(f"Failed to create Celery task: {task_error!s}")
 
         except (ValidationError, QueueError):
             # Re-raise validation and queue errors as-is
             raise
         except Exception as e:
             logger.error(f"Unexpected error queueing PDF {file_path}: {e}")
-            raise QueueError(f"Failed to queue PDF processing: {str(e)}")
+            raise QueueError(f"Failed to queue PDF processing: {e!s}")
 
-    def get_queue_status(self) -> Dict[str, Any]:
+    def get_queue_status(self) -> dict[str, Any]:
         """Get current queue status and statistics.
 
         Returns:

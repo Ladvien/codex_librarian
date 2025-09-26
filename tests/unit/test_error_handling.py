@@ -4,53 +4,40 @@ Tests for comprehensive error handling and retry mechanisms.
 Following TDD approach for CORE-006 implementation.
 """
 
-import pytest
-import asyncio
 import time
-from datetime import datetime, timedelta
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from typing import Dict, Any, Optional
+from unittest.mock import Mock
+
+import pytest
 
 from src.pdf_to_markdown_mcp.core.errors import (
+    AuthenticationError,
+    CircuitBreaker,
+    CircuitBreakerError,
+    DatabaseError,
+    ErrorCategory,
+    ErrorTracker,
+    ExponentialBackoffRetry,
+    InputValidationError,
     # Basic error hierarchy
     PDFToMarkdownError,
-    ValidationError,
-    ProcessingError,
-    EmbeddingError,
-    DatabaseError,
-    ConfigurationError,
-    ResourceError,
-
-    # Security-focused errors
-    SecurityError,
-    RateLimitError,
-    AuthenticationError,
-    AuthorizationError,
-    InputValidationError,
-
-    # Retry and resilience errors
-    TransientError,
     PermanentError,
-    CircuitBreakerError,
-    TimeoutError,
-
-    # Error categorization
-    ErrorCategory,
-    categorize_error,
-    is_retryable_error,
-    get_retry_strategy,
-
+    ProcessingError,
+    RateLimitError,
+    ResourceError,
     # Retry mechanisms
     RetryConfig,
-    ExponentialBackoffRetry,
-    CircuitBreaker,
     RetryManager,
-
-    # Error logging and tracking
-    ErrorTracker,
-    ErrorMetrics,
-    sanitize_error_for_user,
+    # Security-focused errors
+    SecurityError,
+    TimeoutError,
+    # Retry and resilience errors
+    TransientError,
+    ValidationError,
+    categorize_error,
     create_correlation_id,
+    get_retry_strategy,
+    is_retryable_error,
+    sanitize_error_for_user,
 )
 
 
@@ -65,9 +52,7 @@ class TestErrorHierarchy:
 
         # When
         error = PDFToMarkdownError(
-            message=message,
-            correlation_id=correlation_id,
-            error_code="PDF001"
+            message=message, correlation_id=correlation_id, error_code="PDF001"
         )
 
         # Then
@@ -84,25 +69,42 @@ class TestErrorHierarchy:
 
         # When
         error = SecurityError(
-            message="Authentication failed",
-            internal_details=internal_details
+            message="Authentication failed", internal_details=internal_details
         )
 
         # Then
         user_message = sanitize_error_for_user(error)
         assert "secret123" not in user_message
         assert "password" not in user_message
-        assert "Authentication failed" in user_message or "Security error" in user_message
+        assert (
+            "Authentication failed" in user_message or "Security error" in user_message
+        )
 
     def test_error_categorization(self):
         """Test that errors are correctly categorized for retry logic."""
         # Given & When & Then
-        assert categorize_error(ValidationError("Invalid input")) == ErrorCategory.VALIDATION
-        assert categorize_error(TransientError("Temporary failure")) == ErrorCategory.TRANSIENT
-        assert categorize_error(DatabaseError("Connection timeout")) == ErrorCategory.TRANSIENT
-        assert categorize_error(PermanentError("Invalid file format")) == ErrorCategory.PERMANENT
-        assert categorize_error(ResourceError("Out of memory")) == ErrorCategory.RESOURCE
-        assert categorize_error(SecurityError("Access denied")) == ErrorCategory.SECURITY
+        assert (
+            categorize_error(ValidationError("Invalid input"))
+            == ErrorCategory.VALIDATION
+        )
+        assert (
+            categorize_error(TransientError("Temporary failure"))
+            == ErrorCategory.TRANSIENT
+        )
+        assert (
+            categorize_error(DatabaseError("Connection timeout"))
+            == ErrorCategory.TRANSIENT
+        )
+        assert (
+            categorize_error(PermanentError("Invalid file format"))
+            == ErrorCategory.PERMANENT
+        )
+        assert (
+            categorize_error(ResourceError("Out of memory")) == ErrorCategory.RESOURCE
+        )
+        assert (
+            categorize_error(SecurityError("Access denied")) == ErrorCategory.SECURITY
+        )
 
     def test_retryable_error_detection(self):
         """Test that retryable errors are correctly identified."""
@@ -134,10 +136,7 @@ class TestRetryMechanisms:
         """Test exponential backoff retry delay calculation."""
         # Given
         retry_config = RetryConfig(
-            max_retries=5,
-            base_delay=1.0,
-            max_delay=60.0,
-            backoff_multiplier=2.0
+            max_retries=5, base_delay=1.0, max_delay=60.0, backoff_multiplier=2.0
         )
         retry_mechanism = ExponentialBackoffRetry(retry_config)
 
@@ -152,9 +151,7 @@ class TestRetryMechanisms:
         """Test circuit breaker state transitions."""
         # Given
         circuit_breaker = CircuitBreaker(
-            failure_threshold=3,
-            recovery_timeout=30,
-            success_threshold=2
+            failure_threshold=3, recovery_timeout=30, success_threshold=2
         )
 
         # Then - Initial state should be CLOSED
@@ -187,8 +184,7 @@ class TestRetryMechanisms:
 
         # When
         result = await retry_manager.execute_with_retry(
-            failing_operation,
-            operation_name="test_operation"
+            failing_operation, operation_name="test_operation"
         )
 
         # Then
@@ -221,7 +217,7 @@ class TestErrorTracking:
         error_tracker.record_error(
             error=DatabaseError("Connection failed"),
             operation="database_query",
-            component="db_session"
+            component="db_session",
         )
 
         # Then
@@ -241,7 +237,7 @@ class TestErrorTracking:
             error_tracker.record_error(
                 error=ValidationError("Invalid input"),
                 operation="api_endpoint",
-                user_context={"user_id": "test_user"}
+                user_context={"user_id": "test_user"},
             )
 
         # Then
@@ -255,7 +251,7 @@ class TestErrorTracking:
         error = DatabaseError(
             message="Query failed",
             operation="select_documents",
-            internal_details="Connection string: postgres://user:pass@host/db"
+            internal_details="Connection string: postgres://user:pass@host/db",
         )
 
         # When
@@ -284,12 +280,13 @@ class TestGracefulDegradation:
 
         # When
         from src.pdf_to_markdown_mcp.core.errors import GracefulDegradationManager
+
         manager = GracefulDegradationManager()
 
         result = await manager.execute_with_fallback(
             primary_operation=primary_service.process,
             fallback_operation=fallback_service.process,
-            operation_name="test_service"
+            operation_name="test_service",
         )
 
         # Then
@@ -309,10 +306,10 @@ class TestGracefulDegradation:
         # When
         with pytest.raises(TimeoutError):
             from src.pdf_to_markdown_mcp.core.errors import TimeoutManager
+
             timeout_manager = TimeoutManager(timeout_seconds=1)
             timeout_manager.execute_with_timeout(
-                operation=long_running_operation,
-                resource_manager=resource_manager
+                operation=long_running_operation, resource_manager=resource_manager
             )
 
         # Then
@@ -335,12 +332,11 @@ class TestGracefulDegradation:
 
         # When
         from src.pdf_to_markdown_mcp.core.errors import PartialSuccessHandler
+
         handler = PartialSuccessHandler()
 
         result = handler.handle_batch_operation(
-            items=batch_items,
-            processor=batch_processor,
-            min_success_rate=0.7
+            items=batch_items, processor=batch_processor, min_success_rate=0.7
         )
 
         # Then
@@ -361,9 +357,7 @@ class TestSecurityErrorHandling:
 
         # When
         error = RateLimitError(
-            message="Too many requests",
-            user_id=user_id,
-            retry_after=60
+            message="Too many requests", user_id=user_id, retry_after=60
         )
 
         # Then
@@ -381,7 +375,7 @@ class TestSecurityErrorHandling:
         error = InputValidationError(
             message="Invalid input detected",
             input_value=malicious_input,
-            validation_rule="sql_injection_check"
+            validation_rule="sql_injection_check",
         )
 
         # Then
@@ -396,14 +390,16 @@ class TestSecurityErrorHandling:
 
         # When
         error = AuthenticationError(
-            message="Authentication failed",
-            user_identifier=nonexistent_user
+            message="Authentication failed", user_identifier=nonexistent_user
         )
 
         # Then
         user_message = sanitize_error_for_user(error)
         assert nonexistent_user not in user_message
-        assert "Authentication failed" in user_message or "Invalid credentials" in user_message
+        assert (
+            "Authentication failed" in user_message
+            or "Invalid credentials" in user_message
+        )
 
 
 class TestErrorRecovery:
@@ -414,6 +410,7 @@ class TestErrorRecovery:
         """Test that failed tasks are properly queued in dead letter queue."""
         # Given
         from src.pdf_to_markdown_mcp.core.errors import DeadLetterQueueManager
+
         dlq_manager = DeadLetterQueueManager()
 
         failed_task = {
@@ -421,7 +418,7 @@ class TestErrorRecovery:
             "operation": "process_pdf",
             "error": ProcessingError("Processing failed"),
             "retry_count": 3,
-            "original_args": {"file_path": "/test/file.pdf"}
+            "original_args": {"file_path": "/test/file.pdf"},
         }
 
         # When
@@ -437,16 +434,23 @@ class TestErrorRecovery:
         """Test that appropriate recovery strategies are selected."""
         # Given
         from src.pdf_to_markdown_mcp.core.errors import RecoveryStrategyManager
+
         recovery_manager = RecoveryStrategyManager()
 
         # When & Then
-        strategy = recovery_manager.get_recovery_strategy(DatabaseError("Connection lost"))
+        strategy = recovery_manager.get_recovery_strategy(
+            DatabaseError("Connection lost")
+        )
         assert strategy.strategy_type == "reconnect_and_retry"
 
-        strategy = recovery_manager.get_recovery_strategy(ValidationError("Invalid input"))
+        strategy = recovery_manager.get_recovery_strategy(
+            ValidationError("Invalid input")
+        )
         assert strategy.strategy_type == "no_recovery"
 
-        strategy = recovery_manager.get_recovery_strategy(ResourceError("Out of memory"))
+        strategy = recovery_manager.get_recovery_strategy(
+            ResourceError("Out of memory")
+        )
         assert strategy.strategy_type == "wait_and_retry"
 
 

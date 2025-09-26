@@ -5,10 +5,10 @@ This module tests the SQLAlchemy models for proper validation,
 relationships, and database operations following TDD principles.
 """
 
-import pytest
 from datetime import datetime, timedelta
+
+import pytest
 from sqlalchemy.exc import IntegrityError
-from unittest.mock import patch
 
 from src.pdf_to_markdown_mcp.db.models import (
     Document,
@@ -16,7 +16,6 @@ from src.pdf_to_markdown_mcp.db.models import (
     DocumentEmbedding,
     DocumentImage,
     ProcessingQueue,
-    Base,
 )
 from tests.fixtures import (
     DocumentFactory,
@@ -35,7 +34,7 @@ class TestDocument:
             file_path="/tmp/test.pdf",
             file_name="test.pdf",
             file_size=12345,
-            status="pending"
+            status="pending",
         )
 
         # When
@@ -135,7 +134,7 @@ class TestDocument:
             markdown_content="# Test",
             plain_text="Test",
             word_count=1,
-            language="en"
+            language="en",
         )
         db_session.add(content)
         db_session.commit()
@@ -149,7 +148,7 @@ class TestDocument:
         """Test created_at is automatically set."""
         # Given
         document_data = DocumentFactory.create()
-        del document_data['created_at']  # Remove to test auto-generation
+        del document_data["created_at"]  # Remove to test auto-generation
 
         # When
         document = Document(**document_data)
@@ -210,7 +209,7 @@ class TestDocumentContent:
             markdown_content="# Test Document\n\nContent",
             plain_text="Test Document\n\nContent",
             word_count=3,
-            language="en"
+            language="en",
         )
         db_session.add(content)
         db_session.commit()
@@ -232,7 +231,7 @@ class TestDocumentContent:
             markdown_content="# Test",
             plain_text="Test",
             word_count=1,
-            language="en"
+            language="en",
         )
         db_session.add(content)
 
@@ -253,13 +252,15 @@ class TestDocumentContent:
             markdown_content="# Test",
             plain_text="Test",
             word_count=1,
-            language="en"
+            language="en",
         )
         db_session.add(content)
         db_session.commit()
 
         # When
-        retrieved_document = db_session.query(Document).filter_by(id=document.id).first()
+        retrieved_document = (
+            db_session.query(Document).filter_by(id=document.id).first()
+        )
 
         # Then
         assert len(retrieved_document.content) == 1
@@ -278,7 +279,7 @@ class TestDocumentContent:
             markdown_content="# Test",
             plain_text="Test",
             word_count=1,
-            language="en"
+            language="en",
         )
         db_session.add(content)
         db_session.commit()
@@ -290,7 +291,9 @@ class TestDocumentContent:
         db_session.commit()
 
         # Then
-        assert db_session.query(DocumentContent).filter_by(id=content_id).first() is None
+        assert (
+            db_session.query(DocumentContent).filter_by(id=content_id).first() is None
+        )
 
 
 class TestDocumentEmbedding:
@@ -315,7 +318,7 @@ class TestDocumentEmbedding:
             embedding=embedding_vector,
             start_char=0,
             end_char=33,
-            token_count=6
+            token_count=6,
         )
         db_session.add(embedding)
         db_session.commit()
@@ -341,7 +344,7 @@ class TestDocumentEmbedding:
             embedding=embedding_vector,
             start_char=0,
             end_char=4,
-            token_count=1
+            token_count=1,
         )
         db_session.add(embedding)
 
@@ -368,11 +371,15 @@ class TestDocumentEmbedding:
         db_session.commit()
 
         # When
-        retrieved_document = db_session.query(Document).filter_by(id=document.id).first()
+        retrieved_document = (
+            db_session.query(Document).filter_by(id=document.id).first()
+        )
 
         # Then
         assert len(retrieved_document.embeddings) == 3
-        assert all(emb.document_id == document.id for emb in retrieved_document.embeddings)
+        assert all(
+            emb.document_id == document.id for emb in retrieved_document.embeddings
+        )
 
     def test_document_embedding_unique_constraint(self, db_session):
         """Test unique constraint on (document_id, chunk_index)."""
@@ -392,7 +399,7 @@ class TestDocumentEmbedding:
             embedding=embedding_vector,
             start_char=0,
             end_char=11,
-            token_count=2
+            token_count=2,
         )
         db_session.add(embedding1)
         db_session.commit()
@@ -405,7 +412,7 @@ class TestDocumentEmbedding:
             embedding=embedding_vector,
             start_char=12,
             end_char=24,
-            token_count=2
+            token_count=2,
         )
         db_session.add(embedding2)
 
@@ -436,7 +443,7 @@ class TestDocumentImage:
             ocr_text="Image caption text",
             embedding=clip_embedding,
             page_number=1,
-            position_data={"x": 100, "y": 200, "width": 300, "height": 200}
+            position_data={"x": 100, "y": 200, "width": 300, "height": 200},
         )
         db_session.add(image)
         db_session.commit()
@@ -471,7 +478,7 @@ class TestDocumentImage:
             ocr_text="First caption",
             embedding=clip_embedding,
             page_number=1,
-            position_data={"x": 100, "y": 200, "width": 300, "height": 200}
+            position_data={"x": 100, "y": 200, "width": 300, "height": 200},
         )
         db_session.add(image1)
         db_session.commit()
@@ -485,7 +492,7 @@ class TestDocumentImage:
             ocr_text="Second caption",
             embedding=clip_embedding,
             page_number=1,
-            position_data={"x": 400, "y": 200, "width": 300, "height": 200}
+            position_data={"x": 400, "y": 200, "width": 300, "height": 200},
         )
         db_session.add(image2)
 
@@ -513,7 +520,7 @@ class TestProcessingQueue:
             status="pending",
             priority=5,
             progress=0.0,
-            retry_count=0
+            retry_count=0,
         )
         db_session.add(queue_entry)
         db_session.commit()
@@ -548,7 +555,7 @@ class TestProcessingQueue:
                 status=status,
                 priority=5,
                 progress=0.0,
-                retry_count=0
+                retry_count=0,
             )
             db_session.add(queue_entry)
 
@@ -566,7 +573,12 @@ class TestProcessingQueue:
         db_session.add(document)
         db_session.commit()
 
-        valid_task_types = ["pdf_processing", "embedding_generation", "maintenance", "cleanup"]
+        valid_task_types = [
+            "pdf_processing",
+            "embedding_generation",
+            "maintenance",
+            "cleanup",
+        ]
 
         for task_type in valid_task_types:
             # When
@@ -577,7 +589,7 @@ class TestProcessingQueue:
                 status="pending",
                 priority=5,
                 progress=0.0,
-                retry_count=0
+                retry_count=0,
             )
             db_session.add(queue_entry)
 
@@ -605,7 +617,7 @@ class TestProcessingQueue:
             status="pending",
             priority=5,
             progress=0.0,
-            retry_count=0
+            retry_count=0,
         )
         db_session.add(entry1)
         db_session.commit()
@@ -618,7 +630,7 @@ class TestProcessingQueue:
             status="pending",
             priority=3,
             progress=0.0,
-            retry_count=0
+            retry_count=0,
         )
         db_session.add(entry2)
 
@@ -641,13 +653,15 @@ class TestProcessingQueue:
             status="pending",
             priority=5,
             progress=0.0,
-            retry_count=0
+            retry_count=0,
         )
         db_session.add(queue_entry)
         db_session.commit()
 
         # When
-        retrieved_document = db_session.query(Document).filter_by(id=document.id).first()
+        retrieved_document = (
+            db_session.query(Document).filter_by(id=document.id).first()
+        )
 
         # Then
         assert len(retrieved_document.processing_tasks) == 1

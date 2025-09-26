@@ -5,17 +5,16 @@ This module provides API key authentication, rate limiting, input validation,
 and other security measures to protect API endpoints.
 """
 
+import hashlib
+import logging
 import os
 import secrets
-import hashlib
 import time
-import logging
-from typing import Optional, Dict, Any
-from functools import wraps
-
-from fastapi import HTTPException, Depends, status, Request
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pathlib import Path
+from typing import Any
+
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +39,8 @@ class SecurityManager:
 
     def __init__(self):
         self.security = HTTPBearer(auto_error=False)
-        self.failed_attempts: Dict[str, int] = {}
-        self.last_attempt: Dict[str, float] = {}
+        self.failed_attempts: dict[str, int] = {}
+        self.last_attempt: dict[str, float] = {}
 
     def create_api_key(self) -> str:
         """Generate a secure API key."""
@@ -132,7 +131,7 @@ def validate_path_security(path: Path) -> Path:
         raise ValueError(f"Invalid path: {path}")
 
 
-def validate_file_security(file_path: Path) -> Dict[str, Any]:
+def validate_file_security(file_path: Path) -> dict[str, Any]:
     """
     Comprehensive file security validation.
 
@@ -190,7 +189,7 @@ def get_client_ip(request: Request) -> str:
 
 async def verify_api_key_dependency(
     request: Request,
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(
+    credentials: HTTPAuthorizationCredentials | None = Depends(
         security_manager.security
     ),
 ) -> bool:

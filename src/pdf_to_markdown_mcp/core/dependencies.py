@@ -7,7 +7,8 @@ maintaining proper architecture boundaries and testability.
 Following TDD and architecture principles from CLAUDE.md.
 """
 
-from typing import Generator
+from collections.abc import Generator
+
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
@@ -44,6 +45,6 @@ DatabaseServiceDep = Depends(get_database_service)
 
 # Export dependencies
 __all__ = [
-    "get_database_service",
     "DatabaseServiceDep",
+    "get_database_service",
 ]

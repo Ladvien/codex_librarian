@@ -9,14 +9,13 @@ Tests that ensure component boundaries are properly enforced:
 Following TDD approach as required by CLAUDE.md.
 """
 
-import pytest
 import ast
 import importlib
 from pathlib import Path
-from typing import List, Set
 from unittest.mock import Mock, patch
 
-from pdf_to_markdown_mcp.api import convert
+import pytest
+
 from pdf_to_markdown_mcp.services.database import DatabaseService
 
 
@@ -31,7 +30,10 @@ class TestComponentBoundaryViolations:
         API → Services → Database (not API → Database)
         """
         # Given: The API convert module
-        api_module_path = Path(__file__).parent.parent.parent / "src/pdf_to_markdown_mcp/api/convert.py"
+        api_module_path = (
+            Path(__file__).parent.parent.parent
+            / "src/pdf_to_markdown_mcp/api/convert.py"
+        )
 
         # When: We analyze the imports
         forbidden_imports = self._get_forbidden_db_imports(api_module_path)
@@ -49,7 +51,9 @@ class TestComponentBoundaryViolations:
         This test ensures proper service layer abstraction.
         """
         # Given: A mock document service
-        with patch('pdf_to_markdown_mcp.services.database.DatabaseService') as mock_service:
+        with patch(
+            "pdf_to_markdown_mcp.services.database.DatabaseService"
+        ) as mock_service:
             mock_service.return_value.find_document_by_hash.return_value = None
             mock_service.return_value.create_document.return_value = Mock()
 
@@ -57,9 +61,9 @@ class TestComponentBoundaryViolations:
             service = DatabaseService()
 
             # Then: Service should have document operations
-            assert hasattr(service, 'find_document_by_hash')
-            assert hasattr(service, 'create_document')
-            assert hasattr(service, 'update_document')
+            assert hasattr(service, "find_document_by_hash")
+            assert hasattr(service, "create_document")
+            assert hasattr(service, "update_document")
 
     def test_document_service_provides_crud_operations(self):
         """
@@ -72,11 +76,11 @@ class TestComponentBoundaryViolations:
 
         # When: We check for required methods
         required_methods = [
-            'find_document_by_hash',
-            'create_document',
-            'update_document',
-            'get_document_by_id',
-            'delete_document',
+            "find_document_by_hash",
+            "create_document",
+            "update_document",
+            "get_document_by_id",
+            "delete_document",
         ]
 
         # Then: All CRUD methods should be available
@@ -118,9 +122,12 @@ class TestComponentBoundaryViolations:
         This promotes testability and proper separation of concerns.
         """
         # Given: We analyze the convert.py file for dependency patterns
-        api_module_path = Path(__file__).parent.parent.parent / "src/pdf_to_markdown_mcp/api/convert.py"
+        api_module_path = (
+            Path(__file__).parent.parent.parent
+            / "src/pdf_to_markdown_mcp/api/convert.py"
+        )
 
-        with open(api_module_path, 'r') as f:
+        with open(api_module_path) as f:
             content = f.read()
             tree = ast.parse(content)
 
@@ -133,27 +140,29 @@ class TestComponentBoundaryViolations:
             f"not direct instantiation: {direct_instantiations}"
         )
 
-    def _get_forbidden_db_imports(self, file_path: Path) -> List[str]:
+    def _get_forbidden_db_imports(self, file_path: Path) -> list[str]:
         """Find direct database model imports in API files."""
-        with open(file_path, 'r') as f:
+        with open(file_path) as f:
             content = f.read()
             tree = ast.parse(content)
 
         forbidden_imports = []
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom):
-                if node.module and 'db.models' in node.module:
+                if node.module and "db.models" in node.module:
                     for alias in node.names:
-                        forbidden_imports.append(f"from {node.module} import {alias.name}")
+                        forbidden_imports.append(
+                            f"from {node.module} import {alias.name}"
+                        )
 
         return forbidden_imports
 
-    def _find_direct_service_instantiation(self, tree: ast.AST) -> List[str]:
+    def _find_direct_service_instantiation(self, tree: ast.AST) -> list[str]:
         """Find direct service instantiation patterns."""
         instantiations = []
         for node in ast.walk(tree):
             if isinstance(node, ast.Call):
-                if isinstance(node.func, ast.Name) and node.func.id.endswith('Service'):
+                if isinstance(node.func, ast.Name) and node.func.id.endswith("Service"):
                     instantiations.append(f"{node.func.id}()")
         return instantiations
 
@@ -169,7 +178,9 @@ class TestServiceLayerAbstraction:
         This test will initially fail and guide our implementation.
         """
         # Given: A database service with mocked dependencies
-        with patch('pdf_to_markdown_mcp.services.database.DatabaseService._get_session') as mock_session:
+        with patch(
+            "pdf_to_markdown_mcp.services.database.DatabaseService._get_session"
+        ) as mock_session:
             mock_session.return_value = Mock()
             service = DatabaseService()
 
@@ -202,7 +213,7 @@ class TestDataTransferObjects:
                 file_hash="abc123",
                 size_bytes=1000,
                 processing_status="completed",
-                created_at="2025-09-26T10:00:00Z"
+                created_at="2025-09-26T10:00:00Z",
             )
 
             assert dto.id == 1
@@ -249,7 +260,7 @@ class TestArchitectureCompliance:
             f"Circular dependencies detected violating layered architecture: {circular_deps}"
         )
 
-    def _get_module_imports(self, module_name: str) -> List[str]:
+    def _get_module_imports(self, module_name: str) -> list[str]:
         """Get all imports for a given module."""
         try:
             module = importlib.import_module(module_name)

@@ -6,14 +6,15 @@ and distributed tracing for the PDF to Markdown MCP server.
 """
 
 import asyncio
+import logging
 import time
 import uuid
+from collections.abc import Callable
 from contextvars import ContextVar
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from enum import Enum
-from typing import Dict, Any, Optional, Callable, List
-import logging
+from typing import Any
 
 try:
     import structlog
@@ -31,7 +32,7 @@ except ImportError:
     psutil = None
 
 try:
-    from prometheus_client import Counter, Histogram, Gauge, Info, generate_latest
+    from prometheus_client import Counter, Gauge, Histogram, Info, generate_latest
 
     PROMETHEUS_AVAILABLE = True
 except ImportError:
@@ -70,7 +71,7 @@ except ImportError:
 
 
 # Context variable for correlation ID
-correlation_id_var: ContextVar[Optional[str]] = ContextVar(
+correlation_id_var: ContextVar[str | None] = ContextVar(
     "correlation_id", default=None
 )
 
@@ -98,8 +99,8 @@ class ComponentHealth:
 
     status: HealthStatus
     last_check: float
-    response_time_ms: Optional[float] = None
-    details: Dict[str, Any] = None
+    response_time_ms: float | None = None
+    details: dict[str, Any] = None
 
     def __post_init__(self):
         if self.details is None:
@@ -112,7 +113,7 @@ class SystemHealth:
 
     status: HealthStatus
     uptime_seconds: float
-    components: Dict[str, ComponentHealth]
+    components: dict[str, ComponentHealth]
     version: str
     timestamp: float = None
 
@@ -251,7 +252,7 @@ class MetricsCollector:
             self.logger.error(f"Failed to record search query metrics: {e}")
 
     def record_celery_task(
-        self, task_type: str, status: str, duration_seconds: Optional[float] = None
+        self, task_type: str, status: str, duration_seconds: float | None = None
     ):
         """Record Celery task metrics."""
         try:
@@ -277,7 +278,7 @@ class MetricsCollector:
                 self.processing_queue_gauge.labels(queue_type=queue_type).set(depth)
 
             self.logger.debug(
-                f"queue_depth_updated", queue_type=queue_type, depth=depth
+                "queue_depth_updated", queue_type=queue_type, depth=depth
             )
 
         except Exception as e:
@@ -363,8 +364,9 @@ class HealthMonitor:
         """Check PostgreSQL database connectivity and performance."""
         start_time = time.time()
         try:
-            from pdf_to_markdown_mcp.db.session import get_db
             from sqlalchemy import text
+
+            from pdf_to_markdown_mcp.db.session import get_db
 
             async with get_db() as session:
                 # Perform lightweight database query
@@ -442,8 +444,8 @@ class HealthMonitor:
     async def check_embedding_health(self) -> ComponentHealth:
         """Check embedding service health."""
         try:
-            from pdf_to_markdown_mcp.services.embeddings import create_embedding_service
             from pdf_to_markdown_mcp.config import settings
+            from pdf_to_markdown_mcp.services.embeddings import create_embedding_service
 
             embedding_service = create_embedding_service(settings.embedding)
             health_result = await embedding_service.health_check()
@@ -593,7 +595,7 @@ class HealthMonitor:
 
         # Process results
         overall_status = HealthStatus.HEALTHY
-        for name, result in zip(health_checks.keys(), results):
+        for name, result in zip(health_checks.keys(), results, strict=False):
             if isinstance(result, Exception):
                 components[name] = ComponentHealth(
                     status=HealthStatus.UNHEALTHY,
@@ -622,7 +624,7 @@ class HealthMonitor:
             timestamp=time.time(),
         )
 
-    async def check_readiness(self) -> Dict[str, Any]:
+    async def check_readiness(self) -> dict[str, Any]:
         """Check if system is ready to accept traffic."""
         ready = True
         checks = {}
@@ -661,7 +663,7 @@ class AlertRule:
     def __init__(
         self,
         name: str,
-        condition: Callable[[Dict[str, Any]], bool],
+        condition: Callable[[dict[str, Any]], bool],
         severity: AlertSeverity,
         cooldown_minutes: int = 15,
     ):
@@ -684,7 +686,7 @@ class AlertingEngine:
         """Add alerting rule to engine."""
         self.rules.append(rule)
 
-    async def evaluate_alerts(self, metrics: Dict[str, Any]):
+    async def evaluate_alerts(self, metrics: dict[str, Any]):
         """Evaluate all alerting rules against current metrics."""
         for rule in self.rules:
             try:
@@ -707,7 +709,7 @@ class AlertingEngine:
 
         return cooldown_elapsed >= rule.cooldown_minutes
 
-    async def _send_alert(self, rule: AlertRule, metrics: Dict[str, Any]):
+    async def _send_alert(self, rule: AlertRule, metrics: dict[str, Any]):
         """Send alert notification."""
         self.logger.error(
             "alert_triggered",
@@ -734,7 +736,7 @@ class TracingManager:
         correlation_id_var.set(correlation_id)
 
     @staticmethod
-    def get_correlation_id() -> Optional[str]:
+    def get_correlation_id() -> str | None:
         """Get correlation ID from current context."""
         return correlation_id_var.get()
 
@@ -781,7 +783,7 @@ class TracingManager:
 
 
 # Create standard alerting rules
-def create_standard_alerts() -> List[AlertRule]:
+def create_standard_alerts() -> list[AlertRule]:
     """Create standard alerting rules for common issues."""
     return [
         AlertRule(

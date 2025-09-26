@@ -1,18 +1,18 @@
 """Unit tests for file system monitoring with Watchdog."""
 
-import pytest
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from pathlib import Path
+import hashlib
 import tempfile
 import time
-import hashlib
-from typing import Dict, Any
+from pathlib import Path
+from unittest.mock import Mock, patch
+
+import pytest
 
 from pdf_to_markdown_mcp.core.watcher import (
+    DirectoryWatcher,
+    FileValidator,
     PDFFileHandler,
     SmartFileDetector,
-    FileValidator,
-    DirectoryWatcher,
     WatcherConfig,
 )
 
@@ -48,7 +48,7 @@ class TestWatcherConfig:
             ignore_patterns=ignore_patterns,
             recursive=False,
             stability_timeout=10.0,
-            max_file_size_mb=100
+            max_file_size_mb=100,
         )
 
         # Then (Assert)
@@ -71,7 +71,7 @@ class TestFileValidator:
     def test_validate_pdf_with_valid_file(self, validator):
         """Test that validator correctly validates a proper PDF file"""
         # Given (Arrange)
-        with tempfile.NamedTemporaryFile(suffix='.pdf') as temp_file:
+        with tempfile.NamedTemporaryFile(suffix=".pdf") as temp_file:
             temp_file.write(b"%PDF-1.4 test content")
             temp_file.flush()
             file_path = Path(temp_file.name)
@@ -80,16 +80,16 @@ class TestFileValidator:
             result = validator.validate_pdf(file_path)
 
             # Then (Assert)
-            assert result['valid'] is True
-            assert result['mime_type'] == 'application/pdf'
-            assert result['size_bytes'] > 0
-            assert result['hash'] is not None
-            assert result['error'] is None
+            assert result["valid"] is True
+            assert result["mime_type"] == "application/pdf"
+            assert result["size_bytes"] > 0
+            assert result["hash"] is not None
+            assert result["error"] is None
 
     def test_validate_pdf_with_invalid_file_extension(self, validator):
         """Test that validator rejects files with invalid file extension"""
         # Given (Arrange)
-        with tempfile.NamedTemporaryFile(suffix='.txt') as temp_file:
+        with tempfile.NamedTemporaryFile(suffix=".txt") as temp_file:
             temp_file.write(b"This is not a PDF")
             temp_file.flush()
             file_path = Path(temp_file.name)
@@ -98,13 +98,13 @@ class TestFileValidator:
             result = validator.validate_pdf(file_path)
 
             # Then (Assert)
-            assert result['valid'] is False
-            assert result['error'] == 'Invalid file extension: .txt'
+            assert result["valid"] is False
+            assert result["error"] == "Invalid file extension: .txt"
 
     def test_validate_pdf_with_invalid_magic_bytes(self, validator):
         """Test that validator rejects PDF files with invalid magic bytes"""
         # Given (Arrange)
-        with tempfile.NamedTemporaryFile(suffix='.pdf') as temp_file:
+        with tempfile.NamedTemporaryFile(suffix=".pdf") as temp_file:
             temp_file.write(b"This is not a real PDF file")
             temp_file.flush()
             file_path = Path(temp_file.name)
@@ -113,8 +113,8 @@ class TestFileValidator:
             result = validator.validate_pdf(file_path)
 
             # Then (Assert)
-            assert result['valid'] is False
-            assert result['error'] == 'File does not start with PDF magic bytes'
+            assert result["valid"] is False
+            assert result["error"] == "File does not start with PDF magic bytes"
 
     def test_validate_pdf_with_nonexistent_file(self, validator):
         """Test that validator handles nonexistent files gracefully"""
@@ -125,8 +125,8 @@ class TestFileValidator:
         result = validator.validate_pdf(file_path)
 
         # Then (Assert)
-        assert result['valid'] is False
-        assert result['error'] is not None
+        assert result["valid"] is False
+        assert result["error"] is not None
 
     def test_calculate_file_hash(self, validator):
         """Test that file hash calculation works correctly"""
@@ -198,7 +198,7 @@ class TestSmartFileDetector:
 
             # Then (Assert)
             assert is_stable_1 is False  # First check always returns False
-            assert is_stable_2 is True   # File stable after timeout
+            assert is_stable_2 is True  # File stable after timeout
 
 
 class TestPDFFileHandler:
@@ -213,9 +213,7 @@ class TestPDFFileHandler:
     def config(self):
         """Create test configuration"""
         return WatcherConfig(
-            patterns=["*.pdf"],
-            stability_timeout=0.1,
-            max_file_size_mb=1
+            patterns=["*.pdf"], stability_timeout=0.1, max_file_size_mb=1
         )
 
     @pytest.fixture
@@ -264,11 +262,11 @@ class TestPDFFileHandler:
 
         mock_validator = Mock()
         mock_validator.validate_pdf.return_value = {
-            'valid': True,
-            'mime_type': 'application/pdf',
-            'size_bytes': 1000,
-            'hash': 'test_hash',
-            'error': None
+            "valid": True,
+            "mime_type": "application/pdf",
+            "size_bytes": 1000,
+            "hash": "test_hash",
+            "error": None,
         }
 
         # Replace instances in handler
@@ -292,8 +290,8 @@ class TestPDFFileHandler:
         # Given (Arrange)
         mock_validator = Mock()
         mock_validator.validate_pdf.return_value = {
-            'valid': False,
-            'error': 'Invalid MIME type'
+            "valid": False,
+            "error": "Invalid MIME type",
         }
         handler.validator = mock_validator
 
@@ -332,17 +330,14 @@ class TestDirectoryWatcher:
     @pytest.fixture
     def config(self):
         """Create test configuration"""
-        return WatcherConfig(
-            watch_directories=["/tmp/test"],
-            recursive=True
-        )
+        return WatcherConfig(watch_directories=["/tmp/test"], recursive=True)
 
     @pytest.fixture
     def watcher(self, mock_task_queue, config):
         """Setup DirectoryWatcher with mocked dependencies"""
         return DirectoryWatcher(mock_task_queue, config)
 
-    @patch('pdf_to_markdown_mcp.core.watcher.Observer')
+    @patch("pdf_to_markdown_mcp.core.watcher.Observer")
     def test_start_watching(self, mock_observer_class, watcher):
         """Test that watcher starts monitoring directories correctly"""
         # Given (Arrange)
@@ -356,7 +351,7 @@ class TestDirectoryWatcher:
         mock_observer.start.assert_called_once()
         assert watcher.observer is mock_observer
 
-    @patch('pdf_to_markdown_mcp.core.watcher.Observer')
+    @patch("pdf_to_markdown_mcp.core.watcher.Observer")
     def test_stop_watching(self, mock_observer_class, watcher):
         """Test that watcher stops monitoring gracefully"""
         # Given (Arrange)
@@ -371,7 +366,7 @@ class TestDirectoryWatcher:
         mock_observer.stop.assert_called_once()
         mock_observer.join.assert_called_once()
 
-    @patch('pdf_to_markdown_mcp.core.watcher.Observer')
+    @patch("pdf_to_markdown_mcp.core.watcher.Observer")
     def test_add_watch_directory(self, mock_observer_class, watcher):
         """Test that watcher can add new directories dynamically"""
         # Given (Arrange)
@@ -397,7 +392,7 @@ class TestDirectoryWatcher:
         # Then (Assert)
         assert result is False
 
-    @patch('pdf_to_markdown_mcp.core.watcher.Observer')
+    @patch("pdf_to_markdown_mcp.core.watcher.Observer")
     def test_is_running_when_started(self, mock_observer_class, watcher):
         """Test that is_running returns True when watcher is active"""
         # Given (Arrange)
@@ -418,7 +413,7 @@ class TestDirectoryWatcher:
         new_config = WatcherConfig(
             watch_directories=["/tmp/updated"],
             patterns=["*.pdf", "*.docx"],
-            stability_timeout=10.0
+            stability_timeout=10.0,
         )
 
         # When (Act)

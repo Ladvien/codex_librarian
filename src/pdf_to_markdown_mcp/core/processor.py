@@ -5,37 +5,34 @@ Orchestrates the entire PDF-to-Markdown conversion pipeline using MinerU.
 """
 
 import asyncio
-import logging
 import hashlib
+import logging
 import time
 import uuid
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Any, Optional, List, AsyncIterator, Callable
-from dataclasses import dataclass, field
+from typing import Any
 
 from sqlalchemy.orm import Session
 
-from pdf_to_markdown_mcp.models.document import (
-    ProcessingStatus,
-    Document,
-    DocumentContent,
-)
-from pdf_to_markdown_mcp.models.request import ProcessingOptions
-from pdf_to_markdown_mcp.services.mineru import MinerUService
-from pdf_to_markdown_mcp.services.database import VectorDatabaseService
 from pdf_to_markdown_mcp.core.chunker import TextChunker
-from pdf_to_markdown_mcp.core.streaming import (
-    stream_large_file,
-    StreamingProgressTracker,
-    MemoryMappedFileReader,
-    stream_processing_with_backpressure,
-    get_streaming_stats,
-)
 from pdf_to_markdown_mcp.core.exceptions import (
     ProcessingError,
     ValidationError,
-    ResourceError,
 )
+from pdf_to_markdown_mcp.core.streaming import (
+    StreamingProgressTracker,
+    get_streaming_stats,
+    stream_large_file,
+)
+from pdf_to_markdown_mcp.models.document import (
+    Document,
+    ProcessingStatus,
+)
+from pdf_to_markdown_mcp.models.request import ProcessingOptions
+from pdf_to_markdown_mcp.services.database import VectorDatabaseService
+from pdf_to_markdown_mcp.services.mineru import MinerUService
 
 logger = logging.getLogger(__name__)
 
@@ -45,17 +42,17 @@ class ProcessingResult:
     """Result of PDF processing operation."""
 
     document_id: int
-    output_path: Optional[Path]
+    output_path: Path | None
     processing_time_ms: int
     page_count: int
     chunk_count: int
     has_images: bool
     has_tables: bool
-    error_message: Optional[str] = None
-    operation_id: Optional[str] = None
+    error_message: str | None = None
+    operation_id: str | None = None
     streaming_enabled: bool = False
-    memory_usage_mb: Optional[float] = None
-    peak_memory_mb: Optional[float] = None
+    memory_usage_mb: float | None = None
+    peak_memory_mb: float | None = None
 
 
 class PDFProcessor:
@@ -68,15 +65,16 @@ class PDFProcessor:
         self.database_service = VectorDatabaseService(db_session)
         self.chunker = TextChunker()
         self.enable_streaming = enable_streaming
-        self._active_operations: Dict[str, StreamingProgressTracker] = {}
+        self._active_operations: dict[str, StreamingProgressTracker] = {}
 
     async def process_pdf(
         self,
         file_path: Path,
-        output_dir: Optional[Path] = None,
+        output_dir: Path | None = None,
         options: ProcessingOptions = None,
-        progress_callback: Optional[Callable[[int, int, str], None]] = None,
-        operation_id: Optional[str] = None,
+        progress_callback: Callable[[int, int, str], None] | None = None,
+        operation_id: str | None = None,
+        document_id: int | None = None,
     ) -> ProcessingResult:
         """
         Process a PDF file through the complete pipeline with streaming support.
@@ -87,6 +85,7 @@ class PDFProcessor:
             options: Processing options and configuration
             progress_callback: Optional callback for progress updates
             operation_id: Unique operation identifier (auto-generated if None)
+            document_id: Optional existing document ID (for processing queued docs)
 
         Returns:
             ProcessingResult with processing statistics
@@ -150,22 +149,49 @@ class PDFProcessor:
             else:
                 file_hash = self._calculate_file_hash(file_path)
 
-            # Check if already processed
-            existing_doc = await self.database_service.get_document_by_hash(file_hash)
-            if (
-                existing_doc
-                and existing_doc.conversion_status == ProcessingStatus.COMPLETED
-            ):
-                logger.info(f"PDF already processed: {file_path}")
-                return ProcessingResult(
-                    document_id=existing_doc.id,
-                    output_path=None,
-                    processing_time_ms=0,
-                    page_count=0,
-                    chunk_count=0,
-                    has_images=False,
-                    has_tables=False,
+            # Get document record (either provided or lookup by hash)
+            document = None
+            if document_id:
+                # Use provided document ID (from task queue)
+                document = await self.database_service.get_document_by_id(document_id)
+                if not document:
+                    raise ValidationError(f"Document with ID {document_id} not found")
+
+                # Check if already processed
+                if document.conversion_status == ProcessingStatus.COMPLETED:
+                    logger.info(f"PDF already processed: {file_path}")
+                    return ProcessingResult(
+                        document_id=document.id,
+                        output_path=Path(document.output_path)
+                        if document.output_path
+                        else None,
+                        processing_time_ms=0,
+                        page_count=0,
+                        chunk_count=0,
+                        has_images=False,
+                        has_tables=False,
+                    )
+            else:
+                # Look up by hash for direct processing (not from queue)
+                existing_doc = await self.database_service.get_document_by_hash(
+                    file_hash
                 )
+                if (
+                    existing_doc
+                    and existing_doc.conversion_status == ProcessingStatus.COMPLETED
+                ):
+                    logger.info(f"PDF already processed: {file_path}")
+                    return ProcessingResult(
+                        document_id=existing_doc.id,
+                        output_path=Path(existing_doc.output_path)
+                        if existing_doc.output_path
+                        else None,
+                        processing_time_ms=0,
+                        page_count=0,
+                        chunk_count=0,
+                        has_images=False,
+                        has_tables=False,
+                    )
 
             # Update progress: Creating document record
             if progress_tracker:
@@ -174,11 +200,16 @@ class PDFProcessor:
                 )
 
             # Create or update document record
-            document = await self._create_or_update_document(
-                file_path=file_path,
-                file_hash=file_hash,
-                status=ProcessingStatus.PROCESSING,
-            )
+            if not document:
+                document = await self._create_or_update_document(
+                    file_path=file_path,
+                    file_hash=file_hash,
+                    status=ProcessingStatus.PROCESSING,
+                )
+            else:
+                # Update existing document to processing status
+                document.conversion_status = ProcessingStatus.PROCESSING
+                await self.database_service.save_document(document)
 
             try:
                 # Update progress: Starting PDF processing
@@ -187,11 +218,22 @@ class PDFProcessor:
                         bytes_processed=0, current_step="Processing PDF with MinerU"
                     )
 
+                # Determine output directory - use mirrored path if available
+                actual_output_dir = output_dir
+                if document.output_path:
+                    # Use the directory from the mirrored output path
+                    mirrored_output_path = Path(document.output_path)
+                    actual_output_dir = mirrored_output_path.parent
+                    logger.info(f"Using mirrored output directory: {actual_output_dir}")
+
                 # Process PDF with MinerU with streaming support
                 if use_streaming:
                     mineru_result = await self.mineru_service.process_pdf_streaming(
                         file_path=file_path,
-                        output_dir=output_dir,
+                        output_dir=actual_output_dir,
+                        output_filename=mirrored_output_path.name
+                        if document.output_path
+                        else None,
                         options=options,
                         progress_callback=lambda processed, total, step: (
                             asyncio.create_task(
@@ -206,7 +248,12 @@ class PDFProcessor:
                     )
                 else:
                     mineru_result = await self.mineru_service.process_pdf(
-                        file_path=file_path, output_dir=output_dir, options=options
+                        file_path=file_path,
+                        output_dir=actual_output_dir,
+                        output_filename=mirrored_output_path.name
+                        if document.output_path
+                        else None,
+                        options=options,
                     )
 
                 # Update progress: Creating chunks
@@ -329,9 +376,16 @@ class PDFProcessor:
                     },
                 )
 
+                # Use mirrored output path if available, otherwise use MinerU result
+                final_output_path = (
+                    Path(document.output_path)
+                    if document.output_path
+                    else mineru_result.output_path
+                )
+
                 return ProcessingResult(
                     document_id=document.id,
-                    output_path=mineru_result.output_path,
+                    output_path=final_output_path,
                     processing_time_ms=processing_time_ms,
                     page_count=mineru_result.page_count,
                     chunk_count=len(chunks),
@@ -366,7 +420,7 @@ class PDFProcessor:
             raise  # Re-raise processing errors
         except Exception as e:
             logger.exception("Unexpected error during PDF processing")
-            raise ProcessingError(f"Unexpected processing error: {str(e)}")
+            raise ProcessingError(f"Unexpected processing error: {e!s}")
 
     async def _validate_pdf_file(self, file_path: Path) -> None:
         """
@@ -399,7 +453,7 @@ class PDFProcessor:
                 header = f.read(8)
                 if not header.startswith(b"%PDF-"):
                     raise ValidationError("Invalid PDF file format")
-        except IOError as e:
+        except OSError as e:
             raise ValidationError(f"Cannot read PDF file: {e}")
 
     def _calculate_file_hash(self, file_path: Path) -> str:
@@ -414,7 +468,7 @@ class PDFProcessor:
 
             return hash_sha256.hexdigest()
 
-        except IOError as e:
+        except OSError as e:
             raise ValidationError(f"Cannot calculate file hash: {e}")
 
     async def _create_or_update_document(
@@ -447,7 +501,7 @@ class PDFProcessor:
 
             return await self.database_service.create_document(document)
 
-    async def get_processing_status(self, document_id: int) -> Dict[str, Any]:
+    async def get_processing_status(self, document_id: int) -> dict[str, Any]:
         """Get processing status for a document."""
         document = await self.database_service.get_document_by_id(document_id)
 
@@ -485,7 +539,7 @@ class PDFProcessor:
     async def _calculate_file_hash_streaming(
         self,
         file_path: Path,
-        progress_tracker: Optional[StreamingProgressTracker] = None,
+        progress_tracker: StreamingProgressTracker | None = None,
     ) -> str:
         """Calculate SHA-256 hash using streaming for large files."""
         hash_sha256 = hashlib.sha256()
@@ -514,9 +568,9 @@ class PDFProcessor:
         options: ProcessingOptions,
         document_id: int,
         filename: str,
-        metadata: Dict[str, Any],
-        progress_tracker: Optional[StreamingProgressTracker] = None,
-    ) -> List[Any]:
+        metadata: dict[str, Any],
+        progress_tracker: StreamingProgressTracker | None = None,
+    ) -> list[Any]:
         """Create text chunks using streaming for large text content."""
         logger.info(
             f"Creating chunks with streaming for large text ({len(text)} characters)"
@@ -546,8 +600,8 @@ class PDFProcessor:
     async def _store_chunks_streaming(
         self,
         document_id: int,
-        chunks: List[Any],
-        progress_tracker: Optional[StreamingProgressTracker] = None,
+        chunks: list[Any],
+        progress_tracker: StreamingProgressTracker | None = None,
     ) -> None:
         """Store chunks in database using batching for large chunk counts."""
         batch_size = 50  # Process chunks in batches
@@ -576,14 +630,14 @@ class PDFProcessor:
 
         logger.info(f"Successfully stored all {len(chunks)} chunks")
 
-    def get_active_operations(self) -> Dict[str, Dict[str, Any]]:
+    def get_active_operations(self) -> dict[str, dict[str, Any]]:
         """Get status of all active processing operations."""
         return {
             op_id: tracker.metrics.to_dict()
             for op_id, tracker in self._active_operations.items()
         }
 
-    def get_operation_status(self, operation_id: str) -> Optional[Dict[str, Any]]:
+    def get_operation_status(self, operation_id: str) -> dict[str, Any] | None:
         """Get status of a specific operation."""
         tracker = self._active_operations.get(operation_id)
         return tracker.metrics.to_dict() if tracker else None
@@ -600,7 +654,7 @@ class PDFProcessor:
             return True
         return False
 
-    def get_streaming_stats(self) -> Dict[str, Any]:
+    def get_streaming_stats(self) -> dict[str, Any]:
         """Get streaming statistics for this processor."""
         return {
             "processor_stats": {

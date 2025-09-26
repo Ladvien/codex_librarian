@@ -8,18 +8,17 @@ processing progress, job status updates, and other real-time events.
 import asyncio
 import json
 import logging
-from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional, AsyncGenerator, Set
-from dataclasses import dataclass, field
-from enum import Enum
 import uuid
+from collections.abc import AsyncGenerator
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from enum import Enum
+from typing import Any
 
-from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field
 
 from pdf_to_markdown_mcp.models.response import JobStatus
-
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +39,9 @@ class SSEEvent:
     """Server-Sent Event data structure."""
 
     event: str
-    data: Dict[str, Any]
-    event_id: Optional[str] = None
-    retry: Optional[int] = None  # Retry timeout in milliseconds
+    data: dict[str, Any]
+    event_id: str | None = None
+    retry: int | None = None  # Retry timeout in milliseconds
 
     def to_sse_format(self) -> str:
         """Format event as SSE data."""
@@ -76,13 +75,13 @@ class SSEProgress(BaseModel):
     status: JobStatus = Field(..., description="Job status")
 
     # Timing information
-    started_at: Optional[datetime] = Field(None, description="Job start time")
-    estimated_completion: Optional[datetime] = Field(
+    started_at: datetime | None = Field(None, description="Job start time")
+    estimated_completion: datetime | None = Field(
         None, description="Estimated completion"
     )
 
     # Additional metadata
-    metadata: Dict[str, Any] = Field(
+    metadata: dict[str, Any] = Field(
         default_factory=dict, description="Additional progress metadata"
     )
 
@@ -98,18 +97,18 @@ class ProgressTracker:
         self.progress_percent = 0.0
         self.current_step = "Initializing"
         self.status = JobStatus.QUEUED
-        self.started_at: Optional[datetime] = None
-        self.completed_at: Optional[datetime] = None
-        self.error_message: Optional[str] = None
-        self.metadata: Dict[str, Any] = {}
-        self.events: List[SSEEvent] = []
+        self.started_at: datetime | None = None
+        self.completed_at: datetime | None = None
+        self.error_message: str | None = None
+        self.metadata: dict[str, Any] = {}
+        self.events: list[SSEEvent] = []
 
     def update_progress(
         self,
         progress_percent: float,
         current_step: str,
         status: JobStatus = JobStatus.RUNNING,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ):
         """Update job progress and generate SSE event."""
         self.progress_percent = min(100.0, max(0.0, progress_percent))
@@ -200,7 +199,7 @@ class ProgressTracker:
         self.events.append(event)
         return event
 
-    def add_metadata(self, metadata: Dict[str, Any]):
+    def add_metadata(self, metadata: dict[str, Any]):
         """Add metadata to the tracker."""
         self.metadata.update(metadata)
 
@@ -267,7 +266,7 @@ class ProgressStream:
                     if event.event in [SSEEventType.COMPLETE, SSEEventType.ERROR]:
                         break
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # Send heartbeat to keep connection alive
                     heartbeat = SSEEvent(
                         event=SSEEventType.HEARTBEAT,
@@ -305,7 +304,7 @@ class ProgressStream:
         progress_percent: float,
         current_step: str,
         status: JobStatus = JobStatus.RUNNING,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ):
         """Emit a progress event to all subscribers."""
         if self._closed:
@@ -375,8 +374,8 @@ class JobProgressMonitor:
     """Global monitor for managing multiple job progress streams."""
 
     def __init__(self):
-        self.active_streams: Dict[str, ProgressStream] = {}
-        self._cleanup_task: Optional[asyncio.Task] = None
+        self.active_streams: dict[str, ProgressStream] = {}
+        self._cleanup_task: asyncio.Task | None = None
 
     def get_or_create_stream(self, job_id: str) -> ProgressStream:
         """Get existing stream or create a new one."""
@@ -392,7 +391,7 @@ class JobProgressMonitor:
         progress_percent: float,
         current_step: str,
         status: JobStatus = JobStatus.RUNNING,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ):
         """Broadcast progress update to job stream."""
         stream = self.get_or_create_stream(job_id)
@@ -435,10 +434,10 @@ progress_monitor = JobProgressMonitor()
 
 
 def format_sse_data(
-    data: Dict[str, Any],
-    event_type: Optional[str] = None,
-    event_id: Optional[str] = None,
-    retry_ms: Optional[int] = None,
+    data: dict[str, Any],
+    event_type: str | None = None,
+    event_id: str | None = None,
+    retry_ms: int | None = None,
 ) -> str:
     """Format data as Server-Sent Event string."""
     lines = []

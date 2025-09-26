@@ -4,15 +4,16 @@ Unit tests for convert API endpoints.
 Tests convert_single and batch_convert MCP tools following TDD principles.
 """
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
-from fastapi.testclient import TestClient
+from unittest.mock import Mock, patch
+
+import pytest
 from sqlalchemy.orm import Session
 
-from pdf_to_markdown_mcp.models.request import ConvertSingleRequest, BatchConvertRequest, ProcessingOptions
-from pdf_to_markdown_mcp.models.response import ConvertSingleResponse, BatchConvertResponse, ErrorType
-from pdf_to_markdown_mcp.api.convert import router
+from pdf_to_markdown_mcp.models.request import (
+    BatchConvertRequest,
+    ConvertSingleRequest,
+)
 
 
 class TestConvertSingleEndpoint:
@@ -28,12 +29,12 @@ class TestConvertSingleEndpoint:
         """Create a mock PDF file for testing."""
         pdf_file = tmp_path / "test.pdf"
         # Create a valid PDF header
-        with open(pdf_file, 'wb') as f:
-            f.write(b'%PDF-1.4\n')
-            f.write(b'%' + b'\xE2\xE3\xCF\xD3' + b'\n')  # Binary comment
-            f.write(b'1 0 obj\n<<\n/Type /Catalog\n/Pages 2 0 R\n>>\nendobj\n')
-            f.write(b'xref\n0 3\n')
-            f.write(b'%%EOF\n')
+        with open(pdf_file, "wb") as f:
+            f.write(b"%PDF-1.4\n")
+            f.write(b"%" + b"\xe2\xe3\xcf\xd3" + b"\n")  # Binary comment
+            f.write(b"1 0 obj\n<<\n/Type /Catalog\n/Pages 2 0 R\n>>\nendobj\n")
+            f.write(b"xref\n0 3\n")
+            f.write(b"%%EOF\n")
         return pdf_file
 
     @pytest.fixture
@@ -52,7 +53,7 @@ class TestConvertSingleEndpoint:
                 "extract_tables": True,
                 "extract_formulas": True,
                 "chunk_for_embeddings": True,
-            }
+            },
         }
 
     @pytest.mark.asyncio
@@ -67,11 +68,12 @@ class TestConvertSingleEndpoint:
         mock_job = Mock()
         mock_job.id = "job_123"
 
-        with patch('pdf_to_markdown_mcp.api.convert.process_pdf_document') as mock_task:
+        with patch("pdf_to_markdown_mcp.api.convert.process_pdf_document") as mock_task:
             mock_task.delay.return_value = mock_job
 
             # When
             from pdf_to_markdown_mcp.api.convert import convert_single_pdf
+
             response = await convert_single_pdf(request, Mock(), mock_db_session)
 
             # Then
@@ -106,13 +108,16 @@ class TestConvertSingleEndpoint:
         mock_result.has_images = True
         mock_result.has_tables = False
 
-        with patch('pdf_to_markdown_mcp.api.convert.PDFProcessor') as mock_processor_class:
+        with patch(
+            "pdf_to_markdown_mcp.api.convert.PDFProcessor"
+        ) as mock_processor_class:
             mock_processor = Mock()
             mock_processor.process_pdf.return_value = mock_result
             mock_processor_class.return_value = mock_processor
 
             # When
             from pdf_to_markdown_mcp.api.convert import convert_single_pdf
+
             response = await convert_single_pdf(request, Mock(), mock_db_session)
 
             # Then
@@ -131,15 +136,10 @@ class TestConvertSingleEndpoint:
             mock_processor.process_pdf.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_convert_single_handles_file_not_found_error(
-        self, mock_db_session
-    ):
+    async def test_convert_single_handles_file_not_found_error(self, mock_db_session):
         """Test that convert_single handles FileNotFoundError properly."""
         # Given
-        request_data = {
-            "file_path": "/nonexistent/file.pdf",
-            "store_embeddings": True
-        }
+        request_data = {"file_path": "/nonexistent/file.pdf", "store_embeddings": True}
 
         # When/Then - ValidationError should be raised during request validation
         with pytest.raises(ValueError, match="File does not exist"):
@@ -154,10 +154,7 @@ class TestConvertSingleEndpoint:
         fake_pdf = tmp_path / "fake.pdf"
         fake_pdf.write_text("This is not a PDF file")
 
-        request_data = {
-            "file_path": str(fake_pdf),
-            "store_embeddings": True
-        }
+        request_data = {"file_path": str(fake_pdf), "store_embeddings": True}
 
         # When/Then - ValidationError should be raised during request validation
         with pytest.raises(ValueError, match="does not appear to be a valid PDF"):
@@ -171,18 +168,17 @@ class TestConvertSingleEndpoint:
         # Given - create a large file mock
         large_pdf = tmp_path / "large.pdf"
         # Create small file but mock stat to return large size
-        large_pdf.write_bytes(b'%PDF-1.4\n%test')
+        large_pdf.write_bytes(b"%PDF-1.4\n%test")
 
-        with patch.object(Path, 'stat') as mock_stat:
+        with patch.object(Path, "stat") as mock_stat:
             mock_stat.return_value.st_size = 600 * 1024 * 1024  # 600MB
 
-            request_data = {
-                "file_path": str(large_pdf),
-                "store_embeddings": True
-            }
+            request_data = {"file_path": str(large_pdf), "store_embeddings": True}
 
             # When/Then
-            with pytest.raises(ValueError, match="File too large.*Maximum allowed: 500MB"):
+            with pytest.raises(
+                ValueError, match="File too large.*Maximum allowed: 500MB"
+            ):
                 ConvertSingleRequest(**request_data)
 
 
@@ -198,9 +194,9 @@ class TestBatchConvertEndpoint:
         # Create multiple PDF files
         for i in range(3):
             pdf_file = pdf_dir / f"doc{i}.pdf"
-            with open(pdf_file, 'wb') as f:
-                f.write(b'%PDF-1.4\n')
-                f.write(b'%test')
+            with open(pdf_file, "wb") as f:
+                f.write(b"%PDF-1.4\n")
+                f.write(b"%test")
 
         return pdf_dir
 
@@ -218,8 +214,8 @@ class TestBatchConvertEndpoint:
             "options": {
                 "ocr_language": "eng",
                 "chunk_size": 1000,
-                "chunk_overlap": 200
-            }
+                "chunk_overlap": 200,
+            },
         }
 
     @pytest.mark.asyncio
@@ -234,11 +230,12 @@ class TestBatchConvertEndpoint:
         mock_job = Mock()
         mock_job.id = "batch_456"
 
-        with patch('pdf_to_markdown_mcp.api.convert.process_pdf_batch') as mock_task:
+        with patch("pdf_to_markdown_mcp.api.convert.process_pdf_batch") as mock_task:
             mock_task.delay.return_value = mock_job
 
             # When
             from pdf_to_markdown_mcp.api.convert import batch_convert_pdfs
+
             response = await batch_convert_pdfs(request, Mock(), mock_db_session)
 
             # Then
@@ -266,12 +263,13 @@ class TestBatchConvertEndpoint:
             "directory": str(empty_dir),
             "pattern": "*.pdf",
             "max_files": 10,
-            "priority": 5
+            "priority": 5,
         }
         request = BatchConvertRequest(**request_data)
 
         # When
         from pdf_to_markdown_mcp.api.convert import batch_convert_pdfs
+
         response = await batch_convert_pdfs(request, Mock(), mock_db_session)
 
         # Then
@@ -293,25 +291,26 @@ class TestBatchConvertEndpoint:
 
         for i in range(5):
             pdf_file = pdf_dir / f"doc{i}.pdf"
-            with open(pdf_file, 'wb') as f:
-                f.write(b'%PDF-1.4\n')
+            with open(pdf_file, "wb") as f:
+                f.write(b"%PDF-1.4\n")
 
         request_data = {
             "directory": str(pdf_dir),
             "pattern": "*.pdf",
             "max_files": 3,  # Limit to 3 files
-            "priority": 5
+            "priority": 5,
         }
         request = BatchConvertRequest(**request_data)
 
         mock_job = Mock()
         mock_job.id = "batch_789"
 
-        with patch('pdf_to_markdown_mcp.api.convert.process_pdf_batch') as mock_task:
+        with patch("pdf_to_markdown_mcp.api.convert.process_pdf_batch") as mock_task:
             mock_task.delay.return_value = mock_job
 
             # When
             from pdf_to_markdown_mcp.api.convert import batch_convert_pdfs
+
             response = await batch_convert_pdfs(request, Mock(), mock_db_session)
 
             # Then
@@ -321,16 +320,14 @@ class TestBatchConvertEndpoint:
             assert len(response.queued_files) == 3
 
     @pytest.mark.asyncio
-    async def test_batch_convert_handles_invalid_directory(
-        self, mock_db_session
-    ):
+    async def test_batch_convert_handles_invalid_directory(self, mock_db_session):
         """Test batch_convert with invalid directory."""
         # Given
         request_data = {
             "directory": "/nonexistent/directory",
             "pattern": "*.pdf",
             "max_files": 10,
-            "priority": 5
+            "priority": 5,
         }
 
         # When/Then
@@ -349,6 +346,7 @@ class TestStreamProgressEndpoint:
 
         # When
         from pdf_to_markdown_mcp.api.convert import stream_progress
+
         response = await stream_progress(job_id=job_id)
 
         # Then
@@ -376,6 +374,7 @@ class TestStreamProgressEndpoint:
 
         # Parse first event and verify structure
         import json
+
         first_event_data = events[0][6:-2]  # Remove "data: " and "\n\n"
         parsed_data = json.loads(first_event_data)
 

@@ -5,27 +5,25 @@ This module tests the PDFProcessor orchestrator class that coordinates
 PDF processing workflows following TDD principles.
 """
 
-import pytest
 import asyncio
-from unittest.mock import Mock, AsyncMock, patch
 from pathlib import Path
+from unittest.mock import Mock, patch
 
-from src.pdf_to_markdown_mcp.core.processor import PDFProcessor
+import pytest
+
 from src.pdf_to_markdown_mcp.core.exceptions import (
-    ValidationError,
-    ProcessingError,
     EmbeddingError,
-    DatabaseError,
+    ProcessingError,
+    ValidationError,
 )
-from src.pdf_to_markdown_mcp.models.processing import ProcessingResult
-
+from src.pdf_to_markdown_mcp.core.processor import PDFProcessor
 from tests.fixtures import (
     DocumentFactory,
     ProcessingResultFactory,
-    create_temp_pdf,
-    create_mock_mineru_service,
     create_mock_embedding_service,
+    create_mock_mineru_service,
     create_sample_embeddings,
+    create_temp_pdf,
 )
 
 
@@ -39,33 +37,35 @@ class TestPDFProcessor:
 
         # Then
         assert processor is not None
-        assert hasattr(processor, 'config')
-        assert hasattr(processor, 'mineru_service')
-        assert hasattr(processor, 'embedding_service')
-        assert hasattr(processor, 'database_service')
+        assert hasattr(processor, "config")
+        assert hasattr(processor, "mineru_service")
+        assert hasattr(processor, "embedding_service")
+        assert hasattr(processor, "database_service")
 
     def test_pdf_processor_custom_config(self):
         """Test PDFProcessor with custom configuration."""
         # Given
         custom_config = {
-            'chunk_size': 1500,
-            'chunk_overlap': 300,
-            'language': 'fr',
-            'extract_tables': False
+            "chunk_size": 1500,
+            "chunk_overlap": 300,
+            "language": "fr",
+            "extract_tables": False,
         }
 
         # When
         processor = PDFProcessor(config=custom_config)
 
         # Then
-        assert processor.config['chunk_size'] == 1500
-        assert processor.config['chunk_overlap'] == 300
-        assert processor.config['language'] == 'fr'
-        assert processor.config['extract_tables'] is False
+        assert processor.config["chunk_size"] == 1500
+        assert processor.config["chunk_overlap"] == 300
+        assert processor.config["language"] == "fr"
+        assert processor.config["extract_tables"] is False
 
-    @patch('src.pdf_to_markdown_mcp.core.processor.MinerUService')
-    @patch('src.pdf_to_markdown_mcp.core.processor.EmbeddingService')
-    def test_pdf_processor_service_initialization(self, mock_embedding_class, mock_mineru_class):
+    @patch("src.pdf_to_markdown_mcp.core.processor.MinerUService")
+    @patch("src.pdf_to_markdown_mcp.core.processor.EmbeddingService")
+    def test_pdf_processor_service_initialization(
+        self, mock_embedding_class, mock_mineru_class
+    ):
         """Test PDFProcessor initializes services correctly."""
         # Given
         mock_mineru = create_mock_mineru_service()
@@ -134,7 +134,7 @@ class TestPDFProcessorValidation:
         processor = PDFProcessor()
         large_pdf = temp_directory / "large.pdf"
 
-        with patch('pathlib.Path.stat') as mock_stat:
+        with patch("pathlib.Path.stat") as mock_stat:
             # Mock file size to be larger than limit (500MB)
             mock_stat.return_value.st_size = 600 * 1024 * 1024
             large_pdf.write_bytes(b"%PDF-1.4\nsmall content")
@@ -156,9 +156,7 @@ class TestPDFProcessorProcessing:
 
         # Mock services
         processing_result = ProcessingResultFactory.create(
-            success=True,
-            chunk_count=3,
-            include_tables=True
+            success=True, chunk_count=3, include_tables=True
         )
 
         mock_mineru = create_mock_mineru_service(success=True)
@@ -175,11 +173,11 @@ class TestPDFProcessorProcessing:
         result = await processor.process_document(str(pdf_path))
 
         # Then
-        assert result['success'] is True
-        assert result['document_path'] == str(pdf_path)
-        assert 'processing_time' in result
-        assert 'chunks_processed' in result
-        assert result['chunks_processed'] == 3
+        assert result["success"] is True
+        assert result["document_path"] == str(pdf_path)
+        assert "processing_time" in result
+        assert "chunks_processed" in result
+        assert result["chunks_processed"] == 3
 
         # Verify service calls
         mock_mineru.process_pdf.assert_called_once_with(Path(pdf_path))
@@ -193,7 +191,9 @@ class TestPDFProcessorProcessing:
         processor = PDFProcessor()
 
         mock_mineru = Mock()
-        mock_mineru.process_pdf.side_effect = ProcessingError("MinerU processing failed")
+        mock_mineru.process_pdf.side_effect = ProcessingError(
+            "MinerU processing failed"
+        )
         processor.mineru_service = mock_mineru
 
         # When/Then
@@ -215,7 +215,9 @@ class TestPDFProcessorProcessing:
 
         # Mock embedding failure
         mock_embedding = Mock()
-        mock_embedding.generate_batch.side_effect = EmbeddingError("Embedding service failed")
+        mock_embedding.generate_batch.side_effect = EmbeddingError(
+            "Embedding service failed"
+        )
         processor.embedding_service = mock_embedding
 
         # When/Then
@@ -238,11 +240,13 @@ class TestPDFProcessorProcessing:
         processor.embedding_service = mock_embedding
 
         # When
-        result = await processor.process_document(str(pdf_path), generate_embeddings=False)
+        result = await processor.process_document(
+            str(pdf_path), generate_embeddings=False
+        )
 
         # Then
-        assert result['success'] is True
-        assert result['chunks_processed'] == 2
+        assert result["success"] is True
+        assert result["chunks_processed"] == 2
 
         # Embedding service should not be called
         mock_embedding.generate_batch.assert_not_called()
@@ -256,9 +260,7 @@ class TestPDFProcessorProcessing:
 
         # Mock processing result with no chunks
         processing_result = ProcessingResultFactory.create(
-            success=True,
-            chunk_count=0,
-            chunks=[]
+            success=True, chunk_count=0, chunks=[]
         )
         mock_mineru = create_mock_mineru_service(success=True)
         mock_mineru.process_pdf.return_value = processing_result
@@ -271,8 +273,8 @@ class TestPDFProcessorProcessing:
         result = await processor.process_document(str(pdf_path))
 
         # Then
-        assert result['success'] is True
-        assert result['chunks_processed'] == 0
+        assert result["success"] is True
+        assert result["chunks_processed"] == 0
 
         # Embedding service should not be called with empty chunks
         mock_embedding.generate_batch.assert_not_called()
@@ -285,12 +287,11 @@ class TestPDFProcessorProcessing:
         processor = PDFProcessor()
 
         progress_updates = []
+
         def progress_callback(stage: str, progress: float, message: str = ""):
-            progress_updates.append({
-                'stage': stage,
-                'progress': progress,
-                'message': message
-            })
+            progress_updates.append(
+                {"stage": stage, "progress": progress, "message": message}
+            )
 
         processing_result = ProcessingResultFactory.create(success=True, chunk_count=2)
         mock_mineru = create_mock_mineru_service(success=True)
@@ -304,19 +305,18 @@ class TestPDFProcessorProcessing:
 
         # When
         result = await processor.process_document(
-            str(pdf_path),
-            progress_callback=progress_callback
+            str(pdf_path), progress_callback=progress_callback
         )
 
         # Then
-        assert result['success'] is True
+        assert result["success"] is True
         assert len(progress_updates) > 0
 
         # Verify progress stages
-        stages = [update['stage'] for update in progress_updates]
-        assert 'validation' in stages
-        assert 'processing' in stages
-        assert 'embeddings' in stages
+        stages = [update["stage"] for update in progress_updates]
+        assert "validation" in stages
+        assert "processing" in stages
+        assert "embeddings" in stages
 
 
 class TestPDFProcessorBatchProcessing:
@@ -344,11 +344,13 @@ class TestPDFProcessorBatchProcessing:
         processor.embedding_service = mock_embedding
 
         # When
-        results = await processor.batch_process_documents([str(path) for path in pdf_paths])
+        results = await processor.batch_process_documents(
+            [str(path) for path in pdf_paths]
+        )
 
         # Then
         assert len(results) == 3
-        assert all(result['success'] for result in results)
+        assert all(result["success"] for result in results)
         assert mock_mineru.process_pdf.call_count == 3
 
     @pytest.mark.asyncio
@@ -377,17 +379,19 @@ class TestPDFProcessorBatchProcessing:
         processor.embedding_service = mock_embedding
 
         # When
-        results = await processor.batch_process_documents([str(path) for path in pdf_paths])
+        results = await processor.batch_process_documents(
+            [str(path) for path in pdf_paths]
+        )
 
         # Then
         assert len(results) == 3
-        assert sum(1 for r in results if r['success']) == 2
-        assert sum(1 for r in results if not r['success']) == 1
+        assert sum(1 for r in results if r["success"]) == 2
+        assert sum(1 for r in results if not r["success"]) == 1
 
         # Find the failed result
-        failed_result = next(r for r in results if not r['success'])
-        assert 'error' in failed_result
-        assert "Processing failed" in failed_result['error']
+        failed_result = next(r for r in results if not r["success"])
+        assert "error" in failed_result
+        assert "Processing failed" in failed_result["error"]
 
     @pytest.mark.asyncio
     async def test_batch_process_documents_concurrent_limit(self, temp_directory):
@@ -413,16 +417,15 @@ class TestPDFProcessorBatchProcessing:
             concurrent_count -= 1
             return ProcessingResultFactory.create(success=True, chunk_count=1)
 
-        with patch.object(processor, 'process_document', mock_process_with_tracking):
+        with patch.object(processor, "process_document", mock_process_with_tracking):
             # When
             results = await processor.batch_process_documents(
-                [str(path) for path in pdf_paths],
-                max_concurrent=3
+                [str(path) for path in pdf_paths], max_concurrent=3
             )
 
             # Then
             assert len(results) == 10
-            assert all(result['success'] for result in results)
+            assert all(result["success"] for result in results)
             assert max_concurrent <= 3  # Should not exceed concurrency limit
 
 
@@ -430,7 +433,9 @@ class TestPDFProcessorDatabaseIntegration:
     """Test PDFProcessor database integration methods."""
 
     @pytest.mark.asyncio
-    async def test_process_document_with_storage_success(self, async_db_session, temp_directory):
+    async def test_process_document_with_storage_success(
+        self, async_db_session, temp_directory
+    ):
         """Test processing document with database storage."""
         # Given
         pdf_path = create_temp_pdf(directory=temp_directory)
@@ -438,9 +443,9 @@ class TestPDFProcessorDatabaseIntegration:
 
         # Create document record
         from src.pdf_to_markdown_mcp.db.models import Document
+
         document_data = DocumentFactory.create(
-            file_path=str(pdf_path),
-            status="processing"
+            file_path=str(pdf_path), status="processing"
         )
         document = Document(**document_data)
         async_db_session.add(document)
@@ -458,18 +463,22 @@ class TestPDFProcessorDatabaseIntegration:
         processor.embedding_service = mock_embedding
 
         # When
-        result = await processor.process_document_with_storage(document.id, async_db_session)
+        result = await processor.process_document_with_storage(
+            document.id, async_db_session
+        )
 
         # Then
-        assert result['success'] is True
-        assert result['document_id'] == document.id
+        assert result["success"] is True
+        assert result["document_id"] == document.id
 
         # Verify document status updated
         await async_db_session.refresh(document)
         assert document.status == "completed"
 
     @pytest.mark.asyncio
-    async def test_process_document_with_storage_document_not_found(self, async_db_session):
+    async def test_process_document_with_storage_document_not_found(
+        self, async_db_session
+    ):
         """Test processing with non-existent document ID."""
         # Given
         processor = PDFProcessor()
@@ -477,19 +486,23 @@ class TestPDFProcessorDatabaseIntegration:
 
         # When/Then
         with pytest.raises(ValidationError, match="Document not found"):
-            await processor.process_document_with_storage(non_existent_id, async_db_session)
+            await processor.process_document_with_storage(
+                non_existent_id, async_db_session
+            )
 
     @pytest.mark.asyncio
-    async def test_process_document_with_storage_processing_failure(self, async_db_session, temp_directory):
+    async def test_process_document_with_storage_processing_failure(
+        self, async_db_session, temp_directory
+    ):
         """Test storage with processing failure updates document status."""
         # Given
         pdf_path = create_temp_pdf(directory=temp_directory)
         processor = PDFProcessor()
 
         from src.pdf_to_markdown_mcp.db.models import Document
+
         document_data = DocumentFactory.create(
-            file_path=str(pdf_path),
-            status="processing"
+            file_path=str(pdf_path), status="processing"
         )
         document = Document(**document_data)
         async_db_session.add(document)

@@ -5,19 +5,17 @@ This module provides a robust circuit breaker to prevent Redis connection pool
 saturation and handle Redis connectivity issues gracefully.
 """
 
-import asyncio
 import logging
 import time
+from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, Callable, Optional, Dict, Union
-from contextlib import asynccontextmanager, contextmanager
+from typing import Any
 
 from ..core.errors import (
     CircuitBreakerError,
-    TransientError,
-    track_error,
     create_correlation_id,
+    track_error,
 )
 
 logger = logging.getLogger(__name__)
@@ -63,8 +61,8 @@ class CircuitBreaker:
         # State tracking
         self.state = CircuitBreakerState.CLOSED
         self.failure_count = 0
-        self.last_failure_time: Optional[datetime] = None
-        self.next_attempt_time: Optional[datetime] = None
+        self.last_failure_time: datetime | None = None
+        self.next_attempt_time: datetime | None = None
 
         # Metrics
         self.total_calls = 0
@@ -310,7 +308,7 @@ class CircuitBreaker:
 
             raise
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get circuit breaker statistics."""
         success_rate = self.successful_calls / max(self.total_calls, 1)
 
@@ -351,7 +349,7 @@ class RedisCircuitBreakerManager:
     """Manager for Redis-specific circuit breakers."""
 
     def __init__(self):
-        self.circuit_breakers: Dict[str, CircuitBreaker] = {}
+        self.circuit_breakers: dict[str, CircuitBreaker] = {}
 
     def get_circuit_breaker(
         self, name: str, failure_threshold: int = 5, recovery_timeout: int = 60
@@ -384,7 +382,7 @@ class RedisCircuitBreakerManager:
 
         return self.circuit_breakers[name]
 
-    def get_all_stats(self) -> Dict[str, Dict[str, Any]]:
+    def get_all_stats(self) -> dict[str, dict[str, Any]]:
         """Get statistics for all circuit breakers."""
         return {name: cb.get_stats() for name, cb in self.circuit_breakers.items()}
 

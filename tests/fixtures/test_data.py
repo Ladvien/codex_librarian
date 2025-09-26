@@ -11,8 +11,7 @@ This module provides sample data for testing various components:
 
 import hashlib
 from datetime import datetime
-from typing import List, Dict, Any, Optional
-from pathlib import Path
+from typing import Any
 
 # Sample PDF content (minimal valid PDF)
 SAMPLE_PDF_CONTENT = b"""%PDF-1.4
@@ -277,7 +276,7 @@ SAMPLE_IMAGE_EMBEDDINGS = [
 ]
 
 
-def create_sample_pdf_content(content: Optional[str] = None) -> bytes:
+def create_sample_pdf_content(content: str | None = None) -> bytes:
     """Create sample PDF content with optional custom text."""
     if content is None:
         return SAMPLE_PDF_CONTENT
@@ -312,10 +311,12 @@ startxref
 300
 %%EOF"""
 
-    return template.encode('utf-8')
+    return template.encode("utf-8")
 
 
-def create_sample_markdown(title: str = "Test Document", sections: Optional[List[str]] = None) -> str:
+def create_sample_markdown(
+    title: str = "Test Document", sections: list[str] | None = None
+) -> str:
     """Create sample markdown content with optional customization."""
     if sections is None:
         return SAMPLE_MARKDOWN_CONTENT.format(timestamp=datetime.now().isoformat())
@@ -328,7 +329,7 @@ def create_sample_markdown(title: str = "Test Document", sections: Optional[List
     return content
 
 
-def create_sample_processing_result(**overrides) -> Dict[str, Any]:
+def create_sample_processing_result(**overrides) -> dict[str, Any]:
     """Create a sample processing result with optional overrides."""
     result = {
         "success": True,
@@ -346,7 +347,7 @@ def create_sample_processing_result(**overrides) -> Dict[str, Any]:
             "confidence": 0.95,
             "file_size": len(SAMPLE_PDF_CONTENT),
             "file_hash": SAMPLE_PDF_METADATA["file_hash"],
-        }
+        },
     }
 
     # Apply overrides
@@ -354,7 +355,9 @@ def create_sample_processing_result(**overrides) -> Dict[str, Any]:
     return result
 
 
-def create_sample_embeddings(count: int = 4, dimensions: int = 1536) -> List[List[float]]:
+def create_sample_embeddings(
+    count: int = 4, dimensions: int = 1536
+) -> list[list[float]]:
     """Create sample embedding vectors."""
     embeddings = []
     for i in range(count):
@@ -366,7 +369,7 @@ def create_sample_embeddings(count: int = 4, dimensions: int = 1536) -> List[Lis
     return embeddings
 
 
-def create_database_test_data() -> Dict[str, List[Dict[str, Any]]]:
+def create_database_test_data() -> dict[str, list[dict[str, Any]]]:
     """Create comprehensive test data for database operations."""
     now = datetime.utcnow()
 

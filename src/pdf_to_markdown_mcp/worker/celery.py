@@ -5,13 +5,14 @@ This module sets up the Celery application with Redis broker, proper task routin
 error handling, monitoring, and coordination with the processing pipeline.
 """
 
-import os
 import logging
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Any
+
 from celery import Celery, Task
-from celery.signals import worker_ready, worker_shutting_down, task_prerun, task_postrun
-from kombu import Queue, Exchange
+from celery.signals import task_postrun, task_prerun, worker_ready, worker_shutting_down
+from kombu import Exchange, Queue
+
 from ..config import settings
 from ..core.circuit_breaker import (
     get_redis_broker_circuit_breaker,
@@ -302,7 +303,7 @@ def create_celery_app() -> Celery:
     return app
 
 
-def _setup_task_routes() -> Dict[str, Dict[str, str]]:
+def _setup_task_routes() -> dict[str, dict[str, str]]:
     """Set up task routing configuration."""
     return {
         # PDF processing tasks - high priority
@@ -449,7 +450,7 @@ app.autodiscover_tasks(["pdf_to_markdown_mcp.worker"], related_name="tasks")
 
 
 # Enhanced monitoring and management functions
-def get_worker_stats() -> Dict[str, Any]:
+def get_worker_stats() -> dict[str, Any]:
     """Get comprehensive worker statistics for monitoring."""
     try:
         inspect = app.control.inspect()
@@ -494,7 +495,7 @@ def get_queue_length(queue_name: str) -> int:
         return -1
 
 
-def get_all_queue_stats() -> Dict[str, Dict[str, Any]]:
+def get_all_queue_stats() -> dict[str, dict[str, Any]]:
     """Get statistics for all configured queues."""
     queue_stats = {}
 
@@ -521,52 +522,51 @@ def get_all_queue_stats() -> Dict[str, Dict[str, Any]]:
     return queue_stats
 
 
-def get_redis_connection_info() -> Dict[str, Any]:
+def get_redis_connection_info() -> dict[str, Any]:
     """Get Redis connection information and health status with circuit breaker protection."""
     circuit_breaker = get_redis_broker_circuit_breaker()
 
     try:
-        with circuit_breaker("get_redis_info"):
-            with app.connection() as conn:
-                redis_client = conn.default_channel.client
-                info = redis_client.info()
+        with circuit_breaker("get_redis_info"), app.connection() as conn:
+            redis_client = conn.default_channel.client
+            info = redis_client.info()
 
-                connection_stats = {
-                    "connected_clients": info.get("connected_clients", 0),
-                    "used_memory_human": info.get("used_memory_human", "0"),
-                    "used_memory": info.get("used_memory", 0),
-                    "keyspace_hits": info.get("keyspace_hits", 0),
-                    "keyspace_misses": info.get("keyspace_misses", 0),
-                    "total_connections_received": info.get(
-                        "total_connections_received", 0
-                    ),
-                    "total_commands_processed": info.get("total_commands_processed", 0),
-                    "redis_version": info.get("redis_version", "unknown"),
-                    "uptime_in_seconds": info.get("uptime_in_seconds", 0),
-                    "role": info.get("role", "unknown"),
-                    # Enhanced connection pool metrics
-                    "max_clients": info.get("maxclients", 0),
-                    "rejected_connections": info.get("rejected_connections", 0),
-                    "client_recent_max_input_buffer": info.get(
-                        "client_recent_max_input_buffer", 0
-                    ),
-                    "client_recent_max_output_buffer": info.get(
-                        "client_recent_max_output_buffer", 0
-                    ),
-                }
+            connection_stats = {
+                "connected_clients": info.get("connected_clients", 0),
+                "used_memory_human": info.get("used_memory_human", "0"),
+                "used_memory": info.get("used_memory", 0),
+                "keyspace_hits": info.get("keyspace_hits", 0),
+                "keyspace_misses": info.get("keyspace_misses", 0),
+                "total_connections_received": info.get(
+                    "total_connections_received", 0
+                ),
+                "total_commands_processed": info.get("total_commands_processed", 0),
+                "redis_version": info.get("redis_version", "unknown"),
+                "uptime_in_seconds": info.get("uptime_in_seconds", 0),
+                "role": info.get("role", "unknown"),
+                # Enhanced connection pool metrics
+                "max_clients": info.get("maxclients", 0),
+                "rejected_connections": info.get("rejected_connections", 0),
+                "client_recent_max_input_buffer": info.get(
+                    "client_recent_max_input_buffer", 0
+                ),
+                "client_recent_max_output_buffer": info.get(
+                    "client_recent_max_output_buffer", 0
+                ),
+            }
 
-                # Add circuit breaker statistics
-                connection_stats["circuit_breaker"] = circuit_breaker.get_stats()
+            # Add circuit breaker statistics
+            connection_stats["circuit_breaker"] = circuit_breaker.get_stats()
 
-                # Calculate connection pool utilization
-                max_clients = connection_stats["max_clients"]
-                connected_clients = connection_stats["connected_clients"]
-                if max_clients > 0:
-                    connection_stats["pool_utilization_percent"] = round(
-                        (connected_clients / max_clients) * 100, 2
-                    )
+            # Calculate connection pool utilization
+            max_clients = connection_stats["max_clients"]
+            connected_clients = connection_stats["connected_clients"]
+            if max_clients > 0:
+                connection_stats["pool_utilization_percent"] = round(
+                    (connected_clients / max_clients) * 100, 2
+                )
 
-                return connection_stats
+            return connection_stats
 
     except Exception as e:
         logger.error(f"Failed to get Redis connection info: {e}")
@@ -584,7 +584,7 @@ def purge_queue(queue_name: str) -> int:
         return -1
 
 
-def get_task_info(task_id: str) -> Dict[str, Any]:
+def get_task_info(task_id: str) -> dict[str, Any]:
     """Get detailed information about a specific task."""
     try:
         result = app.AsyncResult(task_id)
@@ -620,7 +620,7 @@ def cancel_task(task_id: str) -> bool:
         return False
 
 
-def get_worker_health() -> Dict[str, Any]:
+def get_worker_health() -> dict[str, Any]:
     """Comprehensive worker health check with circuit breaker awareness."""
     health_status = {
         "status": "healthy",
@@ -632,12 +632,11 @@ def get_worker_health() -> Dict[str, Any]:
     # Check Redis broker connectivity with circuit breaker protection
     circuit_breaker = get_redis_broker_circuit_breaker()
     try:
-        with circuit_breaker("health_check_broker"):
-            with app.connection() as conn:
-                conn.default_channel.client.ping()
+        with circuit_breaker("health_check_broker"), app.connection() as conn:
+            conn.default_channel.client.ping()
         health_status["checks"]["redis_broker"] = "healthy"
     except Exception as e:
-        health_status["checks"]["redis_broker"] = f"unhealthy: {str(e)}"
+        health_status["checks"]["redis_broker"] = f"unhealthy: {e!s}"
         health_status["status"] = "degraded"
 
     # Check Redis result backend
@@ -649,7 +648,7 @@ def get_worker_health() -> Dict[str, Any]:
             test_result = result_backend.get("health_check_test")
         health_status["checks"]["redis_result_backend"] = "healthy"
     except Exception as e:
-        health_status["checks"]["redis_result_backend"] = f"unhealthy: {str(e)}"
+        health_status["checks"]["redis_result_backend"] = f"unhealthy: {e!s}"
         if health_status["status"] == "healthy":
             health_status["status"] = "degraded"
 
@@ -666,7 +665,7 @@ def get_worker_health() -> Dict[str, Any]:
             health_status["status"] = "degraded"
             health_status["worker_count"] = 0
     except Exception as e:
-        health_status["checks"]["workers"] = f"unhealthy: {str(e)}"
+        health_status["checks"]["workers"] = f"unhealthy: {e!s}"
         health_status["status"] = "unhealthy"
         health_status["worker_count"] = 0
 
@@ -690,26 +689,26 @@ def get_worker_health() -> Dict[str, Any]:
         )
 
         if critical_queued > 100:  # Critical threshold
-            health_status["checks"][
-                "queue_depth"
-            ] = f"critical: {critical_queued} critical tasks queued"
+            health_status["checks"]["queue_depth"] = (
+                f"critical: {critical_queued} critical tasks queued"
+            )
             health_status["status"] = "unhealthy"
         elif total_queued > 1000:  # General threshold
-            health_status["checks"][
-                "queue_depth"
-            ] = f"warning: {total_queued} tasks queued"
+            health_status["checks"]["queue_depth"] = (
+                f"warning: {total_queued} tasks queued"
+            )
             if health_status["status"] == "healthy":
                 health_status["status"] = "degraded"
         else:
-            health_status["checks"][
-                "queue_depth"
-            ] = f"healthy: {total_queued} tasks queued"
+            health_status["checks"]["queue_depth"] = (
+                f"healthy: {total_queued} tasks queued"
+            )
 
         health_status["total_queued_tasks"] = total_queued
         health_status["critical_queued_tasks"] = critical_queued
         health_status["queue_breakdown"] = queue_stats
     except Exception as e:
-        health_status["checks"]["queue_depth"] = f"error: {str(e)}"
+        health_status["checks"]["queue_depth"] = f"error: {e!s}"
         health_status["status"] = "degraded"
 
     # Check Redis connection pool utilization
@@ -718,24 +717,24 @@ def get_worker_health() -> Dict[str, Any]:
         if "pool_utilization_percent" in redis_info:
             utilization = redis_info["pool_utilization_percent"]
             if utilization > 90:
-                health_status["checks"][
-                    "connection_pool"
-                ] = f"critical: {utilization}% utilized"
+                health_status["checks"]["connection_pool"] = (
+                    f"critical: {utilization}% utilized"
+                )
                 health_status["status"] = "unhealthy"
             elif utilization > 75:
-                health_status["checks"][
-                    "connection_pool"
-                ] = f"warning: {utilization}% utilized"
+                health_status["checks"]["connection_pool"] = (
+                    f"warning: {utilization}% utilized"
+                )
                 if health_status["status"] == "healthy":
                     health_status["status"] = "degraded"
             else:
-                health_status["checks"][
-                    "connection_pool"
-                ] = f"healthy: {utilization}% utilized"
+                health_status["checks"]["connection_pool"] = (
+                    f"healthy: {utilization}% utilized"
+                )
 
         health_status["redis_info"] = redis_info
     except Exception as e:
-        health_status["checks"]["connection_pool"] = f"error: {str(e)}"
+        health_status["checks"]["connection_pool"] = f"error: {e!s}"
         if health_status["status"] == "healthy":
             health_status["status"] = "degraded"
 

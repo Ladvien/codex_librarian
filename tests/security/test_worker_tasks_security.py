@@ -14,23 +14,23 @@ Security Test Categories:
 6. Async pattern security
 """
 
-import pytest
-from unittest.mock import Mock, patch, AsyncMock, MagicMock
 import asyncio
-import time
-from celery.exceptions import Retry, Ignore
-from typing import Dict, Any, List
-import tempfile
 import os
+import tempfile
+import time
+from unittest.mock import Mock, patch
 
-from src.pdf_to_markdown_mcp.worker.tasks import (
-    process_pdf,
-    generate_embeddings,
-    cleanup_task_results,
-    monitor_redis_connections,
-    ProgressTracker
-)
+import pytest
+from celery.exceptions import Retry
+
 from src.pdf_to_markdown_mcp.core.errors import ProcessingError
+from src.pdf_to_markdown_mcp.worker.tasks import (
+    ProgressTracker,
+    cleanup_task_results,
+    generate_embeddings,
+    monitor_redis_connections,
+    process_pdf,
+)
 
 
 class TestTaskInputValidation:
@@ -53,7 +53,9 @@ class TestTaskInputValidation:
             tmp.write(b"%PDF-1.4\n")
             tmp.write(b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n")
             tmp.write(b"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n")
-            tmp.write(b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\n")
+            tmp.write(
+                b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\n"
+            )
             tmp.write(b"xref\n0 4\n0000000000 65535 f\n")
             tmp.write(b"0000000009 00000 n\n0000000058 00000 n\n0000000115 00000 n\n")
             tmp.write(b"trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n178\n%%EOF\n")
@@ -84,14 +86,16 @@ class TestTaskInputValidation:
             "/etc/shadow",
             "'; DROP TABLE documents; --",
             "/dev/null; rm -rf /",
-            "\\\\attacker.com\\malware\\evil.pdf"
+            "\\\\attacker.com\\malware\\evil.pdf",
         ]
 
         # When & Then
         for malicious_path in malicious_paths:
             with pytest.raises((ProcessingError, ValueError, FileNotFoundError)):
                 # Mock the task execution
-                with patch('src.pdf_to_markdown_mcp.worker.tasks.validate_path_security') as mock_validate:
+                with patch(
+                    "src.pdf_to_markdown_mcp.worker.tasks.validate_path_security"
+                ) as mock_validate:
                     mock_validate.side_effect = ValueError("Invalid path detected")
 
                     process_pdf.apply(args=[malicious_path])
@@ -105,7 +109,9 @@ class TestTaskInputValidation:
         Then should enforce file size limits and prevent memory exhaustion
         """
         # Given
-        with patch('src.pdf_to_markdown_mcp.worker.tasks.os.path.getsize') as mock_getsize:
+        with patch(
+            "src.pdf_to_markdown_mcp.worker.tasks.os.path.getsize"
+        ) as mock_getsize:
             # Simulate file larger than MAX_FILE_SIZE_MB (500MB default)
             mock_getsize.return_value = 600 * 1024 * 1024  # 600 MB
 
@@ -127,12 +133,14 @@ class TestTaskInputValidation:
         num_concurrent_tasks = 20  # More than typical worker capacity
 
         # Mock the MinerU service to simulate processing time
-        with patch('src.pdf_to_markdown_mcp.services.mineru.MinerUService') as mock_service:
+        with patch(
+            "src.pdf_to_markdown_mcp.services.mineru.MinerUService"
+        ) as mock_service:
             mock_service.return_value.process_pdf.return_value = {
-                'status': 'success',
-                'pages_processed': 1,
-                'chunks_created': 5,
-                'processing_time': 1.0
+                "status": "success",
+                "pages_processed": 1,
+                "chunks_created": 5,
+                "processing_time": 1.0,
             }
 
             # Simulate concurrent task execution
@@ -140,13 +148,13 @@ class TestTaskInputValidation:
             for i in range(num_concurrent_tasks):
                 # In real scenario, would use delay() but for testing we simulate
                 task_result = Mock()
-                task_result.get = Mock(return_value={'status': 'success'})
+                task_result.get = Mock(return_value={"status": "success"})
                 tasks.append(task_result)
 
             # When - All tasks should complete without resource exhaustion
             for task in tasks:
                 result = task.get()
-                assert result['status'] == 'success'
+                assert result["status"] == "success"
 
     def test_process_pdf_malformed_pdf_handling(self, temp_pdf_file):
         """
@@ -168,12 +176,16 @@ class TestTaskInputValidation:
 
         for content in malformed_contents:
             try:
-                with open(malformed_pdf_path, 'wb') as f:
+                with open(malformed_pdf_path, "wb") as f:
                     f.write(content)
 
                 # When & Then
-                with patch('src.pdf_to_markdown_mcp.services.mineru.MinerUService') as mock_service:
-                    mock_service.return_value.process_pdf.side_effect = ProcessingError("Malformed PDF detected")
+                with patch(
+                    "src.pdf_to_markdown_mcp.services.mineru.MinerUService"
+                ) as mock_service:
+                    mock_service.return_value.process_pdf.side_effect = ProcessingError(
+                        "Malformed PDF detected"
+                    )
 
                     with pytest.raises(ProcessingError):
                         process_pdf.apply(args=[malformed_pdf_path])
@@ -197,18 +209,24 @@ class TestTaskInputValidation:
         # Given
         invalid_inputs = [
             {"chunks": None},  # None chunks
-            {"chunks": []},    # Empty chunks
-            {"chunks": [""; DROP TABLE documents; --]"},  # SQL injection in text
+            {"chunks": []},  # Empty chunks
+            {"chunks": ['"; DROP TABLE documents; --"']},  # SQL injection in text
             {"chunks": ["x" * 100000]},  # Extremely long text
-            {"chunks": [{"malicious": "'; DELETE FROM embeddings; --"}]},  # Dict injection
+            {
+                "chunks": [{"malicious": "'; DELETE FROM embeddings; --"}]
+            },  # Dict injection
             {"chunks": "not_a_list"},  # Wrong type
         ]
 
         # When & Then
         for invalid_input in invalid_inputs:
             try:
-                with patch('src.pdf_to_markdown_mcp.services.embeddings.EmbeddingService') as mock_service:
-                    mock_service.return_value.generate_batch_embeddings.side_effect = ValueError("Invalid input")
+                with patch(
+                    "src.pdf_to_markdown_mcp.services.embeddings.EmbeddingService"
+                ) as mock_service:
+                    mock_service.return_value.generate_batch_embeddings.side_effect = (
+                        ValueError("Invalid input")
+                    )
 
                     with pytest.raises((ValueError, ProcessingError)):
                         generate_embeddings.apply(args=[invalid_input])
@@ -229,17 +247,23 @@ class TestTaskInputValidation:
         large_chunk_batch = {
             "chunks": ["Sample text chunk"] * 10000,  # 10,000 chunks
             "document_id": 1,
-            "batch_size": 100  # Should process in batches
+            "batch_size": 100,  # Should process in batches
         }
 
         # Mock memory monitoring
-        with patch('src.pdf_to_markdown_mcp.worker.tasks.psutil') as mock_psutil:
+        with patch("src.pdf_to_markdown_mcp.worker.tasks.psutil") as mock_psutil:
             mock_process = Mock()
-            mock_process.memory_info.return_value = Mock(rss=500 * 1024 * 1024)  # 500MB usage
+            mock_process.memory_info.return_value = Mock(
+                rss=500 * 1024 * 1024
+            )  # 500MB usage
             mock_psutil.Process.return_value = mock_process
 
-            with patch('src.pdf_to_markdown_mcp.services.embeddings.EmbeddingService') as mock_service:
-                mock_service.return_value.generate_batch_embeddings.return_value = [[0.1] * 1536] * 100
+            with patch(
+                "src.pdf_to_markdown_mcp.services.embeddings.EmbeddingService"
+            ) as mock_service:
+                mock_service.return_value.generate_batch_embeddings.return_value = [
+                    [0.1] * 1536
+                ] * 100
 
                 # When
                 try:
@@ -268,13 +292,17 @@ class TestTaskInputValidation:
                 "{{7*7}}",  # Template injection
                 "__import__('os').system('rm -rf /')",  # Python injection
             ],
-            "document_id": 1
+            "document_id": 1,
         }
 
         # When & Then
-        with patch('src.pdf_to_markdown_mcp.services.embeddings.EmbeddingService') as mock_service:
+        with patch(
+            "src.pdf_to_markdown_mcp.services.embeddings.EmbeddingService"
+        ) as mock_service:
             # Mock successful processing - injection should be treated as plain text
-            mock_service.return_value.generate_batch_embeddings.return_value = [[0.1] * 1536] * 5
+            mock_service.return_value.generate_batch_embeddings.return_value = [
+                [0.1] * 1536
+            ] * 5
 
             try:
                 result = generate_embeddings.apply(args=[injection_chunks])
@@ -295,7 +323,7 @@ class TestTaskInputValidation:
         Then should prevent command injection
         """
         # Given
-        with patch('src.pdf_to_markdown_mcp.worker.tasks.redis.Redis') as mock_redis:
+        with patch("src.pdf_to_markdown_mcp.worker.tasks.redis.Redis") as mock_redis:
             mock_redis_instance = Mock()
             mock_redis.from_url.return_value = mock_redis_instance
 
@@ -303,7 +331,7 @@ class TestTaskInputValidation:
             malicious_keys = [
                 b"task:result:'; FLUSHALL; --",
                 b"task:progress:'; CONFIG SET dir /var/www/html; --",
-                b"task:monitoring:'; EVAL 'os.execute(\"rm -rf /\")' 0; --"
+                b"task:monitoring:'; EVAL 'os.execute(\"rm -rf /\")' 0; --",
             ]
             mock_redis_instance.keys.return_value = malicious_keys
 
@@ -316,7 +344,7 @@ class TestTaskInputValidation:
                 mock_redis_instance.keys.assert_called()
                 # Should not call dangerous operations like EVAL, CONFIG, FLUSHALL directly
 
-            except Exception as e:
+            except Exception:
                 # Should handle Redis errors gracefully
                 assert True
 
@@ -329,32 +357,34 @@ class TestTaskInputValidation:
         Then should not expose sensitive connection information
         """
         # Given
-        with patch('src.pdf_to_markdown_mcp.worker.tasks.redis.Redis') as mock_redis:
+        with patch("src.pdf_to_markdown_mcp.worker.tasks.redis.Redis") as mock_redis:
             mock_redis_instance = Mock()
             mock_redis.from_url.return_value = mock_redis_instance
 
             # Mock Redis info that might contain sensitive data
             mock_redis_instance.info.return_value = {
-                'connected_clients': 10,
-                'used_memory': 1000000,
-                'keyspace_hits': 1000,
-                'redis_version': '6.0.0',
+                "connected_clients": 10,
+                "used_memory": 1000000,
+                "keyspace_hits": 1000,
+                "redis_version": "6.0.0",
                 # Sensitive information that shouldn't be logged
-                'config_file': '/etc/redis/redis.conf',
-                'executable': '/usr/bin/redis-server'
+                "config_file": "/etc/redis/redis.conf",
+                "executable": "/usr/bin/redis-server",
             }
 
             # When
-            with patch('src.pdf_to_markdown_mcp.worker.tasks.logger') as mock_logger:
+            with patch("src.pdf_to_markdown_mcp.worker.tasks.logger") as mock_logger:
                 monitor_redis_connections.apply()
 
                 # Then - Should not log sensitive configuration information
                 log_calls = [call.args[0] for call in mock_logger.info.call_args_list]
-                sensitive_info = ['config_file', 'executable', '/etc/', '/usr/']
+                sensitive_info = ["config_file", "executable", "/etc/", "/usr/"]
 
                 for log_message in log_calls:
                     for sensitive in sensitive_info:
-                        assert sensitive not in str(log_message), f"Sensitive info '{sensitive}' found in log: {log_message}"
+                        assert sensitive not in str(log_message), (
+                            f"Sensitive info '{sensitive}' found in log: {log_message}"
+                        )
 
     # Test progress tracking security
 
@@ -377,7 +407,7 @@ class TestTaskInputValidation:
         ]
 
         # When & Then
-        with patch('src.pdf_to_markdown_mcp.worker.tasks.redis.Redis') as mock_redis:
+        with patch("src.pdf_to_markdown_mcp.worker.tasks.redis.Redis") as mock_redis:
             mock_redis_instance = Mock()
             mock_redis.from_url.return_value = mock_redis_instance
 
@@ -393,7 +423,9 @@ class TestTaskInputValidation:
 
                 except (ValueError, TypeError) as e:
                     # Input validation should catch malicious data
-                    assert True, f"Progress validation correctly rejected malicious data: {e}"
+                    assert True, (
+                        f"Progress validation correctly rejected malicious data: {e}"
+                    )
 
     def test_progress_tracker_memory_leak_prevention(self):
         """
@@ -407,7 +439,7 @@ class TestTaskInputValidation:
         tracker = ProgressTracker("long-running-task")
 
         # Simulate many progress updates
-        with patch('src.pdf_to_markdown_mcp.worker.tasks.redis.Redis') as mock_redis:
+        with patch("src.pdf_to_markdown_mcp.worker.tasks.redis.Redis") as mock_redis:
             mock_redis_instance = Mock()
             mock_redis.from_url.return_value = mock_redis_instance
 
@@ -417,7 +449,7 @@ class TestTaskInputValidation:
                     tracker.update_progress(
                         step=f"processing_chunk_{i}",
                         progress=i / 10,
-                        details={"chunk": i, "memory_mb": 100 + i}
+                        details={"chunk": i, "memory_mb": 100 + i},
                     )
                 except Exception:
                     # Should handle gracefully without accumulating memory
@@ -444,13 +476,15 @@ class TestTaskErrorHandling:
         sensitive_errors = [
             FileNotFoundError("/etc/passwd not found"),
             PermissionError("Access denied to /root/.ssh/id_rsa"),
-            ConnectionError("Failed to connect to postgresql://user:password@host:5432/db"),
+            ConnectionError(
+                "Failed to connect to postgresql://user:password@host:5432/db"
+            ),
             ValueError("Invalid config in /app/secrets.json"),
         ]
 
         # When & Then
         for error in sensitive_errors:
-            with patch('src.pdf_to_markdown_mcp.worker.tasks.logger') as mock_logger:
+            with patch("src.pdf_to_markdown_mcp.worker.tasks.logger") as mock_logger:
                 # Simulate task error handling
                 try:
                     raise error
@@ -461,9 +495,16 @@ class TestTaskErrorHandling:
                     sanitized_error = sanitized_error.replace("password", "[REDACTED]")
 
                     # Should not contain sensitive information
-                    sensitive_patterns = ["/etc/passwd", "/root/", ":password@", "secrets.json"]
+                    sensitive_patterns = [
+                        "/etc/passwd",
+                        "/root/",
+                        ":password@",
+                        "secrets.json",
+                    ]
                     for pattern in sensitive_patterns:
-                        assert pattern not in sanitized_error, f"Sensitive pattern '{pattern}' in error message"
+                        assert pattern not in sanitized_error, (
+                            f"Sensitive pattern '{pattern}' in error message"
+                        )
 
     def test_task_retry_limit_exhaustion_security(self, temp_pdf_file):
         """
@@ -474,12 +515,18 @@ class TestTaskErrorHandling:
         Then should fail securely without resource exhaustion
         """
         # Given
-        with patch('src.pdf_to_markdown_mcp.worker.tasks.process_pdf.retry') as mock_retry:
+        with patch(
+            "src.pdf_to_markdown_mcp.worker.tasks.process_pdf.retry"
+        ) as mock_retry:
             mock_retry.side_effect = Retry("Max retries exceeded")
 
             # Mock a consistently failing operation
-            with patch('src.pdf_to_markdown_mcp.services.mineru.MinerUService') as mock_service:
-                mock_service.return_value.process_pdf.side_effect = Exception("Persistent failure")
+            with patch(
+                "src.pdf_to_markdown_mcp.services.mineru.MinerUService"
+            ) as mock_service:
+                mock_service.return_value.process_pdf.side_effect = Exception(
+                    "Persistent failure"
+                )
 
                 # When & Then
                 with pytest.raises(Retry):
@@ -497,7 +544,9 @@ class TestTaskErrorHandling:
         Then circuit breaker should prevent cascade failures
         """
         # Given
-        with patch('src.pdf_to_markdown_mcp.core.circuit_breaker.CircuitBreaker') as mock_circuit:
+        with patch(
+            "src.pdf_to_markdown_mcp.core.circuit_breaker.CircuitBreaker"
+        ) as mock_circuit:
             mock_breaker = Mock()
             mock_circuit.return_value = mock_breaker
 
@@ -574,10 +623,9 @@ class TestAsyncPatternSecurity:
                 resources_cleaned.append(self.name)
 
         async def async_operation_with_resources():
-            async with MockResource("database"):
-                async with MockResource("redis"):
-                    async with MockResource("file_handle"):
-                        raise ValueError("Simulated error")
+            async with MockResource("database"), MockResource("redis"):
+                async with MockResource("file_handle"):
+                    raise ValueError("Simulated error")
 
         # When
         try:
@@ -608,8 +656,10 @@ class TestAsyncPatternSecurity:
 
         # When
         try:
-            result = await asyncio.wait_for(potentially_hanging_operation(), timeout=1.0)
-        except asyncio.TimeoutError:
+            result = await asyncio.wait_for(
+                potentially_hanging_operation(), timeout=1.0
+            )
+        except TimeoutError:
             timeout_occurred = True
 
         # Then
@@ -625,7 +675,6 @@ class TestAsyncPatternSecurity:
         """
         # Given - Simulate potential deadlock scenario
         import threading
-        import time
 
         resource_1 = threading.Lock()
         resource_2 = threading.Lock()
@@ -663,7 +712,9 @@ class TestAsyncPatternSecurity:
         thread_2.join(timeout=2.0)
 
         # Then - Should complete without deadlock
-        assert not (thread_1.is_alive() or thread_2.is_alive()), "Potential deadlock detected"
+        assert not (thread_1.is_alive() or thread_2.is_alive()), (
+            "Potential deadlock detected"
+        )
 
 
 if __name__ == "__main__":

@@ -11,11 +11,11 @@ Following architecture principles from ARCHITECTURE.md:
 """
 
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from enum import Enum
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field, validator
-from enum import Enum
 
 
 class ProcessingStatusType(str, Enum):
@@ -36,23 +36,23 @@ class DocumentDTO(BaseModel):
     containing only the data needed by the API layer.
     """
 
-    id: Optional[int] = None
+    id: int | None = None
     filename: str = Field(..., min_length=1, max_length=255)
     file_path: str = Field(..., min_length=1)
     file_hash: str = Field(..., min_length=1)
     size_bytes: int = Field(..., gt=0)
     processing_status: ProcessingStatusType
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-    processed_at: Optional[datetime] = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    processed_at: datetime | None = None
 
     # Processing metadata
-    page_count: Optional[int] = Field(None, ge=0)
-    processing_time_seconds: Optional[float] = Field(None, ge=0)
-    error_message: Optional[str] = None
+    page_count: int | None = Field(None, ge=0)
+    processing_time_seconds: float | None = Field(None, ge=0)
+    error_message: str | None = None
 
     # Optional metadata
-    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    metadata: dict[str, Any] | None = Field(default_factory=dict)
 
     @validator("file_path")
     def validate_file_path(cls, v):
@@ -116,12 +116,12 @@ class UpdateDocumentDTO(BaseModel):
     Contains fields that can be updated after document creation.
     """
 
-    processing_status: Optional[ProcessingStatusType] = None
-    page_count: Optional[int] = Field(None, ge=0)
-    processing_time_seconds: Optional[float] = Field(None, ge=0)
-    error_message: Optional[str] = None
-    processed_at: Optional[datetime] = None
-    metadata: Optional[Dict[str, Any]] = None
+    processing_status: ProcessingStatusType | None = None
+    page_count: int | None = Field(None, ge=0)
+    processing_time_seconds: float | None = Field(None, ge=0)
+    error_message: str | None = None
+    processed_at: datetime | None = None
+    metadata: dict[str, Any] | None = None
 
 
 class DocumentSearchResultDTO(BaseModel):
@@ -137,7 +137,7 @@ class DocumentSearchResultDTO(BaseModel):
     size_bytes: int
     processing_status: ProcessingStatusType
     created_at: datetime
-    page_count: Optional[int] = None
+    page_count: int | None = None
 
     class Config:
         """Pydantic configuration."""
@@ -153,7 +153,7 @@ class DocumentListDTO(BaseModel):
     Provides efficient document list representation.
     """
 
-    documents: List[DocumentSearchResultDTO]
+    documents: list[DocumentSearchResultDTO]
     total_count: int = Field(..., ge=0)
     page: int = Field(..., ge=1)
     page_size: int = Field(..., ge=1, le=100)
@@ -171,10 +171,10 @@ class DocumentListDTO(BaseModel):
 
 # Export all DTOs
 __all__ = [
-    "ProcessingStatusType",
-    "DocumentDTO",
     "CreateDocumentDTO",
-    "UpdateDocumentDTO",
-    "DocumentSearchResultDTO",
+    "DocumentDTO",
     "DocumentListDTO",
+    "DocumentSearchResultDTO",
+    "ProcessingStatusType",
+    "UpdateDocumentDTO",
 ]

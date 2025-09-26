@@ -3,18 +3,19 @@ Test suite for embedding generation service.
 Follows TDD approach with comprehensive coverage.
 """
 
-import pytest
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
+
 import numpy as np
-from typing import List, Dict, Any
+import pytest
+
 from pdf_to_markdown_mcp.services.embeddings import (
-    EmbeddingProvider,
-    OllamaEmbedder,
-    OpenAIEmbedder,
-    EmbeddingService,
     EmbeddingConfig,
     EmbeddingError,
+    EmbeddingProvider,
     EmbeddingResult,
+    EmbeddingService,
+    OllamaEmbedder,
+    OpenAIEmbedder,
 )
 
 
@@ -41,7 +42,7 @@ class TestEmbeddingConfig:
             batch_size=5,
             timeout=60.0,
             max_retries=5,
-            embedding_dimensions=768
+            embedding_dimensions=768,
         )
 
         assert config.provider == EmbeddingProvider.OPENAI
@@ -73,7 +74,7 @@ class TestOllamaEmbedder:
     @pytest.fixture
     def ollama_embedder(self):
         """Setup OllamaEmbedder with mocked client."""
-        with patch('pdf_to_markdown_mcp.services.embeddings.ollama') as mock_ollama:
+        with patch("pdf_to_markdown_mcp.services.embeddings.ollama") as mock_ollama:
             mock_client = AsyncMock()
             mock_ollama.AsyncClient.return_value = mock_client
 
@@ -89,7 +90,7 @@ class TestOllamaEmbedder:
         expected_embedding = [0.1, 0.2, 0.3, 0.4]
 
         ollama_embedder.client.embeddings.return_value = {
-            'embedding': expected_embedding
+            "embedding": expected_embedding
         }
 
         # When
@@ -99,8 +100,7 @@ class TestOllamaEmbedder:
         assert len(result) == 1
         assert result[0] == expected_embedding
         ollama_embedder.client.embeddings.assert_called_once_with(
-            model="test-model",
-            prompt=text
+            model="test-model", prompt=text
         )
 
     @pytest.mark.asyncio
@@ -108,17 +108,13 @@ class TestOllamaEmbedder:
         """Test embedding multiple texts with Ollama."""
         # Given
         texts = ["First text", "Second text", "Third text"]
-        expected_embeddings = [
-            [0.1, 0.2, 0.3],
-            [0.4, 0.5, 0.6],
-            [0.7, 0.8, 0.9]
-        ]
+        expected_embeddings = [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9]]
 
         # Mock sequential calls
         ollama_embedder.client.embeddings.side_effect = [
-            {'embedding': expected_embeddings[0]},
-            {'embedding': expected_embeddings[1]},
-            {'embedding': expected_embeddings[2]},
+            {"embedding": expected_embeddings[0]},
+            {"embedding": expected_embeddings[1]},
+            {"embedding": expected_embeddings[2]},
         ]
 
         # When
@@ -164,8 +160,8 @@ class TestOllamaEmbedder:
         expected_embeddings = [[0.1, 0.2], [0.3, 0.4]]
 
         ollama_embedder.client.embeddings.side_effect = [
-            {'embedding': expected_embeddings[0]},
-            {'embedding': expected_embeddings[1]},
+            {"embedding": expected_embeddings[0]},
+            {"embedding": expected_embeddings[1]},
         ]
 
         # When
@@ -182,7 +178,7 @@ class TestOpenAIEmbedder:
     @pytest.fixture
     def openai_embedder(self):
         """Setup OpenAIEmbedder with mocked client."""
-        with patch('pdf_to_markdown_mcp.services.embeddings.openai') as mock_openai:
+        with patch("pdf_to_markdown_mcp.services.embeddings.openai") as mock_openai:
             mock_client = AsyncMock()
             mock_openai.AsyncOpenAI.return_value = mock_client
 
@@ -210,9 +206,7 @@ class TestOpenAIEmbedder:
         assert len(result) == 1
         assert result[0] == expected_embedding
         openai_embedder.client.embeddings.create.assert_called_once_with(
-            model="test-embedding-model",
-            input=[text],
-            dimensions=1536
+            model="test-embedding-model", input=[text], dimensions=1536
         )
 
     @pytest.mark.asyncio
@@ -220,11 +214,7 @@ class TestOpenAIEmbedder:
         """Test embedding multiple texts with OpenAI (native batching)."""
         # Given
         texts = ["First text", "Second text", "Third text"]
-        expected_embeddings = [
-            [0.1, 0.2, 0.3],
-            [0.4, 0.5, 0.6],
-            [0.7, 0.8, 0.9]
-        ]
+        expected_embeddings = [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9]]
 
         mock_response = Mock()
         mock_response.data = []
@@ -242,9 +232,7 @@ class TestOpenAIEmbedder:
         assert len(result) == 3
         assert result == expected_embeddings
         openai_embedder.client.embeddings.create.assert_called_once_with(
-            model="test-embedding-model",
-            input=texts,
-            dimensions=1536
+            model="test-embedding-model", input=texts, dimensions=1536
         )
 
     @pytest.mark.asyncio
@@ -267,9 +255,7 @@ class TestOpenAIEmbedder:
         # Then
         assert result[0] == expected_embedding
         openai_embedder.client.embeddings.create.assert_called_once_with(
-            model="test-embedding-model",
-            input=texts,
-            dimensions=custom_dimensions
+            model="test-embedding-model", input=texts, dimensions=custom_dimensions
         )
 
     @pytest.mark.asyncio
@@ -277,7 +263,9 @@ class TestOpenAIEmbedder:
         """Test OpenAI embedding error handling."""
         # Given
         texts = ["Test text"]
-        openai_embedder.client.embeddings.create.side_effect = Exception("API quota exceeded")
+        openai_embedder.client.embeddings.create.side_effect = Exception(
+            "API quota exceeded"
+        )
 
         # When/Then
         with pytest.raises(EmbeddingError) as exc_info:
@@ -307,9 +295,14 @@ class TestEmbeddingService:
         """Setup EmbeddingService with mocked embedders."""
         config = EmbeddingConfig()
 
-        with patch('pdf_to_markdown_mcp.services.embeddings.OllamaEmbedder') as mock_ollama_cls, \
-             patch('pdf_to_markdown_mcp.services.embeddings.OpenAIEmbedder') as mock_openai_cls:
-
+        with (
+            patch(
+                "pdf_to_markdown_mcp.services.embeddings.OllamaEmbedder"
+            ) as mock_ollama_cls,
+            patch(
+                "pdf_to_markdown_mcp.services.embeddings.OpenAIEmbedder"
+            ) as mock_openai_cls,
+        ):
             mock_ollama_cls.return_value = mock_ollama_embedder
             mock_openai_cls.return_value = mock_openai_embedder
 
@@ -378,7 +371,7 @@ class TestEmbeddingService:
         embedding_service.ollama_embedder.embed_texts.side_effect = [
             [[0.1, 0.2]] * 10,  # First batch: 10 embeddings
             [[0.3, 0.4]] * 10,  # Second batch: 10 embeddings
-            [[0.5, 0.6]] * 5,   # Third batch: 5 embeddings
+            [[0.5, 0.6]] * 5,  # Third batch: 5 embeddings
         ]
 
         # When
@@ -392,7 +385,7 @@ class TestEmbeddingService:
         calls = embedding_service.ollama_embedder.embed_texts.call_args_list
         assert len(calls[0][0][0]) == 10  # First batch size
         assert len(calls[1][0][0]) == 10  # Second batch size
-        assert len(calls[2][0][0]) == 5   # Third batch size
+        assert len(calls[2][0][0]) == 5  # Third batch size
 
     @pytest.mark.asyncio
     async def test_generate_embeddings_empty_input(self, embedding_service):
@@ -423,7 +416,7 @@ class TestEmbeddingService:
         embedding_service.ollama_embedder.embed_texts.side_effect = [
             EmbeddingError("Temporary failure"),
             EmbeddingError("Another failure"),
-            [[0.1, 0.2, 0.3]]  # Success on third try
+            [[0.1, 0.2, 0.3]],  # Success on third try
         ]
 
         # When
@@ -441,14 +434,18 @@ class TestEmbeddingService:
         embedding_service.config.provider = EmbeddingProvider.OLLAMA
         embedding_service.config.max_retries = 2
 
-        embedding_service.ollama_embedder.embed_texts.side_effect = EmbeddingError("Persistent failure")
+        embedding_service.ollama_embedder.embed_texts.side_effect = EmbeddingError(
+            "Persistent failure"
+        )
 
         # When/Then
         with pytest.raises(EmbeddingError) as exc_info:
             await embedding_service.generate_embeddings(texts)
 
         assert "Max retries (2) exceeded" in str(exc_info.value)
-        assert embedding_service.ollama_embedder.embed_texts.call_count == 3  # Initial + 2 retries
+        assert (
+            embedding_service.ollama_embedder.embed_texts.call_count == 3
+        )  # Initial + 2 retries
 
     @pytest.mark.asyncio
     async def test_health_check_ollama_healthy(self, embedding_service):
@@ -462,14 +459,18 @@ class TestEmbeddingService:
 
         # Then
         assert is_healthy is True
-        embedding_service.ollama_embedder.embed_texts.assert_called_once_with(["health check"])
+        embedding_service.ollama_embedder.embed_texts.assert_called_once_with(
+            ["health check"]
+        )
 
     @pytest.mark.asyncio
     async def test_health_check_service_unhealthy(self, embedding_service):
         """Test health check when service is unhealthy."""
         # Given
         embedding_service.config.provider = EmbeddingProvider.OPENAI
-        embedding_service.openai_embedder.embed_texts.side_effect = Exception("Service down")
+        embedding_service.openai_embedder.embed_texts.side_effect = Exception(
+            "Service down"
+        )
 
         # When
         is_healthy = await embedding_service.health_check()
@@ -506,9 +507,9 @@ class TestEmbeddingService:
         """Test embedding normalization."""
         # Given
         embeddings = [
-            [3.0, 4.0],     # Magnitude = 5
-            [1.0, 1.0],     # Magnitude = sqrt(2)
-            [0.0, 0.0],     # Zero vector
+            [3.0, 4.0],  # Magnitude = 5
+            [1.0, 1.0],  # Magnitude = sqrt(2)
+            [0.0, 0.0],  # Zero vector
         ]
 
         # When
@@ -519,7 +520,9 @@ class TestEmbeddingService:
         # First vector normalized
         assert normalized[0] == pytest.approx([0.6, 0.8], rel=1e-6)
         # Second vector normalized
-        assert normalized[1] == pytest.approx([1/np.sqrt(2), 1/np.sqrt(2)], rel=1e-6)
+        assert normalized[1] == pytest.approx(
+            [1 / np.sqrt(2), 1 / np.sqrt(2)], rel=1e-6
+        )
         # Zero vector remains zero
         assert normalized[2] == [0.0, 0.0]
 
@@ -535,11 +538,7 @@ class TestEmbeddingResult:
         model = "test-model"
 
         # When
-        result = EmbeddingResult(
-            embeddings=embeddings,
-            provider=provider,
-            model=model
-        )
+        result = EmbeddingResult(embeddings=embeddings, provider=provider, model=model)
 
         # Then
         assert result.embeddings == embeddings
@@ -558,7 +557,7 @@ class TestEmbeddingResult:
             embeddings=embeddings,
             provider=EmbeddingProvider.OPENAI,
             model="test-model",
-            metadata=metadata
+            metadata=metadata,
         )
 
         # Then

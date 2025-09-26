@@ -5,22 +5,21 @@ Following TDD principles, these tests define the expected behavior
 of the monitoring and health check infrastructure.
 """
 
-import pytest
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from typing import Dict, Any
 import asyncio
-from datetime import datetime
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 
 from pdf_to_markdown_mcp.core.monitoring import (
-    MetricsCollector,
-    HealthMonitor,
-    ComponentHealth,
-    HealthStatus,
-    SystemHealth,
     AlertingEngine,
     AlertRule,
     AlertSeverity,
-    TracingManager
+    ComponentHealth,
+    HealthMonitor,
+    HealthStatus,
+    MetricsCollector,
+    SystemHealth,
+    TracingManager,
 )
 
 
@@ -45,7 +44,7 @@ class TestMetricsCollector:
             status=status,
             file_type=file_type,
             duration_seconds=duration,
-            processing_type=processing_type
+            processing_type=processing_type,
         )
 
         # Then - verify metrics were recorded (will verify with actual implementation)
@@ -54,19 +53,14 @@ class TestMetricsCollector:
     def test_record_search_query_categorizes_results(self, metrics_collector):
         """Test that search query metrics categorize result counts correctly"""
         # Given
-        test_cases = [
-            (0, 'zero'),
-            (5, 'low'),
-            (50, 'medium'),
-            (500, 'high')
-        ]
+        test_cases = [(0, "zero"), (5, "low"), (50, "medium"), (500, "high")]
 
         for result_count, expected_category in test_cases:
             # When
             metrics_collector.record_search_query(
                 search_type="semantic",
                 result_count=result_count,
-                response_time_ms=100.0
+                response_time_ms=100.0,
             )
 
             # Then - verify categorization (will verify with actual implementation)
@@ -82,7 +76,7 @@ class TestMetricsCollector:
         mock_psutil.disk_usage.return_value = Mock(used=100, total=200)
 
         # When/Then - test will verify continuous collection
-        with patch('pdf_to_markdown_mcp.core.monitoring.psutil', mock_psutil):
+        with patch("pdf_to_markdown_mcp.core.monitoring.psutil", mock_psutil):
             # Start collection and let it run briefly
             task = asyncio.create_task(metrics_collector.collect_system_metrics())
             await asyncio.sleep(0.1)  # Let it run briefly
@@ -116,7 +110,9 @@ class TestHealthMonitor:
         mock_session.execute.return_value = mock_result
 
         # When
-        with patch('pdf_to_markdown_mcp.core.monitoring.get_db_session') as mock_get_session:
+        with patch(
+            "pdf_to_markdown_mcp.core.monitoring.get_db_session"
+        ) as mock_get_session:
             mock_get_session.return_value.__aenter__.return_value = mock_session
 
             result = await health_monitor.check_database_health()
@@ -135,11 +131,13 @@ class TestHealthMonitor:
         mock_session.execute.return_value = Mock()
 
         # When
-        with patch('pdf_to_markdown_mcp.core.monitoring.get_db_session') as mock_get_session:
+        with patch(
+            "pdf_to_markdown_mcp.core.monitoring.get_db_session"
+        ) as mock_get_session:
             mock_get_session.return_value.__aenter__.return_value = mock_session
 
             # Simulate slow response
-            with patch('time.time', side_effect=[0, 2.0]):  # 2 second response
+            with patch("time.time", side_effect=[0, 2.0]):  # 2 second response
                 result = await health_monitor.check_database_health()
 
         # Then
@@ -153,7 +151,9 @@ class TestHealthMonitor:
         error_message = "Connection failed"
 
         # When
-        with patch('pdf_to_markdown_mcp.core.monitoring.get_db_session') as mock_get_session:
+        with patch(
+            "pdf_to_markdown_mcp.core.monitoring.get_db_session"
+        ) as mock_get_session:
             mock_get_session.side_effect = Exception(error_message)
 
             result = await health_monitor.check_database_health()
@@ -171,21 +171,23 @@ class TestHealthMonitor:
             status=HealthStatus.HEALTHY,
             response_time_ms=50.0,
             last_check=123456789,
-            details={}
+            details={},
         )
 
         mock_celery_health = ComponentHealth(
             status=HealthStatus.DEGRADED,
             response_time_ms=None,
             last_check=123456789,
-            details={"message": "Few workers available"}
+            details={"message": "Few workers available"},
         )
 
         # When
-        with patch.object(health_monitor, 'check_database_health', return_value=mock_db_health):
-            with patch.object(health_monitor, 'check_celery_health', return_value=mock_celery_health):
-                with patch('time.time', return_value=123456789):
-                    result = await health_monitor.get_system_health()
+        with patch.object(
+            health_monitor, "check_database_health", return_value=mock_db_health
+        ), patch.object(
+            health_monitor, "check_celery_health", return_value=mock_celery_health
+        ), patch("time.time", return_value=123456789):
+            result = await health_monitor.get_system_health()
 
         # Then
         assert isinstance(result, SystemHealth)
@@ -228,7 +230,7 @@ class TestComponentHealth:
             status=status,
             response_time_ms=response_time,
             last_check=last_check,
-            details=details
+            details=details,
         )
 
         # Then
@@ -251,8 +253,8 @@ class TestAlertingEngine:
         # Given
         rule = AlertRule(
             name="Test Rule",
-            condition=lambda m: m.get('error_rate', 0) > 5.0,
-            severity=AlertSeverity.ERROR
+            condition=lambda m: m.get("error_rate", 0) > 5.0,
+            severity=AlertSeverity.ERROR,
         )
 
         # When
@@ -276,8 +278,8 @@ class TestAlertingEngine:
 
         rule = AlertRule(
             name="High Error Rate",
-            condition=lambda m: m.get('error_rate', 0) > 5.0,
-            severity=AlertSeverity.ERROR
+            condition=lambda m: m.get("error_rate", 0) > 5.0,
+            severity=AlertSeverity.ERROR,
         )
         alerting_engine.add_rule(rule)
 
@@ -307,7 +309,7 @@ class TestAlertingEngine:
             name="Test Rule",
             condition=lambda m: True,  # Always trigger
             severity=AlertSeverity.ERROR,
-            cooldown_minutes=15
+            cooldown_minutes=15,
         )
         alerting_engine.add_rule(rule)
 
@@ -367,9 +369,13 @@ class TestTracingManager:
             return "success"
 
         # When
-        with patch('pdf_to_markdown_mcp.core.monitoring.structlog.get_logger', return_value=mock_logger):
-            with patch.object(TracingManager, 'get_correlation_id', return_value="test-123"):
-                result = asyncio.run(test_function())
+        with patch(
+            "pdf_to_markdown_mcp.core.monitoring.structlog.get_logger",
+            return_value=mock_logger,
+        ), patch.object(
+            TracingManager, "get_correlation_id", return_value="test-123"
+        ):
+            result = asyncio.run(test_function())
 
         # Then
         assert result == "success"

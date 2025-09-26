@@ -5,28 +5,24 @@ This module tests the end-to-end workflow from PDF ingestion
 to final storage with embeddings, following TDD principles.
 """
 
-import pytest
 import asyncio
-from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
-import tempfile
+
+import pytest
 
 from src.pdf_to_markdown_mcp.core.processor import PDFProcessor
-from src.pdf_to_markdown_mcp.services.mineru import MinerUService
-from src.pdf_to_markdown_mcp.services.embeddings import EmbeddingService
-from src.pdf_to_markdown_mcp.services.database import DatabaseService
+from src.pdf_to_markdown_mcp.db.models import (
+    Document,
+    DocumentContent,
+    DocumentEmbedding,
+)
 from src.pdf_to_markdown_mcp.worker.tasks import process_pdf_document
-from src.pdf_to_markdown_mcp.db.models import Document, DocumentContent, DocumentEmbedding
-
 from tests.fixtures import (
     DocumentFactory,
     ProcessingResultFactory,
-    create_temp_pdf,
-    create_test_directory,
-    create_mock_mineru_service,
     create_mock_embedding_service,
-    assert_processing_result,
-    assert_database_state,
+    create_mock_mineru_service,
+    create_temp_pdf,
 )
 
 
@@ -35,10 +31,14 @@ class TestPDFProcessingPipeline:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_complete_pdf_pipeline_success(self, async_db_session, temp_directory):
+    async def test_complete_pdf_pipeline_success(
+        self, async_db_session, temp_directory
+    ):
         """Test successful end-to-end PDF processing pipeline."""
         # Given
-        pdf_path = create_temp_pdf(content="Test document content", directory=temp_directory)
+        pdf_path = create_temp_pdf(
+            content="Test document content", directory=temp_directory
+        )
 
         # Setup services
         processor = PDFProcessor()
@@ -48,10 +48,7 @@ class TestPDFProcessingPipeline:
 
         # Mock successful processing result
         processing_result = ProcessingResultFactory.create(
-            success=True,
-            chunk_count=3,
-            include_tables=True,
-            include_formulas=True
+            success=True, chunk_count=3, include_tables=True, include_formulas=True
         )
         mineru_service.process_pdf.return_value = processing_result
 
@@ -59,19 +56,20 @@ class TestPDFProcessingPipeline:
         embeddings = [[0.1] * 1536, [0.2] * 1536, [0.3] * 1536]
         embedding_service.generate_batch.return_value = embeddings
 
-        with patch.object(processor, 'mineru_service', mineru_service), \
-             patch.object(processor, 'embedding_service', embedding_service), \
-             patch.object(processor, 'database_service', database_service):
-
+        with (
+            patch.object(processor, "mineru_service", mineru_service),
+            patch.object(processor, "embedding_service", embedding_service),
+            patch.object(processor, "database_service", database_service),
+        ):
             # When
             result = await processor.process_document(str(pdf_path))
 
             # Then
-            assert result['success'] is True
-            assert result['document_path'] == str(pdf_path)
-            assert 'processing_time' in result
-            assert 'chunks_processed' in result
-            assert result['chunks_processed'] == 3
+            assert result["success"] is True
+            assert result["document_path"] == str(pdf_path)
+            assert "processing_time" in result
+            assert "chunks_processed" in result
+            assert result["chunks_processed"] == 3
 
             # Verify service calls
             mineru_service.process_pdf.assert_called_once_with(pdf_path)
@@ -80,15 +78,16 @@ class TestPDFProcessingPipeline:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_pdf_pipeline_with_database_storage(self, async_db_session, temp_directory):
+    async def test_pdf_pipeline_with_database_storage(
+        self, async_db_session, temp_directory
+    ):
         """Test PDF pipeline with actual database storage."""
         # Given
         pdf_path = create_temp_pdf(directory=temp_directory)
 
         # Create document record
         document_data = DocumentFactory.create(
-            file_path=str(pdf_path),
-            status="processing"
+            file_path=str(pdf_path), status="processing"
         )
         document = Document(**document_data)
         async_db_session.add(document)
@@ -99,12 +98,17 @@ class TestPDFProcessingPipeline:
             success=True,
             chunk_count=2,
             markdown_content="# Test\n\nContent here",
-            plain_text="Test\n\nContent here"
+            plain_text="Test\n\nContent here",
         )
 
-        with patch('src.pdf_to_markdown_mcp.core.processor.MinerUService') as mock_mineru_class, \
-             patch('src.pdf_to_markdown_mcp.core.processor.EmbeddingService') as mock_embedding_class:
-
+        with (
+            patch(
+                "src.pdf_to_markdown_mcp.core.processor.MinerUService"
+            ) as mock_mineru_class,
+            patch(
+                "src.pdf_to_markdown_mcp.core.processor.EmbeddingService"
+            ) as mock_embedding_class,
+        ):
             mock_mineru = create_mock_mineru_service(success=True)
             mock_mineru.process_pdf.return_value = processing_result
             mock_mineru_class.return_value = mock_mineru
@@ -116,23 +120,33 @@ class TestPDFProcessingPipeline:
             processor = PDFProcessor()
 
             # When
-            result = await processor.process_document_with_storage(document.id, async_db_session)
+            result = await processor.process_document_with_storage(
+                document.id, async_db_session
+            )
 
             # Then
-            assert result['success'] is True
+            assert result["success"] is True
 
             # Verify database updates
             await async_db_session.refresh(document)
             assert document.status == "completed"
 
             # Verify content was stored
-            content = await async_db_session.query(DocumentContent).filter_by(document_id=document.id).first()
+            content = (
+                await async_db_session.query(DocumentContent)
+                .filter_by(document_id=document.id)
+                .first()
+            )
             assert content is not None
             assert content.markdown_content == "# Test\n\nContent here"
             assert content.plain_text == "Test\n\nContent here"
 
             # Verify embeddings were stored
-            embeddings = await async_db_session.query(DocumentEmbedding).filter_by(document_id=document.id).all()
+            embeddings = (
+                await async_db_session.query(DocumentEmbedding)
+                .filter_by(document_id=document.id)
+                .all()
+            )
             assert len(embeddings) == 2
 
     @pytest.mark.integration
@@ -143,15 +157,16 @@ class TestPDFProcessingPipeline:
         pdf_path = create_temp_pdf(directory=temp_directory)
 
         document_data = DocumentFactory.create(
-            file_path=str(pdf_path),
-            status="processing"
+            file_path=str(pdf_path), status="processing"
         )
         document = Document(**document_data)
         async_db_session.add(document)
         await async_db_session.commit()
 
         # Mock processing failure
-        with patch('src.pdf_to_markdown_mcp.core.processor.MinerUService') as mock_mineru_class:
+        with patch(
+            "src.pdf_to_markdown_mcp.core.processor.MinerUService"
+        ) as mock_mineru_class:
             mock_mineru = Mock()
             mock_mineru.process_pdf.side_effect = Exception("Processing failed")
             mock_mineru_class.return_value = mock_mineru
@@ -160,7 +175,9 @@ class TestPDFProcessingPipeline:
 
             # When/Then
             with pytest.raises(Exception, match="Processing failed"):
-                await processor.process_document_with_storage(document.id, async_db_session)
+                await processor.process_document_with_storage(
+                    document.id, async_db_session
+                )
 
             # Verify document status updated to failed
             await async_db_session.refresh(document)
@@ -177,21 +194,29 @@ class TestPDFProcessingPipeline:
 
         # Mock processing result with many chunks
         chunks = [
-            {"text": f"Chunk {i} content", "chunk_index": i, "start_char": i*50, "end_char": (i+1)*50}
+            {
+                "text": f"Chunk {i} content",
+                "chunk_index": i,
+                "start_char": i * 50,
+                "end_char": (i + 1) * 50,
+            }
             for i in range(20)  # 20 chunks
         ]
         processing_result = ProcessingResultFactory.create(
-            success=True,
-            chunks=chunks,
-            chunk_count=20
+            success=True, chunks=chunks, chunk_count=20
         )
 
         # Mock embeddings for all chunks
-        embeddings = [[0.1 + i*0.01] * 1536 for i in range(20)]
+        embeddings = [[0.1 + i * 0.01] * 1536 for i in range(20)]
 
-        with patch('src.pdf_to_markdown_mcp.core.processor.MinerUService') as mock_mineru_class, \
-             patch('src.pdf_to_markdown_mcp.core.processor.EmbeddingService') as mock_embedding_class:
-
+        with (
+            patch(
+                "src.pdf_to_markdown_mcp.core.processor.MinerUService"
+            ) as mock_mineru_class,
+            patch(
+                "src.pdf_to_markdown_mcp.core.processor.EmbeddingService"
+            ) as mock_embedding_class,
+        ):
             mock_mineru = create_mock_mineru_service(success=True)
             mock_mineru.process_pdf.return_value = processing_result
             mock_mineru_class.return_value = mock_mineru
@@ -206,8 +231,8 @@ class TestPDFProcessingPipeline:
             result = await processor.process_document(str(pdf_path))
 
             # Then
-            assert result['success'] is True
-            assert result['chunks_processed'] == 20
+            assert result["success"] is True
+            assert result["chunks_processed"] == 20
 
             # Verify batch processing was used for embeddings
             mock_embedding.generate_batch.assert_called_once()
@@ -230,9 +255,14 @@ class TestPDFProcessingPipeline:
             await asyncio.sleep(0.05 * len(texts))  # 50ms per text
             return [[0.1] * 1536] * len(texts)
 
-        with patch('src.pdf_to_markdown_mcp.core.processor.MinerUService') as mock_mineru_class, \
-             patch('src.pdf_to_markdown_mcp.core.processor.EmbeddingService') as mock_embedding_class:
-
+        with (
+            patch(
+                "src.pdf_to_markdown_mcp.core.processor.MinerUService"
+            ) as mock_mineru_class,
+            patch(
+                "src.pdf_to_markdown_mcp.core.processor.EmbeddingService"
+            ) as mock_embedding_class,
+        ):
             mock_mineru = Mock()
             mock_mineru.process_pdf = mock_slow_processing
             mock_mineru_class.return_value = mock_mineru
@@ -245,17 +275,20 @@ class TestPDFProcessingPipeline:
 
             # When
             import time
+
             start_time = time.time()
             result = await processor.process_document(str(pdf_path))
             total_time = time.time() - start_time
 
             # Then
-            assert result['success'] is True
+            assert result["success"] is True
             assert total_time < 1.0  # Should complete within 1 second
-            assert 'processing_time' in result
+            assert "processing_time" in result
 
     @pytest.mark.integration
-    async def test_pipeline_concurrent_processing(self, async_db_session, temp_directory):
+    async def test_pipeline_concurrent_processing(
+        self, async_db_session, temp_directory
+    ):
         """Test pipeline handling of concurrent document processing."""
         # Given
         pdf_paths = [
@@ -267,8 +300,7 @@ class TestPDFProcessingPipeline:
         documents = []
         for i, pdf_path in enumerate(pdf_paths):
             document_data = DocumentFactory.create(
-                file_path=str(pdf_path),
-                status="processing"
+                file_path=str(pdf_path), status="processing"
             )
             document = Document(**document_data)
             documents.append(document)
@@ -277,9 +309,14 @@ class TestPDFProcessingPipeline:
         await async_db_session.commit()
 
         # Mock services
-        with patch('src.pdf_to_markdown_mcp.core.processor.MinerUService') as mock_mineru_class, \
-             patch('src.pdf_to_markdown_mcp.core.processor.EmbeddingService') as mock_embedding_class:
-
+        with (
+            patch(
+                "src.pdf_to_markdown_mcp.core.processor.MinerUService"
+            ) as mock_mineru_class,
+            patch(
+                "src.pdf_to_markdown_mcp.core.processor.EmbeddingService"
+            ) as mock_embedding_class,
+        ):
             mock_mineru = create_mock_mineru_service(success=True)
             mock_mineru_class.return_value = mock_mineru
 
@@ -297,7 +334,9 @@ class TestPDFProcessingPipeline:
 
             # Then
             assert len(results) == 3
-            assert all(result['success'] for result in results if isinstance(result, dict))
+            assert all(
+                result["success"] for result in results if isinstance(result, dict)
+            )
 
             # Verify all documents completed
             for doc in documents:
@@ -305,14 +344,15 @@ class TestPDFProcessingPipeline:
                 assert doc.status == "completed"
 
     @pytest.mark.integration
-    async def test_pipeline_partial_failure_recovery(self, async_db_session, temp_directory):
+    async def test_pipeline_partial_failure_recovery(
+        self, async_db_session, temp_directory
+    ):
         """Test pipeline recovery from partial failures."""
         # Given
         pdf_path = create_temp_pdf(directory=temp_directory)
 
         document_data = DocumentFactory.create(
-            file_path=str(pdf_path),
-            status="processing"
+            file_path=str(pdf_path), status="processing"
         )
         document = Document(**document_data)
         async_db_session.add(document)
@@ -321,33 +361,50 @@ class TestPDFProcessingPipeline:
         # Mock successful PDF processing but failed embedding
         processing_result = ProcessingResultFactory.create(success=True)
 
-        with patch('src.pdf_to_markdown_mcp.core.processor.MinerUService') as mock_mineru_class, \
-             patch('src.pdf_to_markdown_mcp.core.processor.EmbeddingService') as mock_embedding_class:
-
+        with (
+            patch(
+                "src.pdf_to_markdown_mcp.core.processor.MinerUService"
+            ) as mock_mineru_class,
+            patch(
+                "src.pdf_to_markdown_mcp.core.processor.EmbeddingService"
+            ) as mock_embedding_class,
+        ):
             mock_mineru = create_mock_mineru_service(success=True)
             mock_mineru.process_pdf.return_value = processing_result
             mock_mineru_class.return_value = mock_mineru
 
             mock_embedding = Mock()
-            mock_embedding.generate_batch.side_effect = Exception("Embedding service failed")
+            mock_embedding.generate_batch.side_effect = Exception(
+                "Embedding service failed"
+            )
             mock_embedding_class.return_value = mock_embedding
 
             processor = PDFProcessor()
 
             # When
             with pytest.raises(Exception, match="Embedding service failed"):
-                await processor.process_document_with_storage(document.id, async_db_session)
+                await processor.process_document_with_storage(
+                    document.id, async_db_session
+                )
 
             # Then - Document content should still be stored even if embeddings failed
             await async_db_session.refresh(document)
             assert document.status == "failed"
 
             # Content should be stored
-            content = await async_db_session.query(DocumentContent).filter_by(document_id=document.id).first()
+            content = (
+                await async_db_session.query(DocumentContent)
+                .filter_by(document_id=document.id)
+                .first()
+            )
             assert content is not None
 
             # But no embeddings should be stored
-            embeddings = await async_db_session.query(DocumentEmbedding).filter_by(document_id=document.id).all()
+            embeddings = (
+                await async_db_session.query(DocumentEmbedding)
+                .filter_by(document_id=document.id)
+                .all()
+            )
             assert len(embeddings) == 0
 
 
@@ -362,18 +419,22 @@ class TestCeleryTaskIntegration:
         pdf_path = create_temp_pdf(directory=temp_directory)
 
         document_data = DocumentFactory.create(
-            file_path=str(pdf_path),
-            status="pending"
+            file_path=str(pdf_path), status="pending"
         )
         document = Document(**document_data)
         async_db_session.add(document)
         await async_db_session.commit()
 
         # Mock the Celery app and task
-        with patch('src.pdf_to_markdown_mcp.worker.tasks.get_db_session') as mock_get_db, \
-             patch('src.pdf_to_markdown_mcp.worker.tasks.MinerUService') as mock_mineru_class, \
-             patch('src.pdf_to_markdown_mcp.worker.tasks.EmbeddingService') as mock_embedding_class:
-
+        with (
+            patch("src.pdf_to_markdown_mcp.worker.tasks.get_db_session") as mock_get_db,
+            patch(
+                "src.pdf_to_markdown_mcp.worker.tasks.MinerUService"
+            ) as mock_mineru_class,
+            patch(
+                "src.pdf_to_markdown_mcp.worker.tasks.EmbeddingService"
+            ) as mock_embedding_class,
+        ):
             # Setup database session mock
             mock_get_db.return_value.__enter__.return_value = async_db_session
             mock_get_db.return_value.__exit__.return_value = None
@@ -389,8 +450,8 @@ class TestCeleryTaskIntegration:
             result = await process_pdf_document(document.id)
 
             # Then
-            assert result['success'] is True
-            assert result['document_id'] == document.id
+            assert result["success"] is True
+            assert result["document_id"] == document.id
 
     @pytest.mark.integration
     @pytest.mark.celery
@@ -399,10 +460,13 @@ class TestCeleryTaskIntegration:
         # Given
         pdf_path = create_temp_pdf(directory=temp_directory)
 
-        with patch('src.pdf_to_markdown_mcp.worker.tasks.current_task') as mock_task, \
-             patch('src.pdf_to_markdown_mcp.worker.tasks.get_db_session') as mock_get_db, \
-             patch('src.pdf_to_markdown_mcp.worker.tasks.MinerUService') as mock_mineru_class:
-
+        with (
+            patch("src.pdf_to_markdown_mcp.worker.tasks.current_task") as mock_task,
+            patch("src.pdf_to_markdown_mcp.worker.tasks.get_db_session") as mock_get_db,
+            patch(
+                "src.pdf_to_markdown_mcp.worker.tasks.MinerUService"
+            ) as mock_mineru_class,
+        ):
             # Setup mocks
             mock_task.update_state = Mock()
 
@@ -421,19 +485,21 @@ class TestCeleryTaskIntegration:
             result = await process_pdf_document(1)
 
             # Then
-            assert result['success'] is True
+            assert result["success"] is True
 
             # Verify progress updates were made
             progress_calls = [
-                call for call in mock_task.update_state.call_args_list
-                if call[1].get('state') == 'PROGRESS'
+                call
+                for call in mock_task.update_state.call_args_list
+                if call[1].get("state") == "PROGRESS"
             ]
             assert len(progress_calls) > 0
 
             # Verify final state update
             final_calls = [
-                call for call in mock_task.update_state.call_args_list
-                if call[1].get('state') == 'SUCCESS'
+                call
+                for call in mock_task.update_state.call_args_list
+                if call[1].get("state") == "SUCCESS"
             ]
             assert len(final_calls) > 0
 
@@ -443,21 +509,24 @@ class TestDatabaseIntegration:
 
     @pytest.mark.integration
     @pytest.mark.database
-    async def test_database_transaction_handling(self, async_db_session, temp_directory):
+    async def test_database_transaction_handling(
+        self, async_db_session, temp_directory
+    ):
         """Test proper database transaction handling during processing."""
         # Given
         pdf_path = create_temp_pdf(directory=temp_directory)
 
         document_data = DocumentFactory.create(
-            file_path=str(pdf_path),
-            status="processing"
+            file_path=str(pdf_path), status="processing"
         )
         document = Document(**document_data)
         async_db_session.add(document)
         await async_db_session.commit()
 
         # Mock partial failure scenario
-        with patch('src.pdf_to_markdown_mcp.core.processor.MinerUService') as mock_mineru_class:
+        with patch(
+            "src.pdf_to_markdown_mcp.core.processor.MinerUService"
+        ) as mock_mineru_class:
             mock_mineru = create_mock_mineru_service(success=True)
 
             # Simulate database error during storage
@@ -469,7 +538,9 @@ class TestDatabaseIntegration:
 
             # When/Then
             with pytest.raises(Exception, match="Database error"):
-                await processor.process_document_with_storage(document.id, async_db_session)
+                await processor.process_document_with_storage(
+                    document.id, async_db_session
+                )
 
             # Verify transaction was rolled back
             async_db_session.commit = original_commit
@@ -513,7 +584,7 @@ class TestDatabaseIntegration:
             markdown_content="# Test",
             plain_text="Test",
             word_count=1,
-            language="en"
+            language="en",
         )
         async_db_session.add(content)
 
@@ -524,7 +595,7 @@ class TestDatabaseIntegration:
             embedding=[0.1] * 1536,
             start_char=0,
             end_char=10,
-            token_count=2
+            token_count=2,
         )
         async_db_session.add(embedding)
         await async_db_session.commit()
@@ -537,5 +608,15 @@ class TestDatabaseIntegration:
         await async_db_session.commit()
 
         # Then - Related records should be deleted
-        assert await async_db_session.query(DocumentContent).filter_by(id=content_id).first() is None
-        assert await async_db_session.query(DocumentEmbedding).filter_by(id=embedding_id).first() is None
+        assert (
+            await async_db_session.query(DocumentContent)
+            .filter_by(id=content_id)
+            .first()
+            is None
+        )
+        assert (
+            await async_db_session.query(DocumentEmbedding)
+            .filter_by(id=embedding_id)
+            .first()
+            is None
+        )

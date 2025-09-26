@@ -5,15 +5,10 @@ Tests all chunking functionality including boundary detection, overlap handling,
 and chunk optimization following TDD principles.
 """
 
-import pytest
-from unittest.mock import patch, AsyncMock
-from typing import List, Dict, Any
 
-from src.pdf_to_markdown_mcp.core.chunker import (
-    TextChunker,
-    TextChunk,
-    ChunkBoundary
-)
+import pytest
+
+from src.pdf_to_markdown_mcp.core.chunker import ChunkBoundary, TextChunk, TextChunker
 
 
 class TestTextChunk:
@@ -32,7 +27,7 @@ class TestTextChunk:
             text=text,
             start_index=start_index,
             end_index=end_index,
-            chunk_index=chunk_index
+            chunk_index=chunk_index,
         )
 
         # Then
@@ -80,7 +75,7 @@ class TestTextChunk:
             end_index=len(text),
             chunk_index=0,
             page_number=1,
-            metadata=metadata
+            metadata=metadata,
         )
 
         # Then
@@ -95,9 +90,7 @@ class TestTextChunker:
     def chunker(self):
         """Create a TextChunker instance for testing."""
         return TextChunker(
-            chunk_size=100,
-            chunk_overlap=20,
-            boundary_preference=ChunkBoundary.SENTENCE
+            chunk_size=100, chunk_overlap=20, boundary_preference=ChunkBoundary.SENTENCE
         )
 
     def test_chunker_initialization(self):
@@ -111,7 +104,7 @@ class TestTextChunker:
         chunker = TextChunker(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
-            boundary_preference=boundary_preference
+            boundary_preference=boundary_preference,
         )
 
         # Then
@@ -122,7 +115,9 @@ class TestTextChunker:
     def test_chunker_invalid_overlap(self):
         """Test that invalid overlap raises ValueError."""
         # Given/When/Then
-        with pytest.raises(ValueError, match="Chunk overlap must be less than chunk size"):
+        with pytest.raises(
+            ValueError, match="Chunk overlap must be less than chunk size"
+        ):
             TextChunker(chunk_size=100, chunk_overlap=150)
 
     @pytest.mark.asyncio
@@ -174,7 +169,7 @@ class TestTextChunker:
             "This is the second sentence.",
             "This is the third sentence.",
             "This is the fourth sentence.",
-            "This is the fifth sentence."
+            "This is the fifth sentence.",
         ]
         text = " ".join(sentences)
 
@@ -262,16 +257,16 @@ class TestTextChunker:
 
         # When
         chunks = await chunker.create_chunks(
-            text,
-            chunk_size=override_chunk_size,
-            chunk_overlap=override_overlap
+            text, chunk_size=override_chunk_size, chunk_overlap=override_overlap
         )
 
         # Then
         assert len(chunks) > 1
         # Most chunks should be around the override size
         for chunk in chunks[:-1]:  # Exclude last chunk which might be shorter
-            assert len(chunk.text) <= override_chunk_size * 1.2  # Allow some flexibility
+            assert (
+                len(chunk.text) <= override_chunk_size * 1.2
+            )  # Allow some flexibility
 
     def test_preprocess_text_normalize_whitespace(self, chunker):
         """Test text preprocessing normalizes whitespace."""
@@ -296,8 +291,8 @@ class TestTextChunker:
 
         # Then
         assert "**" in processed  # Bold formatting preserved
-        assert "#" in processed   # Header formatting preserved
-        assert processed.count('\n\n') <= 1  # Excessive newlines normalized
+        assert "#" in processed  # Header formatting preserved
+        assert processed.count("\n\n") <= 1  # Excessive newlines normalized
 
     def test_find_boundaries_paragraph(self, chunker):
         """Test finding paragraph boundaries."""
@@ -358,7 +353,9 @@ class TestTextChunker:
         max_chunk_size = 50
 
         # When
-        best_boundary = chunker._find_best_boundary(boundaries, target_pos, min_pos, max_chunk_size)
+        best_boundary = chunker._find_best_boundary(
+            boundaries, target_pos, min_pos, max_chunk_size
+        )
 
         # Then
         assert best_boundary in boundaries
@@ -373,7 +370,9 @@ class TestTextChunker:
         max_chunk_size = 50
 
         # When
-        best_boundary = chunker._find_best_boundary(boundaries, target_pos, min_pos, max_chunk_size)
+        best_boundary = chunker._find_best_boundary(
+            boundaries, target_pos, min_pos, max_chunk_size
+        )
 
         # Then
         assert best_boundary == target_pos  # Should return target when no good boundary
@@ -386,7 +385,9 @@ class TestTextChunker:
         chunk_end = 35
 
         # When
-        overlap_boundary = chunker._find_overlap_boundary(boundaries, overlap_start, chunk_end)
+        overlap_boundary = chunker._find_overlap_boundary(
+            boundaries, overlap_start, chunk_end
+        )
 
         # Then
         assert overlap_boundary in boundaries or overlap_boundary == overlap_start
@@ -408,7 +409,9 @@ class TestTextChunker:
     async def test_merge_chunks_single_chunk(self, chunker):
         """Test merging single chunk."""
         # Given
-        chunks = [TextChunk(text="Single chunk", start_index=0, end_index=12, chunk_index=0)]
+        chunks = [
+            TextChunk(text="Single chunk", start_index=0, end_index=12, chunk_index=0)
+        ]
 
         # When
         merged = await chunker.merge_chunks(chunks)
@@ -424,7 +427,7 @@ class TestTextChunker:
         chunks = [
             TextChunk(text="Small", start_index=0, end_index=5, chunk_index=0),
             TextChunk(text="chunks", start_index=6, end_index=12, chunk_index=1),
-            TextChunk(text="merge", start_index=13, end_index=18, chunk_index=2)
+            TextChunk(text="merge", start_index=13, end_index=18, chunk_index=2),
         ]
 
         # When
@@ -441,7 +444,7 @@ class TestTextChunker:
         large_text = "A" * 100
         chunks = [
             TextChunk(text=large_text, start_index=0, end_index=100, chunk_index=0),
-            TextChunk(text=large_text, start_index=100, end_index=200, chunk_index=1)
+            TextChunk(text=large_text, start_index=100, end_index=200, chunk_index=1),
         ]
 
         # When
@@ -470,7 +473,9 @@ class TestTextChunker:
         """Test getting statistics for single chunk."""
         # Given
         text = "This is a test chunk with multiple words."
-        chunks = [TextChunk(text=text, start_index=0, end_index=len(text), chunk_index=0)]
+        chunks = [
+            TextChunk(text=text, start_index=0, end_index=len(text), chunk_index=0)
+        ]
 
         # When
         stats = chunker.get_chunk_statistics(chunks)
@@ -490,8 +495,10 @@ class TestTextChunker:
         # Given
         chunks = [
             TextChunk(text="Short", start_index=0, end_index=5, chunk_index=0),
-            TextChunk(text="Medium length text", start_index=6, end_index=24, chunk_index=1),
-            TextChunk(text="A", start_index=25, end_index=26, chunk_index=2)
+            TextChunk(
+                text="Medium length text", start_index=6, end_index=24, chunk_index=1
+            ),
+            TextChunk(text="A", start_index=25, end_index=26, chunk_index=2),
         ]
 
         # When
@@ -538,11 +545,11 @@ class TestChunkBoundaryIntegration:
         """Test chunking with paragraph boundaries."""
         # Given
         chunker = TextChunker(
-            chunk_size=50,
-            chunk_overlap=10,
-            boundary_preference=ChunkBoundary.PARAGRAPH
+            chunk_size=50, chunk_overlap=10, boundary_preference=ChunkBoundary.PARAGRAPH
         )
-        text = "First paragraph.\n\nSecond paragraph with more text.\n\nThird paragraph."
+        text = (
+            "First paragraph.\n\nSecond paragraph with more text.\n\nThird paragraph."
+        )
 
         # When
         chunks = await chunker.create_chunks(text)
@@ -558,9 +565,7 @@ class TestChunkBoundaryIntegration:
         """Test chunking with sentence boundaries."""
         # Given
         chunker = TextChunker(
-            chunk_size=30,
-            chunk_overlap=5,
-            boundary_preference=ChunkBoundary.SENTENCE
+            chunk_size=30, chunk_overlap=5, boundary_preference=ChunkBoundary.SENTENCE
         )
         text = "First sentence. Second sentence. Third sentence! Fourth sentence?"
 
@@ -572,7 +577,7 @@ class TestChunkBoundaryIntegration:
         # Most chunks should end at sentence boundaries
         sentence_endings = 0
         for chunk in chunks[:-1]:  # Exclude last chunk
-            if chunk.text.strip().endswith(('.', '!', '?')):
+            if chunk.text.strip().endswith((".", "!", "?")):
                 sentence_endings += 1
         assert sentence_endings >= 0  # At least some respect boundaries
 
@@ -581,9 +586,7 @@ class TestChunkBoundaryIntegration:
         """Test chunking with word boundaries."""
         # Given
         chunker = TextChunker(
-            chunk_size=20,
-            chunk_overlap=3,
-            boundary_preference=ChunkBoundary.WORD
+            chunk_size=20, chunk_overlap=3, boundary_preference=ChunkBoundary.WORD
         )
         text = "These are individual words that should be split at word boundaries."
 
@@ -603,9 +606,7 @@ class TestChunkBoundaryIntegration:
         """Test chunking with character boundaries."""
         # Given
         chunker = TextChunker(
-            chunk_size=10,
-            chunk_overlap=2,
-            boundary_preference=ChunkBoundary.CHARACTER
+            chunk_size=10, chunk_overlap=2, boundary_preference=ChunkBoundary.CHARACTER
         )
         text = "This is a test string for character-level chunking."
 
@@ -636,8 +637,12 @@ class TestChunkerPerformance:
 
         # Then
         assert len(chunks) > 1
-        assert all(len(chunk.text) <= 1200 for chunk in chunks)  # Within reasonable bounds
-        assert sum(len(chunk.text) for chunk in chunks) >= len(text) * 0.9  # Most text preserved
+        assert all(
+            len(chunk.text) <= 1200 for chunk in chunks
+        )  # Within reasonable bounds
+        assert (
+            sum(len(chunk.text) for chunk in chunks) >= len(text) * 0.9
+        )  # Most text preserved
 
     @pytest.mark.asyncio
     async def test_text_with_special_characters(self):
@@ -677,4 +682,6 @@ class TestChunkerPerformance:
                 current_words = set(current_end.split())
                 next_words = set(next_start.split())
                 # At least one word should overlap (or be very close)
-                assert len(current_words & next_words) > 0 or len(current_end.strip()) < 10
+                assert (
+                    len(current_words & next_words) > 0 or len(current_end.strip()) < 10
+                )

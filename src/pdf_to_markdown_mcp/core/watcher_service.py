@@ -1,23 +1,28 @@
 """Service factory for creating configured watcher instances."""
 
 import logging
-from typing import Optional
 
-from .watcher import DirectoryWatcher, WatcherConfig
-from .task_queue import TaskQueue, create_task_queue
 from ..db.session import get_db_session
+from .mirror import create_directory_mirror
+from .task_queue import TaskQueue, create_task_queue
+from .watcher import DirectoryWatcher, WatcherConfig
 
 logger = logging.getLogger(__name__)
 
 
 def create_watcher_service(
-    config: WatcherConfig, task_queue: Optional[TaskQueue] = None
+    config: WatcherConfig,
+    task_queue: TaskQueue | None = None,
+    enable_directory_mirroring: bool = True,
+    output_base_dir: str | None = None,
 ) -> DirectoryWatcher:
     """Create a properly configured DirectoryWatcher with TaskQueue.
 
     Args:
         config: Watcher configuration
         task_queue: Optional custom task queue, creates default if None
+        enable_directory_mirroring: Whether to enable directory structure preservation
+        output_base_dir: Base directory for markdown output (required if mirroring enabled)
 
     Returns:
         Configured DirectoryWatcher instance
@@ -27,9 +32,27 @@ def create_watcher_service(
         task_queue = create_task_queue(db_session_factory=get_db_session)
         logger.info("Created default TaskQueue for watcher service")
 
-    watcher = DirectoryWatcher(task_queue, config)
+    # Create directory mirror if enabled and we have watch directories
+    directory_mirror = None
+    if enable_directory_mirroring and config.watch_directories and output_base_dir:
+        try:
+            # Use first watch directory as base for mirroring
+            # TODO: Support multiple base directories in future
+            watch_base = config.watch_directories[0]
+            directory_mirror = create_directory_mirror(
+                watch_base_dir=watch_base,
+                output_base_dir=output_base_dir,
+                db_session_factory=get_db_session,
+            )
+            logger.info(f"Created DirectoryMirror: {watch_base} -> {output_base_dir}")
+        except Exception as e:
+            logger.error(f"Failed to create DirectoryMirror: {e}")
+            logger.warning("Proceeding without directory mirroring")
+
+    watcher = DirectoryWatcher(task_queue, config, directory_mirror)
     logger.info(
-        f"Created DirectoryWatcher for {len(config.watch_directories)} directories"
+        f"Created DirectoryWatcher for {len(config.watch_directories)} directories "
+        f"(mirroring={'enabled' if directory_mirror else 'disabled'})"
     )
 
     return watcher
@@ -78,12 +101,20 @@ class WatcherManager:
             logger.info("Created shared TaskQueue for WatcherManager")
         return self._task_queue
 
-    def add_watcher(self, name: str, config: WatcherConfig) -> DirectoryWatcher:
+    def add_watcher(
+        self,
+        name: str,
+        config: WatcherConfig,
+        output_base_dir: str | None = None,
+        enable_mirroring: bool = True,
+    ) -> DirectoryWatcher:
         """Add a named watcher instance.
 
         Args:
             name: Unique name for the watcher
             config: Watcher configuration
+            output_base_dir: Base directory for markdown output
+            enable_mirroring: Whether to enable directory mirroring
 
         Returns:
             Created DirectoryWatcher instance
@@ -94,11 +125,23 @@ class WatcherManager:
         if name in self.watchers:
             raise ValueError(f"Watcher '{name}' already exists")
 
-        watcher = create_watcher_service(config, self.get_task_queue())
-        self.watchers[name] = {"instance": watcher, "config": config, "started": False}
+        watcher = create_watcher_service(
+            config,
+            self.get_task_queue(),
+            enable_directory_mirroring=enable_mirroring,
+            output_base_dir=output_base_dir,
+        )
+        self.watchers[name] = {
+            "instance": watcher,
+            "config": config,
+            "started": False,
+            "output_base_dir": output_base_dir,
+            "mirroring_enabled": enable_mirroring,
+        }
 
         logger.info(
-            f"Added watcher '{name}' with {len(config.watch_directories)} directories"
+            f"Added watcher '{name}' with {len(config.watch_directories)} directories "
+            f"(mirroring={'enabled' if enable_mirroring and output_base_dir else 'disabled'})"
         )
         return watcher
 

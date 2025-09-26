@@ -5,20 +5,20 @@ Implements the configure MCP tool for dynamic server configuration.
 """
 
 import logging
-from typing import Dict, Any
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from pdf_to_markdown_mcp.config import settings
+from pdf_to_markdown_mcp.core.watcher_service import WatcherManager
+from pdf_to_markdown_mcp.db.session import get_db
 from pdf_to_markdown_mcp.models.request import ConfigurationRequest
 from pdf_to_markdown_mcp.models.response import (
     ConfigurationResponse,
     ErrorResponse,
     ErrorType,
 )
-from pdf_to_markdown_mcp.db.session import get_db
-from pdf_to_markdown_mcp.config import settings
-from pdf_to_markdown_mcp.core.watcher_service import WatcherManager
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -96,12 +96,12 @@ async def update_configuration(
 
                         except Exception as e:
                             validation_errors.append(
-                                f"Failed to restart file watcher: {str(e)}"
+                                f"Failed to restart file watcher: {e!s}"
                             )
                             logger.error(f"Failed to restart file watcher: {e}")
 
             except Exception as e:
-                validation_errors.append(f"Error updating watch directories: {str(e)}")
+                validation_errors.append(f"Error updating watch directories: {e!s}")
 
         # Update embedding configuration
         if request.embedding_config is not None:
@@ -141,7 +141,7 @@ async def update_configuration(
 
             except Exception as e:
                 validation_errors.append(
-                    f"Error updating embedding configuration: {str(e)}"
+                    f"Error updating embedding configuration: {e!s}"
                 )
 
         # Update OCR settings
@@ -163,7 +163,7 @@ async def update_configuration(
                 logger.info("OCR settings updated")
 
             except Exception as e:
-                validation_errors.append(f"Error updating OCR settings: {str(e)}")
+                validation_errors.append(f"Error updating OCR settings: {e!s}")
 
         # Update processing limits
         if request.processing_limits is not None:
@@ -203,7 +203,7 @@ async def update_configuration(
                 logger.info("Processing limits updated")
 
             except Exception as e:
-                validation_errors.append(f"Error updating processing limits: {str(e)}")
+                validation_errors.append(f"Error updating processing limits: {e!s}")
 
         # Determine success status
         success = len(validation_errors) == 0
@@ -232,13 +232,13 @@ async def update_configuration(
             status_code=500,
             detail=ErrorResponse(
                 error=ErrorType.SYSTEM,
-                message=f"Failed to update configuration: {str(e)}",
+                message=f"Failed to update configuration: {e!s}",
             ).dict(),
         )
 
 
 @router.get("/configuration")
-async def get_current_configuration() -> Dict[str, Any]:
+async def get_current_configuration() -> dict[str, Any]:
     """
     Get the current server configuration.
     """
@@ -281,13 +281,13 @@ async def get_current_configuration() -> Dict[str, Any]:
             status_code=500,
             detail=ErrorResponse(
                 error=ErrorType.SYSTEM,
-                message=f"Failed to retrieve configuration: {str(e)}",
+                message=f"Failed to retrieve configuration: {e!s}",
             ).dict(),
         )
 
 
 @router.post("/configuration/validate")
-async def validate_configuration(config_data: Dict[str, Any]) -> Dict[str, Any]:
+async def validate_configuration(config_data: dict[str, Any]) -> dict[str, Any]:
     """
     Validate configuration without applying changes.
     """
@@ -352,7 +352,7 @@ async def validate_configuration(config_data: Dict[str, Any]) -> Dict[str, Any]:
             status_code=500,
             detail=ErrorResponse(
                 error=ErrorType.SYSTEM,
-                message=f"Configuration validation failed: {str(e)}",
+                message=f"Configuration validation failed: {e!s}",
             ).dict(),
         )
 
@@ -442,6 +442,6 @@ async def reset_configuration() -> ConfigurationResponse:
             status_code=500,
             detail=ErrorResponse(
                 error=ErrorType.SYSTEM,
-                message=f"Failed to reset configuration: {str(e)}",
+                message=f"Failed to reset configuration: {e!s}",
             ).dict(),
         )

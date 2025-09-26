@@ -13,21 +13,23 @@ Security Test Categories:
 5. Error information leakage prevention
 """
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
-from sqlalchemy.orm import Session
-from sqlalchemy.exc import SQLAlchemyError, InvalidRequestError
-from sqlalchemy import text
-from typing import Dict, Any, List
+from unittest.mock import Mock
 
+import pytest
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+
+from src.pdf_to_markdown_mcp.db.models import (
+    Document,
+    ProcessingQueue,
+)
 from src.pdf_to_markdown_mcp.db.queries import (
     DocumentQueries,
-    SearchQueries,
     QueueQueries,
+    SearchQueries,
+    _validate_integer,
     _validate_string,
-    _validate_integer
 )
-from src.pdf_to_markdown_mcp.db.models import Document, DocumentEmbedding, ProcessingQueue
 
 # SQL Injection Attack Patterns for Testing
 SQL_INJECTION_PAYLOADS = [
@@ -36,36 +38,29 @@ SQL_INJECTION_PAYLOADS = [
     "' OR '1'='1",
     "' OR 1=1 --",
     "' UNION SELECT * FROM users --",
-
     # Advanced injection patterns
     "'; INSERT INTO documents (filename) VALUES ('hacked'); --",
     "' OR EXISTS(SELECT * FROM information_schema.tables WHERE table_name='documents') --",
     "' AND (SELECT COUNT(*) FROM documents) > 0 --",
     "'; UPDATE documents SET filename='hacked' WHERE id=1; --",
-
     # Boolean-based blind injection
     "' AND (SELECT SUBSTRING(version(), 1, 1)) = '1",
     "' OR (SELECT COUNT(*) FROM documents WHERE filename LIKE '%a%') > 0 --",
-
     # Time-based blind injection
     "'; SELECT CASE WHEN (1=1) THEN pg_sleep(5) ELSE pg_sleep(0) END --",
-
     # Error-based injection
     "' AND EXTRACTVALUE(1, CONCAT(0x7e, (SELECT version()), 0x7e)) --",
     "' OR (SELECT * FROM (SELECT COUNT(*),CONCAT(version(),FLOOR(RAND(0)*2))x FROM information_schema.tables GROUP BY x)a) --",
-
     # NoSQL-style injection attempts
     "'; db.documents.drop(); --",
     "' || this.filename == 'admin' --",
-
     # XML injection attempts
     "' OR 1=1 <!--",
     "'><script>alert('xss')</script>",
-
     # PostgreSQL-specific injection
     "'; COPY documents TO '/tmp/output.txt'; --",
     "' OR (SELECT current_user) IS NOT NULL --",
-    "'; CREATE ROLE hacker WITH LOGIN PASSWORD 'password'; --"
+    "'; CREATE ROLE hacker WITH LOGIN PASSWORD 'password'; --",
 ]
 
 FILTER_INJECTION_PAYLOADS = [
@@ -103,7 +98,9 @@ class TestSQLInjectionPrevention:
     # CRITICAL: Full-text Search SQL Injection Tests
 
     @pytest.mark.parametrize("malicious_query", SQL_INJECTION_PAYLOADS)
-    def test_fulltext_search_sql_injection_prevention(self, mock_db_session, malicious_query):
+    def test_fulltext_search_sql_injection_prevention(
+        self, mock_db_session, malicious_query
+    ):
         """
         Test that full-text search prevents SQL injection attacks
 
@@ -117,9 +114,7 @@ class TestSQLInjectionPrevention:
         # When & Then - Should not raise SQL injection error
         try:
             result = SearchQueries.fulltext_search(
-                db=mock_db_session,
-                query=malicious_query,
-                limit=10
+                db=mock_db_session, query=malicious_query, limit=10
             )
 
             # Verify parameterized query was used
@@ -129,16 +124,22 @@ class TestSQLInjectionPrevention:
             # Ensure the query uses parameters, not string concatenation
             assert call_args[0][0].is_text()  # SQLAlchemy text object
             assert "plainto_tsquery('english', :query)" in str(call_args[0][0])
-            assert malicious_query in call_args[0][1]["query"]  # In parameters, not query string
+            assert (
+                malicious_query in call_args[0][1]["query"]
+            )  # In parameters, not query string
 
         except ValueError as e:
             # Input validation should catch malicious patterns
             assert "invalid" in str(e).lower() or "dangerous" in str(e).lower()
         except SQLAlchemyError:
-            pytest.fail("SQL injection attempt caused database error - parameterization failed")
+            pytest.fail(
+                "SQL injection attempt caused database error - parameterization failed"
+            )
 
     @pytest.mark.parametrize("malicious_filters", FILTER_INJECTION_PAYLOADS)
-    def test_fulltext_search_filter_injection_prevention(self, mock_db_session, malicious_filters):
+    def test_fulltext_search_filter_injection_prevention(
+        self, mock_db_session, malicious_filters
+    ):
         """
         Test that search filters prevent SQL injection
 
@@ -155,7 +156,7 @@ class TestSQLInjectionPrevention:
                 db=mock_db_session,
                 query="legitimate search",
                 filters=malicious_filters,
-                limit=10
+                limit=10,
             )
 
             # Verify safe parameterization
@@ -165,9 +166,11 @@ class TestSQLInjectionPrevention:
             # Check that parameters are properly typed
             params = call_args[0][1]
             if "document_id" in params:
-                assert isinstance(params["document_id"], int), "document_id should be validated as integer"
+                assert isinstance(params["document_id"], int), (
+                    "document_id should be validated as integer"
+                )
 
-        except (ValueError, TypeError) as e:
+        except (ValueError, TypeError):
             # Input validation should reject invalid filter types
             assert True, "Input validation correctly rejected malicious filter"
         except SQLAlchemyError:
@@ -198,7 +201,7 @@ class TestSQLInjectionPrevention:
                 result = SearchQueries.vector_similarity_search(
                     db=mock_db_session,
                     query_embedding=malicious_embedding,
-                    threshold=0.7
+                    threshold=0.7,
                 )
 
                 # Verify parameterized query execution
@@ -226,7 +229,7 @@ class TestSQLInjectionPrevention:
         malicious_inputs = [
             "'; DROP TABLE processing_queue; --",
             "1'; UPDATE processing_queue SET status='failed'; --",
-            {"status": "'; DELETE FROM processing_queue; --"}
+            {"status": "'; DELETE FROM processing_queue; --"},
         ]
 
         mock_result = Mock()
@@ -238,8 +241,7 @@ class TestSQLInjectionPrevention:
             try:
                 # Test file path injection
                 result = QueueQueries.get_by_file_path(
-                    db=mock_db_session,
-                    file_path=malicious_input
+                    db=mock_db_session, file_path=malicious_input
                 )
 
                 # Verify ORM query was used (not raw SQL)
@@ -258,7 +260,9 @@ class TestSQLInjectionPrevention:
     # CRITICAL: Document Operations SQL Injection Tests
 
     @pytest.mark.parametrize("malicious_path", SQL_INJECTION_PAYLOADS)
-    def test_document_operations_path_injection_prevention(self, mock_db_session, malicious_path):
+    def test_document_operations_path_injection_prevention(
+        self, mock_db_session, malicious_path
+    ):
         """
         Test that document operations prevent path-based SQL injection
 
@@ -274,8 +278,7 @@ class TestSQLInjectionPrevention:
         # When & Then
         try:
             result = DocumentQueries.get_by_path(
-                db=mock_db_session,
-                source_path=malicious_path
+                db=mock_db_session, source_path=malicious_path
             )
 
             # Verify ORM parameterized query
@@ -326,7 +329,7 @@ class TestSQLInjectionPrevention:
             {"$ne": None},
             [1, "'; DELETE FROM documents; --"],
             "1 OR 1=1",
-            "1); DROP TABLE documents; --"
+            "1); DROP TABLE documents; --",
         ]
 
         # When & Then
@@ -345,14 +348,14 @@ class TestSQLInjectionPrevention:
         Then error messages should not reveal database structure
         """
         # Given - Simulate database error
-        mock_db_session.execute.side_effect = SQLAlchemyError("relation 'secret_table' does not exist")
+        mock_db_session.execute.side_effect = SQLAlchemyError(
+            "relation 'secret_table' does not exist"
+        )
 
         # When & Then
         with pytest.raises(SQLAlchemyError) as exc_info:
             SearchQueries.fulltext_search(
-                db=mock_db_session,
-                query="legitimate query",
-                limit=10
+                db=mock_db_session, query="legitimate query", limit=10
             )
 
         # Error should be generic, not reveal internal structure
@@ -360,7 +363,9 @@ class TestSQLInjectionPrevention:
         sensitive_keywords = ["password", "admin", "user", "secret", "config", "env"]
 
         for keyword in sensitive_keywords:
-            assert keyword not in error_message, f"Error message leaked sensitive keyword: {keyword}"
+            assert keyword not in error_message, (
+                f"Error message leaked sensitive keyword: {keyword}"
+            )
 
     # Integration Tests for Comprehensive Security
 
@@ -378,7 +383,7 @@ class TestSQLInjectionPrevention:
         chained_attack = {
             "query": "'; DROP TABLE documents; --",
             "filters": {"document_id": "1'; DELETE FROM users; --"},
-            "limit": "10'; TRUNCATE TABLE processing_queue; --"
+            "limit": "10'; TRUNCATE TABLE processing_queue; --",
         }
 
         # When & Then
@@ -387,7 +392,7 @@ class TestSQLInjectionPrevention:
                 db=mock_db_session,
                 query=chained_attack["query"],
                 filters=chained_attack["filters"],
-                limit=chained_attack["limit"]
+                limit=chained_attack["limit"],
             )
 
     def test_parameterized_query_verification(self, mock_db_session):
@@ -404,9 +409,7 @@ class TestSQLInjectionPrevention:
 
         # When
         SearchQueries.fulltext_search(
-            db=mock_db_session,
-            query=legitimate_query,
-            limit=10
+            db=mock_db_session, query=legitimate_query, limit=10
         )
 
         # Then
@@ -462,7 +465,7 @@ class TestAdvancedSQLInjectionScenarios:
                 SearchQueries.fulltext_search(
                     db=mock_db_session,
                     query=doc.filename,  # This contains malicious data
-                    limit=10
+                    limit=10,
                 )
                 # Should be safely parameterized
                 mock_db_session.execute.assert_called()
@@ -492,9 +495,7 @@ class TestAdvancedSQLInjectionScenarios:
         for payload in blind_payloads:
             try:
                 result = SearchQueries.fulltext_search(
-                    db=mock_db_session,
-                    query=payload,
-                    limit=10
+                    db=mock_db_session, query=payload, limit=10
                 )
 
                 # Verify safe execution
@@ -502,7 +503,9 @@ class TestAdvancedSQLInjectionScenarios:
 
             except ValueError:
                 # Input validation correctly rejects malicious patterns
-                assert True, f"Blind injection payload correctly rejected: {payload[:50]}"
+                assert True, (
+                    f"Blind injection payload correctly rejected: {payload[:50]}"
+                )
 
     def test_union_based_injection_prevention(self, mock_db_session):
         """
@@ -525,9 +528,7 @@ class TestAdvancedSQLInjectionScenarios:
         for payload in union_payloads:
             try:
                 result = SearchQueries.fulltext_search(
-                    db=mock_db_session,
-                    query=payload,
-                    limit=10
+                    db=mock_db_session, query=payload, limit=10
                 )
 
                 # Verify parameterized execution
@@ -542,6 +543,7 @@ class TestAdvancedSQLInjectionScenarios:
 
 
 # Performance Impact Tests for Security Measures
+
 
 class TestSecurityPerformanceImpact:
     """Test that security measures don't significantly impact performance"""
@@ -568,7 +570,7 @@ class TestSecurityPerformanceImpact:
             "artificial intelligence",
             "data science",
             "natural language processing",
-            "computer vision"
+            "computer vision",
         ]
 
         # When
@@ -576,11 +578,7 @@ class TestSecurityPerformanceImpact:
 
         for query in legitimate_queries * 20:  # 100 queries total
             try:
-                SearchQueries.fulltext_search(
-                    db=mock_db_session,
-                    query=query,
-                    limit=10
-                )
+                SearchQueries.fulltext_search(db=mock_db_session, query=query, limit=10)
             except Exception:
                 pass  # Focus on validation performance, not execution
 
@@ -588,7 +586,9 @@ class TestSecurityPerformanceImpact:
         execution_time = end_time - start_time
 
         # Then - Should complete within reasonable time (< 1 second for 100 validations)
-        assert execution_time < 1.0, f"Input validation took too long: {execution_time:.3f}s"
+        assert execution_time < 1.0, (
+            f"Input validation took too long: {execution_time:.3f}s"
+        )
 
     def test_parameterization_overhead(self, mock_db_session):
         """
@@ -608,9 +608,7 @@ class TestSecurityPerformanceImpact:
         for i in range(50):
             try:
                 SearchQueries.fulltext_search(
-                    db=mock_db_session,
-                    query=f"test query {i}",
-                    limit=10
+                    db=mock_db_session, query=f"test query {i}", limit=10
                 )
             except Exception:
                 pass
@@ -619,7 +617,9 @@ class TestSecurityPerformanceImpact:
         execution_time = end_time - start_time
 
         # Should be fast enough for production use
-        assert execution_time < 0.5, f"Parameterized queries too slow: {execution_time:.3f}s"
+        assert execution_time < 0.5, (
+            f"Parameterized queries too slow: {execution_time:.3f}s"
+        )
 
 
 if __name__ == "__main__":

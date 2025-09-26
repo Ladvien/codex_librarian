@@ -4,7 +4,8 @@ Processing result models for MinerU PDF processing.
 These models represent the output of PDF processing operations.
 """
 
-from typing import Dict, List, Any, Optional
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -13,10 +14,10 @@ class TableData(BaseModel):
 
     page: int = Field(..., ge=1, description="Page number where table was found")
     table_index: int = Field(..., ge=0, description="Table index on the page")
-    headers: List[str] = Field(..., description="Column headers")
-    rows: List[List[str]] = Field(..., description="Table row data")
+    headers: list[str] = Field(..., description="Column headers")
+    rows: list[list[str]] = Field(..., description="Table row data")
     confidence: float = Field(..., ge=0.0, le=1.0, description="Extraction confidence")
-    bbox: Optional[List[int]] = Field(None, description="Bounding box [x1, y1, x2, y2]")
+    bbox: list[int] | None = Field(None, description="Bounding box [x1, y1, x2, y2]")
 
 
 class FormulaData(BaseModel):
@@ -26,7 +27,7 @@ class FormulaData(BaseModel):
     formula_index: int = Field(..., ge=0, description="Formula index on the page")
     latex: str = Field(..., description="LaTeX representation of formula")
     confidence: float = Field(..., ge=0.0, le=1.0, description="Extraction confidence")
-    bbox: Optional[List[int]] = Field(None, description="Bounding box [x1, y1, x2, y2]")
+    bbox: list[int] | None = Field(None, description="Bounding box [x1, y1, x2, y2]")
     is_inline: bool = Field(
         default=False, description="Whether formula is inline or block"
     )
@@ -38,10 +39,10 @@ class ImageData(BaseModel):
     page: int = Field(..., ge=1, description="Page number where image was found")
     image_index: int = Field(..., ge=0, description="Image index on the page")
     path: str = Field(..., description="Path to extracted image file")
-    ocr_text: Optional[str] = Field(None, description="OCR text from image")
+    ocr_text: str | None = Field(None, description="OCR text from image")
     confidence: float = Field(..., ge=0.0, le=1.0, description="OCR confidence")
-    bbox: Optional[List[int]] = Field(None, description="Bounding box [x1, y1, x2, y2]")
-    format: Optional[str] = Field(None, description="Image format (png, jpg, etc.)")
+    bbox: list[int] | None = Field(None, description="Bounding box [x1, y1, x2, y2]")
+    format: str | None = Field(None, description="Image format (png, jpg, etc.)")
 
 
 class ChunkData(BaseModel):
@@ -54,7 +55,7 @@ class ChunkData(BaseModel):
     )
     end_char: int = Field(..., gt=0, description="End character position in document")
     page: int = Field(..., ge=1, description="Primary page number for chunk")
-    token_count: Optional[int] = Field(
+    token_count: int | None = Field(
         None, ge=0, description="Approximate token count"
     )
 
@@ -72,44 +73,44 @@ class ProcessingMetadata(BaseModel):
     processing_time_ms: int = Field(
         ..., ge=0, description="Processing time in milliseconds"
     )
-    ocr_confidence: Optional[float] = Field(
+    ocr_confidence: float | None = Field(
         None, ge=0.0, le=1.0, description="Average OCR confidence"
     )
 
     # File information
-    file_size_bytes: Optional[int] = Field(None, ge=0, description="Original file size")
-    file_hash: Optional[str] = Field(None, description="SHA-256 hash of file")
+    file_size_bytes: int | None = Field(None, ge=0, description="Original file size")
+    file_hash: str | None = Field(None, description="SHA-256 hash of file")
 
     # Processing statistics
-    tables_found: Optional[int] = Field(
+    tables_found: int | None = Field(
         None, ge=0, description="Number of tables extracted"
     )
-    formulas_found: Optional[int] = Field(
+    formulas_found: int | None = Field(
         None, ge=0, description="Number of formulas extracted"
     )
-    images_found: Optional[int] = Field(
+    images_found: int | None = Field(
         None, ge=0, description="Number of images extracted"
     )
-    chunks_created: Optional[int] = Field(
+    chunks_created: int | None = Field(
         None, ge=0, description="Number of text chunks created"
     )
 
     # Quality metrics
-    text_extraction_quality: Optional[float] = Field(
+    text_extraction_quality: float | None = Field(
         None, ge=0.0, le=1.0, description="Text extraction quality score"
     )
-    layout_preservation_quality: Optional[float] = Field(
+    layout_preservation_quality: float | None = Field(
         None, ge=0.0, le=1.0, description="Layout preservation quality"
     )
 
     # Additional metadata
-    language_detected: Optional[str] = Field(
+    language_detected: str | None = Field(
         None, description="Primary language detected"
     )
-    mineru_version: Optional[str] = Field(
+    mineru_version: str | None = Field(
         None, description="MinerU library version used"
     )
-    processing_options: Optional[Dict[str, Any]] = Field(
+    processing_options: dict[str, Any] | None = Field(
         None, description="Processing options used"
     )
 
@@ -120,16 +121,16 @@ class ProcessingResult(BaseModel):
     markdown_content: str = Field(..., description="Full document in Markdown format")
     plain_text: str = Field(..., description="Plain text content for search")
 
-    extracted_tables: List[TableData] = Field(
+    extracted_tables: list[TableData] = Field(
         default_factory=list, description="Extracted table data"
     )
-    extracted_formulas: List[FormulaData] = Field(
+    extracted_formulas: list[FormulaData] = Field(
         default_factory=list, description="Extracted formula data"
     )
-    extracted_images: List[ImageData] = Field(
+    extracted_images: list[ImageData] = Field(
         default_factory=list, description="Extracted image data"
     )
-    chunk_data: List[ChunkData] = Field(
+    chunk_data: list[ChunkData] = Field(
         default_factory=list, description="Text chunks for embeddings"
     )
 
@@ -137,7 +138,7 @@ class ProcessingResult(BaseModel):
         ..., description="Processing metadata"
     )
 
-    def get_content_summary(self) -> Dict[str, Any]:
+    def get_content_summary(self) -> dict[str, Any]:
         """Get a summary of the processed content."""
         return {
             "total_pages": self.processing_metadata.pages,
@@ -159,7 +160,7 @@ class ProcessingResult(BaseModel):
             or len(self.extracted_images) > 0
         )
 
-    def get_page_content(self, page_number: int) -> Dict[str, Any]:
+    def get_page_content(self, page_number: int) -> dict[str, Any]:
         """Get content for a specific page."""
         page_tables = [t for t in self.extracted_tables if t.page == page_number]
         page_formulas = [f for f in self.extracted_formulas if f.page == page_number]

@@ -4,13 +4,13 @@ Configuration management for PDF to Markdown MCP Server.
 Uses pydantic-settings for environment variable handling and type validation.
 """
 
-from pathlib import Path
-from typing import List, Optional, Union, Dict, Any
-from pydantic import Field, validator, ConfigDict
-from pydantic_settings import BaseSettings
-from pydantic.types import DirectoryPath
-import logging
 import json
+import logging
+from pathlib import Path
+
+from pydantic import ConfigDict, Field, validator
+from pydantic.types import DirectoryPath
+from pydantic_settings import BaseSettings
 
 
 class DatabaseSettings(BaseSettings):
@@ -53,7 +53,7 @@ class EmbeddingSettings(BaseSettings):
     ollama_url: str = Field(default="http://localhost:11434", env="OLLAMA_URL")
 
     # OpenAI settings
-    openai_api_key: Optional[str] = Field(default=None, env="OPENAI_API_KEY")
+    openai_api_key: str | None = Field(default=None, env="OPENAI_API_KEY")
 
     class Config:
         env_prefix = "EMBEDDING_"
@@ -190,7 +190,7 @@ class CelerySettings(BaseSettings):
 
     # Security Settings
     task_serializer: str = Field(default="json", env="CELERY_TASK_SERIALIZER")
-    accept_content: List[str] = Field(default=["json"], env="CELERY_ACCEPT_CONTENT")
+    accept_content: list[str] = Field(default=["json"], env="CELERY_ACCEPT_CONTENT")
 
     # Logging Configuration
     worker_log_format: str = Field(
@@ -220,10 +220,10 @@ class CelerySettings(BaseSettings):
 class WatcherSettings(BaseSettings):
     """File watcher configuration."""
 
-    watch_directories: List[Union[str, DirectoryPath]] = Field(
+    watch_directories: list[str | DirectoryPath] = Field(
         default=["/home/user/Documents"], env="WATCH_DIRECTORIES"
     )
-    file_patterns: List[str] = Field(default=["*.pdf"], env="FILE_PATTERNS")
+    file_patterns: list[str] = Field(default=["*.pdf"], env="FILE_PATTERNS")
     recursive: bool = Field(default=True, env="WATCH_RECURSIVE")
 
     # Processing settings
@@ -243,7 +243,7 @@ class LoggingSettings(BaseSettings):
     )
 
     # File logging
-    log_file: Optional[Path] = Field(default=None, env="LOG_FILE")
+    log_file: Path | None = Field(default=None, env="LOG_FILE")
     max_file_size_mb: int = Field(default=100, env="LOG_MAX_FILE_SIZE_MB")
     backup_count: int = Field(default=5, env="LOG_BACKUP_COUNT")
 
@@ -265,7 +265,7 @@ class RedisSettings(BaseSettings):
     host: str = Field(default="localhost", env="REDIS_HOST")
     port: int = Field(default=6379, env="REDIS_PORT")
     db: int = Field(default=0, env="REDIS_DB")
-    password: Optional[str] = Field(default=None, env="REDIS_PASSWORD")
+    password: str | None = Field(default=None, env="REDIS_PASSWORD")
 
     @property
     def url(self) -> str:
@@ -282,7 +282,7 @@ class SecuritySettings(BaseSettings):
     """Security configuration settings."""
 
     # API authentication
-    api_key: Optional[str] = Field(default=None, env="API_KEY")
+    api_key: str | None = Field(default=None, env="API_KEY")
     require_auth: bool = Field(default=False, env="REQUIRE_AUTH")
 
     # Security headers
@@ -291,7 +291,7 @@ class SecuritySettings(BaseSettings):
 
     # File upload security
     max_upload_size_mb: int = Field(default=500, env="MAX_UPLOAD_SIZE_MB")
-    allowed_file_types: List[str] = Field(
+    allowed_file_types: list[str] = Field(
         default=["application/pdf"], env="ALLOWED_FILE_TYPES"
     )
     scan_uploaded_files: bool = Field(default=True, env="SCAN_UPLOADED_FILES")
@@ -349,12 +349,12 @@ class Settings(BaseSettings):
     reload: bool = Field(default=False, env="RELOAD")
 
     # CORS settings - Environment-specific security
-    cors_origins: List[str] = Field(default_factory=lambda: [], env="CORS_ORIGINS")
+    cors_origins: list[str] = Field(default_factory=list, env="CORS_ORIGINS")
     cors_credentials: bool = Field(default=False, env="CORS_CREDENTIALS")
-    cors_methods: List[str] = Field(
+    cors_methods: list[str] = Field(
         default=["GET", "POST", "PUT", "DELETE", "OPTIONS"], env="CORS_METHODS"
     )
-    cors_headers: List[str] = Field(
+    cors_headers: list[str] = Field(
         default=["Content-Type", "Authorization", "X-Correlation-ID"],
         env="CORS_HEADERS",
     )

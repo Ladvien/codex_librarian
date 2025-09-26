@@ -3,15 +3,17 @@ Integration tests for embedding service.
 Tests actual service functionality with mocked external dependencies.
 """
 
-import pytest
+from unittest.mock import AsyncMock, Mock, patch
+
 import numpy as np
-from unittest.mock import Mock, AsyncMock, patch
+import pytest
+
 from pdf_to_markdown_mcp.services.embeddings import (
-    EmbeddingService,
     EmbeddingConfig,
+    EmbeddingError,
     EmbeddingProvider,
+    EmbeddingService,
     create_embedding_service,
-    EmbeddingError
 )
 
 
@@ -38,25 +40,19 @@ class TestEmbeddingServiceIntegration:
         """Test complete Ollama embedding generation workflow."""
         # Given
         config = EmbeddingConfig(
-            provider=EmbeddingProvider.OLLAMA,
-            batch_size=2,
-            max_retries=1
+            provider=EmbeddingProvider.OLLAMA, batch_size=2, max_retries=1
         )
 
         texts = ["Document content 1", "Document content 2", "Document content 3"]
-        expected_embeddings = [
-            [0.1, 0.2, 0.3],
-            [0.4, 0.5, 0.6],
-            [0.7, 0.8, 0.9]
-        ]
+        expected_embeddings = [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9]]
 
         mock_ollama_client.embeddings.side_effect = [
-            {'embedding': expected_embeddings[0]},
-            {'embedding': expected_embeddings[1]},
-            {'embedding': expected_embeddings[2]}
+            {"embedding": expected_embeddings[0]},
+            {"embedding": expected_embeddings[1]},
+            {"embedding": expected_embeddings[2]},
         ]
 
-        with patch('pdf_to_markdown_mcp.services.embeddings.ollama') as mock_ollama:
+        with patch("pdf_to_markdown_mcp.services.embeddings.ollama") as mock_ollama:
             mock_ollama.AsyncClient.return_value = mock_ollama_client
 
             # When
@@ -74,10 +70,7 @@ class TestEmbeddingServiceIntegration:
     async def test_end_to_end_openai_embedding_generation(self, mock_openai_client):
         """Test complete OpenAI embedding generation workflow."""
         # Given
-        config = EmbeddingConfig(
-            provider=EmbeddingProvider.OPENAI,
-            batch_size=5
-        )
+        config = EmbeddingConfig(provider=EmbeddingProvider.OPENAI, batch_size=5)
 
         texts = ["Document 1", "Document 2"]
         expected_embeddings = [[0.1, 0.2], [0.3, 0.4]]
@@ -91,7 +84,7 @@ class TestEmbeddingServiceIntegration:
 
         mock_openai_client.embeddings.create.return_value = mock_response
 
-        with patch('pdf_to_markdown_mcp.services.embeddings.openai') as mock_openai:
+        with patch("pdf_to_markdown_mcp.services.embeddings.openai") as mock_openai:
             mock_openai.AsyncOpenAI.return_value = mock_openai_client
 
             # When
@@ -110,16 +103,16 @@ class TestEmbeddingServiceIntegration:
         texts = ["Test document"]
         expected_embedding = [[0.1, 0.2, 0.3]]
 
-        mock_ollama_client.embeddings.return_value = {'embedding': expected_embedding[0]}
+        mock_ollama_client.embeddings.return_value = {
+            "embedding": expected_embedding[0]
+        }
 
-        with patch('pdf_to_markdown_mcp.services.embeddings.ollama') as mock_ollama:
+        with patch("pdf_to_markdown_mcp.services.embeddings.ollama") as mock_ollama:
             mock_ollama.AsyncClient.return_value = mock_ollama_client
 
             # When
             service = await create_embedding_service(
-                provider=EmbeddingProvider.OLLAMA,
-                batch_size=5,
-                max_retries=2
+                provider=EmbeddingProvider.OLLAMA, batch_size=5, max_retries=2
             )
             result = await service.generate_embeddings(texts)
 
@@ -137,10 +130,10 @@ class TestEmbeddingServiceIntegration:
 
         # Test vectors with known magnitudes
         embeddings = [
-            [3.0, 4.0],      # Magnitude = 5
-            [1.0, 1.0],      # Magnitude = sqrt(2) ≈ 1.414
-            [0.0, 0.0],      # Zero vector
-            [5.0, 0.0],      # Magnitude = 5
+            [3.0, 4.0],  # Magnitude = 5
+            [1.0, 1.0],  # Magnitude = sqrt(2) ≈ 1.414
+            [0.0, 0.0],  # Zero vector
+            [5.0, 0.0],  # Magnitude = 5
         ]
 
         # When
@@ -174,10 +167,10 @@ class TestEmbeddingServiceIntegration:
 
         query_vector = [1.0, 0.0, 0.0]
         candidate_vectors = [
-            [1.0, 0.0, 0.0],    # Perfect match (cosine = 1.0)
-            [0.0, 1.0, 0.0],    # Orthogonal (cosine = 0.0)
-            [0.5, 0.5, 0.0],    # Partial match (cosine ≈ 0.707)
-            [-1.0, 0.0, 0.0],   # Opposite direction (cosine = -1.0)
+            [1.0, 0.0, 0.0],  # Perfect match (cosine = 1.0)
+            [0.0, 1.0, 0.0],  # Orthogonal (cosine = 0.0)
+            [0.5, 0.5, 0.0],  # Partial match (cosine ≈ 0.707)
+            [-1.0, 0.0, 0.0],  # Opposite direction (cosine = -1.0)
         ]
 
         # When
@@ -205,10 +198,7 @@ class TestEmbeddingServiceIntegration:
     async def test_error_handling_and_retry_integration(self, mock_ollama_client):
         """Test error handling and retry mechanisms in integration."""
         # Given
-        config = EmbeddingConfig(
-            provider=EmbeddingProvider.OLLAMA,
-            max_retries=2
-        )
+        config = EmbeddingConfig(provider=EmbeddingProvider.OLLAMA, max_retries=2)
 
         texts = ["Test document"]
 
@@ -216,10 +206,10 @@ class TestEmbeddingServiceIntegration:
         mock_ollama_client.embeddings.side_effect = [
             Exception("Network error"),
             Exception("Temporary failure"),
-            {'embedding': [0.1, 0.2, 0.3]}
+            {"embedding": [0.1, 0.2, 0.3]},
         ]
 
-        with patch('pdf_to_markdown_mcp.services.embeddings.ollama') as mock_ollama:
+        with patch("pdf_to_markdown_mcp.services.embeddings.ollama") as mock_ollama:
             mock_ollama.AsyncClient.return_value = mock_ollama_client
 
             # When
@@ -234,15 +224,12 @@ class TestEmbeddingServiceIntegration:
     async def test_max_retries_exceeded_integration(self, mock_ollama_client):
         """Test behavior when max retries are exceeded."""
         # Given
-        config = EmbeddingConfig(
-            provider=EmbeddingProvider.OLLAMA,
-            max_retries=1
-        )
+        config = EmbeddingConfig(provider=EmbeddingProvider.OLLAMA, max_retries=1)
 
         texts = ["Test document"]
         mock_ollama_client.embeddings.side_effect = Exception("Persistent failure")
 
-        with patch('pdf_to_markdown_mcp.services.embeddings.ollama') as mock_ollama:
+        with patch("pdf_to_markdown_mcp.services.embeddings.ollama") as mock_ollama:
             mock_ollama.AsyncClient.return_value = mock_ollama_client
 
             # When/Then
@@ -258,9 +245,9 @@ class TestEmbeddingServiceIntegration:
         """Test health check functionality."""
         # Given
         config = EmbeddingConfig(provider=EmbeddingProvider.OLLAMA)
-        mock_ollama_client.embeddings.return_value = {'embedding': [0.1, 0.2]}
+        mock_ollama_client.embeddings.return_value = {"embedding": [0.1, 0.2]}
 
-        with patch('pdf_to_markdown_mcp.services.embeddings.ollama') as mock_ollama:
+        with patch("pdf_to_markdown_mcp.services.embeddings.ollama") as mock_ollama:
             mock_ollama.AsyncClient.return_value = mock_ollama_client
 
             # When - Healthy service
@@ -270,14 +257,13 @@ class TestEmbeddingServiceIntegration:
             # Then
             assert is_healthy is True
             mock_ollama_client.embeddings.assert_called_once_with(
-                model="nomic-embed-text",
-                prompt="health check"
+                model="nomic-embed-text", prompt="health check"
             )
 
         # When - Unhealthy service
         mock_ollama_client.embeddings.side_effect = Exception("Service down")
 
-        with patch('pdf_to_markdown_mcp.services.embeddings.ollama') as mock_ollama:
+        with patch("pdf_to_markdown_mcp.services.embeddings.ollama") as mock_ollama:
             mock_ollama.AsyncClient.return_value = mock_ollama_client
 
             service = EmbeddingService(config)

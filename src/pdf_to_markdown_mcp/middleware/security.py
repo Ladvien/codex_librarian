@@ -4,11 +4,11 @@ Security headers middleware for comprehensive web application security.
 Implements OWASP recommended security headers and rate limiting protections.
 """
 
-from typing import Dict, Any
+import logging
+
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
-import logging
 
 from pdf_to_markdown_mcp.config import settings
 
@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 # Import slowapi for rate limiting
 try:
     from slowapi import Limiter, _rate_limit_exceeded_handler
-    from slowapi.util import get_remote_address
     from slowapi.errors import RateLimitExceeded
+    from slowapi.util import get_remote_address
 
     RATE_LIMITING_AVAILABLE = True
 except ImportError:
@@ -88,7 +88,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
     def _get_security_headers(
         self, request: Request, response: Response
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         """Get security headers based on request and response context."""
         headers = {
             # Prevent MIME type sniffing
@@ -213,7 +213,7 @@ class RequestSizeMiddleware(BaseHTTPMiddleware):
 
                     raise HTTPException(
                         status_code=413,
-                        detail=f"Request body too large. Maximum allowed: {self.max_request_size // (1024*1024)}MB",
+                        detail=f"Request body too large. Maximum allowed: {self.max_request_size // (1024 * 1024)}MB",
                     )
             except ValueError:
                 # Invalid Content-Length header
