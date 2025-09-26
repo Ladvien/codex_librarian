@@ -1,7 +1,7 @@
 """
 Security headers middleware for comprehensive web application security.
 
-Implements OWASP recommended security headers and protections.
+Implements OWASP recommended security headers and rate limiting protections.
 """
 
 from typing import Dict, Any
@@ -13,6 +13,19 @@ import logging
 from pdf_to_markdown_mcp.config import settings
 
 logger = logging.getLogger(__name__)
+
+# Import slowapi for rate limiting
+try:
+    from slowapi import Limiter, _rate_limit_exceeded_handler
+    from slowapi.util import get_remote_address
+    from slowapi.errors import RateLimitExceeded
+    RATE_LIMITING_AVAILABLE = True
+except ImportError:
+    logger.warning("slowapi not available, rate limiting disabled")
+    RATE_LIMITING_AVAILABLE = False
+    Limiter = None
+    get_remote_address = None
+    RateLimitExceeded = None
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -209,11 +222,102 @@ class RequestSizeMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+# Rate limiting configuration
+def get_rate_limiter():
+    """Get configured rate limiter for the application."""
+    if not RATE_LIMITING_AVAILABLE:
+        logger.warning("Rate limiting not available - slowapi not installed")
+        return None
+
+    # Create limiter with Redis storage (if available) or in-memory
+    try:
+        # Try to use Redis for distributed rate limiting
+        from limits.storage import RedisStorage
+        redis_url = settings.redis.url if hasattr(settings, 'redis') else "redis://localhost:6379"
+        storage = RedisStorage(redis_url)
+        logger.info(f"Using Redis storage for rate limiting: {redis_url}")
+    except Exception as e:
+        # Fallback to in-memory storage
+        logger.warning(f"Redis not available for rate limiting, using in-memory: {e}")
+        from limits.storage import MemoryStorage
+        storage = MemoryStorage()
+
+    limiter = Limiter(
+        key_func=get_remote_address,
+        storage=storage,
+        default_limits=[
+            f"{settings.rate_limit_per_minute}/minute",
+            f"{settings.rate_limit_per_hour}/hour"
+        ]
+    )
+
+    return limiter
+
+
+def get_endpoint_rate_limits(path: str, method: str) -> list:
+    """Get rate limits for specific endpoint based on security requirements."""
+    # Define per-endpoint rate limits based on resource intensity
+    endpoint_limits = {
+        # High-resource endpoints (PDF processing)
+        "POST:/api/v1/convert_single": ["5/minute", "20/hour"],
+        "POST:/api/v1/batch_convert": ["2/minute", "5/hour"],
+
+        # Medium-resource endpoints (search operations)
+        "GET:/api/v1/semantic_search": ["30/minute", "200/hour"],
+        "GET:/api/v1/hybrid_search": ["30/minute", "200/hour"],
+        "GET:/api/v1/find_similar": ["20/minute", "100/hour"],
+
+        # Low-resource endpoints (status, config)
+        "GET:/api/v1/get_status": ["60/minute", "500/hour"],
+        "GET:/api/v1/stream_progress": ["60/minute", "500/hour"],
+        "POST:/api/v1/configure": ["10/minute", "50/hour"],
+
+        # Health endpoints (more permissive)
+        "GET:/health": ["120/minute", "1000/hour"],
+        "GET:/ready": ["120/minute", "1000/hour"],
+        "GET:/metrics": ["60/minute", "500/hour"],
+    }
+
+    endpoint_key = f"{method}:{path}"
+
+    # Check for exact match
+    if endpoint_key in endpoint_limits:
+        return endpoint_limits[endpoint_key]
+
+    # Check for path patterns
+    for pattern, limits in endpoint_limits.items():
+        if pattern.endswith("*") and endpoint_key.startswith(pattern[:-1]):
+            return limits
+
+    # Default limits for unspecified endpoints
+    return [f"{settings.rate_limit_per_minute}/minute", f"{settings.rate_limit_per_hour}/hour"]
+
+
 # Configuration for easy import
 def create_security_middleware(app):
     """Create and configure security middleware for the application."""
     # Get configuration from settings
-    max_request_size = getattr(settings, 'max_file_size_mb', 100) * 1024 * 1024
+    max_request_size = getattr(settings.processing, 'max_file_size_mb', 100) * 1024 * 1024
+
+    # Configure rate limiting
+    if RATE_LIMITING_AVAILABLE:
+        limiter = get_rate_limiter()
+        if limiter:
+            app.state.limiter = limiter
+            app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+            logger.info(
+                "Rate limiting configured",
+                extra={
+                    "default_limits": [
+                        f"{settings.rate_limit_per_minute}/minute",
+                        f"{settings.rate_limit_per_hour}/hour"
+                    ],
+                    "storage_type": type(limiter.storage).__name__
+                }
+            )
+    else:
+        app.state.limiter = None
+        logger.warning("Rate limiting disabled - slowapi not available")
 
     # Add request size validation
     app.add_middleware(RequestSizeMiddleware, max_request_size=max_request_size)
@@ -225,6 +329,27 @@ def create_security_middleware(app):
         "Security middleware configured",
         extra={
             "max_request_size_mb": max_request_size // (1024*1024),
-            "environment": settings.environment
+            "environment": settings.environment,
+            "rate_limiting_enabled": RATE_LIMITING_AVAILABLE
         }
     )
+
+
+def require_rate_limit(path_pattern: str, method: str = "GET"):
+    """
+    Decorator to add rate limiting to FastAPI endpoints.
+
+    Usage:
+        @require_rate_limit("/api/v1/convert_single", "POST")
+        @app.post("/api/v1/convert_single")
+        async def convert_single(...):
+            pass
+    """
+    def decorator(func):
+        if RATE_LIMITING_AVAILABLE:
+            limits = get_endpoint_rate_limits(path_pattern, method)
+            # Apply rate limiting with endpoint-specific limits
+            for limit in limits:
+                func = limiter.limit(limit)(func)
+        return func
+    return decorator

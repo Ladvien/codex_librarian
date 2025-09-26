@@ -27,7 +27,7 @@ from pdf_to_markdown_mcp.core.monitoring import (
     health_monitor,
     TracingManager
 )
-from pdf_to_markdown_mcp.middleware.security import SecurityHeadersMiddleware, RequestSizeMiddleware
+from pdf_to_markdown_mcp.middleware.security import create_security_middleware
 
 # Configure logging
 configure_logging()

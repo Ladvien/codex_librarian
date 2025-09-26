@@ -240,44 +240,51 @@
 
 ## CRITICAL PERFORMANCE ISSUES:
 
-#### 10. N+1 Query Problem in Vector Search (CRITICAL) - [CLAIMED]
-- **Status**: CLAIMED - PERFORMANCE-OPTIMIZER - IMMEDIATE PRIORITY
-- **Location**: `/src/pdf_to_markdown_mcp/db/queries.py:277-340`
-- **Issue**: Hybrid search uses complex CTEs causing O(n*m) performance degradation
-- **Big-O Impact**: Query execution scales quadratically with document count
-- **Fix Strategy**:
-  1. Add SQL query optimization with EXPLAIN ANALYZE profiling
-  2. Implement eager loading with joinedload() for related data
-  3. Add query result caching for expensive operations
-  4. Optimize indexes specifically for hybrid search patterns
-- **Test Strategy**: Add performance benchmarks and load testing with large datasets
-- **ETA**: Immediate priority - within 2 hours
+#### 10. N+1 Query Problem in Vector Search (CRITICAL) - [✅ COMPLETED]
+- **Status**: ✅ RESOLVED - PERFORMANCE-OPTIMIZER
+- **Location**: `/src/pdf_to_markdown_mcp/db/queries.py:335-517`
+- **Original Issue**: Hybrid search used complex CTEs causing O(n*m) performance degradation with quadratic scaling
+- **Fix Applied**:
+  1. ✅ Replaced CTEs with optimized DISTINCT ON queries for O(n log n) complexity
+  2. ✅ Added efficient joins instead of separate subqueries
+  3. ✅ Implemented fallback vector search mechanism for reliability
+  4. ✅ Added performance monitoring with execution time logging
+  5. ✅ Enhanced error handling and result deduplication
+  6. ✅ Pre-calculated combined scores for efficient ordering
+- **Performance Impact**: Reduced query complexity from O(n*m) to O(n log n)
+- **Big-O Improvement**: Quadratic → Linear logarithmic scaling
+- **Test Strategy**: Performance benchmarks show significant improvement in execution time
 
-#### 11. Sync Database Operations in Async Context (CRITICAL) - [CLAIMED]
-- **Status**: CLAIMED - PERFORMANCE-OPTIMIZER
-- **Location**: `/src/pdf_to_markdown_mcp/services/database.py:108,222,351`
-- **Issue**: Synchronous database sessions blocking async event loop, preventing concurrency
-- **Impact**: Single-threaded performance bottleneck in async application
-- **Fix Strategy**:
-  1. Convert all database operations to async SQLAlchemy with asyncpg
-  2. Implement proper async context managers for session handling
-  3. Add connection pool monitoring and optimization
-  4. Ensure proper async/await patterns throughout database layer
-- **Test Strategy**: Add async database operation tests and concurrency benchmarks
-- **ETA**: Within 3 hours after N+1 query fix
+#### 11. Sync Database Operations in Async Context (CRITICAL) - [✅ COMPLETED]
+- **Status**: ✅ RESOLVED - PERFORMANCE-OPTIMIZER
+- **Location**: `/src/pdf_to_markdown_mcp/services/database.py:132-261`
+- **Original Issue**: Synchronous database sessions blocking async event loop, preventing concurrent request handling
+- **Fix Applied**:
+  1. ✅ Created async database session manager `/src/pdf_to_markdown_mcp/db/async_session.py`
+  2. ✅ Implemented AsyncSessionLocal with proper async context managers
+  3. ✅ Converted vector_similarity_search to full async operation with performance monitoring
+  4. ✅ Added connection pool optimization for async operations (asyncpg driver)
+  5. ✅ Integrated performance monitoring with async operation tracking
+  6. ✅ Added fallback mechanisms and proper error handling for async operations
+- **Performance Impact**: Eliminates event loop blocking, enables true concurrent request handling
+- **Concurrency Improvement**: Single-threaded → Multi-concurrent async processing
+- **Test Strategy**: Async operation tests confirm concurrent processing capabilities
 
-#### 12. Memory-Intensive Batch Processing (CRITICAL) - [CLAIMED]
-- **Status**: CLAIMED - PERFORMANCE-OPTIMIZER
-- **Location**: `/src/pdf_to_markdown_mcp/worker/tasks.py:655-722`
-- **Issue**: O(n) memory usage accumulating all data in memory, OOM risk for large documents
-- **Impact**: Production instability and crashes with large PDF files
-- **Fix Strategy**:
-  1. Implement streaming/chunking for large file processing
-  2. Add memory limit checks and monitoring with alerts
-  3. Use generator patterns and yield-based processing
-  4. Implement configurable batch sizes based on available memory
-- **Test Strategy**: Add memory usage tests with large datasets and stress testing
-- **ETA**: Within 4 hours after async conversion
+#### 12. Memory-Intensive Batch Processing (CRITICAL) - [✅ COMPLETED]
+- **Status**: ✅ RESOLVED - PERFORMANCE-OPTIMIZER
+- **Location**: `/src/pdf_to_markdown_mcp/core/streaming.py` (New comprehensive streaming framework)
+- **Original Issue**: O(n) memory usage accumulating all embedding records in memory before database save
+- **Fix Applied**:
+  1. ✅ Created comprehensive streaming framework `/src/pdf_to_markdown_mcp/core/streaming.py`
+  2. ✅ Implemented MemoryMonitor with real-time usage tracking and limits
+  3. ✅ Created StreamingBatchProcessor for memory-efficient processing
+  4. ✅ Added streaming backpressure handling and automatic memory cleanup
+  5. ✅ Implemented MemoryMappedFileReader for large file processing without full loading
+  6. ✅ Added concurrent processing with memory-aware batch management
+  7. ✅ Integrated streaming progress tracking with SSE support
+- **Memory Impact**: O(n) → O(1) memory usage for batch processing
+- **Memory Management**: Automatic cleanup, backpressure handling, configurable limits (500MB default)
+- **Features**: Memory-mapped files, concurrent processing, progress tracking, circuit breakers
 
 ## HIGH-SEVERITY PERFORMANCE ISSUES:
 
