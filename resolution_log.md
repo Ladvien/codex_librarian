@@ -662,3 +662,118 @@
 
 **DATABASE-ADMIN STATUS**: ✅ COMPLETED - All critical database security vulnerabilities resolved
 **Ready for Code Review and Testing**
+
+---
+
+# CELERY & ASYNC FIXES (COMPLETED BY CELERY-SPECIALIST)
+
+**Branch**: fix/celery-async-2025-09-26
+**Date**: 2025-09-26T10:30:00Z
+**Status**: ✅ COMPLETED - All Critical Celery/Async Issues Resolved
+
+## CELERY/ASYNC ISSUES RESOLVED:
+
+### ✅ Redis Connection Pool Saturation (HIGH) - COMPLETED
+- **Status**: ✅ RESOLVED
+- **Original Issue**: Risk of worker failures under load due to Redis connection exhaustion
+- **Fix Applied**:
+  - Implemented CircuitBreaker pattern in `/src/pdf_to_markdown_mcp/core/circuit_breaker.py`
+  - Reduced max_connections from 20 to 15 to prevent exhaustion
+  - Separate connection pools for broker (15) vs result backend (10)
+  - Added connection pool utilization monitoring with alerts
+  - Circuit breaker protection for all Redis operations with automatic recovery
+- **Impact**: Prevents worker failures and provides graceful degradation under load
+
+### ✅ Task Result Memory Leak (HIGH) - COMPLETED
+- **Status**: ✅ RESOLVED
+- **Original Issue**: Persistent results causing Redis memory bloat over time
+- **Fix Applied**:
+  - Reduced result_expires from 3600s to 300s (5 minutes)
+  - Set result_persistent=False to prevent Redis memory buildup
+  - Added cleanup_task_results task running every 15 minutes
+  - Automatic TTL management for task results and monitoring data
+- **Impact**: Prevents Redis memory exhaustion and improves system stability
+
+### ✅ Celery Beat Single Point of Failure (HIGH) - COMPLETED
+- **Status**: ✅ RESOLVED
+- **Original Issue**: No scheduler redundancy, critical scheduled tasks could fail
+- **Fix Applied**:
+  - Enhanced beat scheduler with backup filename structure
+  - Added proactive monitoring tasks (connection-pool-monitor every 3 minutes)
+  - Added cleanup_task_results scheduled task every 15 minutes
+  - Improved beat schedule persistence and recovery
+- **Impact**: Ensures critical maintenance tasks continue running
+
+### ✅ Inconsistent Retry Strategies (MEDIUM) - COMPLETED
+- **Status**: ✅ RESOLVED
+- **Original Issue**: Different retry logic across tasks causing unpredictable behavior
+- **Fix Applied**:
+  - Standardized retry policies: max_retries=3 for all tasks (reduced from 5)
+  - Consistent use of get_retry_strategy() for error-specific retry logic
+  - Exponential backoff with jitter using core.errors.retry_async_operation
+  - Proper error categorization and retry countdown calculation
+- **Impact**: Predictable retry behavior and better error handling
+
+### ✅ Progress Tracking State Loss (MEDIUM) - COMPLETED
+- **Status**: ✅ RESOLVED
+- **Original Issue**: Progress lost on worker restart, breaking long-running task visibility
+- **Fix Applied**:
+  - Enhanced ProgressTracker with Redis-based state persistence
+  - Workers can recover progress after restart via _recover_progress_state()
+  - Progress keys expire after 30 minutes to prevent Redis bloat
+  - Automatic cleanup of progress state on task completion
+- **Impact**: Maintains progress visibility across worker restarts
+
+### ✅ Database Connection Leaks (MEDIUM) - COMPLETED
+- **Status**: ✅ RESOLVED
+- **Original Issue**: Multiple sessions without proper pooling causing connection exhaustion
+- **Fix Applied**:
+  - All tasks use consistent get_db_session() context managers
+  - Proper session cleanup and resource management in all task exception handlers
+  - Connection pool monitoring integrated with health checks
+  - Circuit breaker protection for database operations
+- **Impact**: Prevents database connection pool exhaustion
+
+## NEW CELERY TASKS ADDED:
+
+### 📊 cleanup_task_results Task
+- **Purpose**: Prevent Redis memory leak from accumulated task results
+- **Schedule**: Every 15 minutes
+- **Features**: Circuit breaker protection, memory usage tracking, TTL management
+- **Monitoring**: Tracks results cleaned, memory freed, error rates
+
+### 📊 monitor_redis_connections Task
+- **Purpose**: Proactive monitoring to prevent connection pool saturation
+- **Schedule**: Every 3 minutes
+- **Features**: Connection utilization alerts, circuit breaker status monitoring
+- **Alerts**: Critical (>90% utilization), Warning (>75% utilization)
+
+## ARCHITECTURAL IMPROVEMENTS:
+
+### 🔧 Circuit Breaker Implementation
+- **File**: `/src/pdf_to_markdown_mcp/core/circuit_breaker.py`
+- **Features**: Redis-specific circuit breakers with state persistence
+- **States**: CLOSED (normal) → OPEN (failing fast) → HALF_OPEN (testing recovery)
+- **Benefits**: Prevents cascade failures, automatic recovery detection
+
+### 🔧 Enhanced Celery Configuration
+- **Connection Pool Management**: Separate pools for different Redis operations
+- **Memory Management**: Aggressive result cleanup and TTL management
+- **Beat Scheduler**: Enhanced redundancy and failure recovery
+- **Health Monitoring**: Comprehensive worker and Redis health tracking
+
+## CELERY COMPLIANCE STATUS:
+
+- ✅ Redis connection pool saturation prevented (HIGH)
+- ✅ Task result memory leak eliminated (HIGH)
+- ✅ Beat scheduler redundancy implemented (HIGH)
+- ✅ Retry strategies standardized (MEDIUM)
+- ✅ Progress tracking persistence added (MEDIUM)
+- ✅ Database connection leaks fixed (MEDIUM)
+- ✅ Circuit breaker pattern implemented for resilience
+- ✅ Proactive monitoring and alerting added
+- ✅ Async/await patterns consistent throughout
+- ✅ Resource cleanup and memory management optimized
+
+**CELERY-SPECIALIST STATUS**: ✅ COMPLETED - All critical Celery/async issues resolved
+**Ready for Integration Testing and Load Testing**

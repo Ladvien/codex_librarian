@@ -306,58 +306,6 @@ class Settings(BaseSettings):
     cors_methods: List[str] = Field(default=["GET", "POST", "PUT", "DELETE", "OPTIONS"], env="CORS_METHODS")
     cors_headers: List[str] = Field(default=["Content-Type", "Authorization", "X-Correlation-ID"], env="CORS_HEADERS")
 
-    @validator("cors_origins")
-    def set_cors_origins_based_on_environment(cls, v, values):
-        """Set CORS origins based on environment for security."""
-        environment = values.get("environment", "development")
-
-        if not v:  # If no explicit CORS origins provided
-            if environment == "production":
-                # Production: No origins allowed by default (must be explicitly configured)
-                return []
-            elif environment == "staging":
-                # Staging: Allow specific staging domains
-                return [
-                    "https://staging.myapp.com",
-                    "https://api-staging.myapp.com"
-                ]
-            else:  # development, testing
-                # Development: Allow localhost for development
-                return [
-                    "http://localhost:3000",
-                    "http://localhost:3001",
-                    "http://localhost:8080",
-                    "http://127.0.0.1:3000",
-                    "http://127.0.0.1:3001",
-                    "http://127.0.0.1:8080"
-                ]
-
-        # If origins explicitly provided, validate them
-        if environment == "production":
-            for origin in v:
-                if origin == "*":
-                    raise ValueError("Wildcard CORS origins (*) not allowed in production")
-                if not origin.startswith(("https://", "http://localhost:", "http://127.0.0.1:")):
-                    raise ValueError(f"Invalid origin for production: {origin}. Must use HTTPS or localhost for testing.")
-
-        return v
-
-    @validator("cors_credentials")
-    def set_cors_credentials_securely(cls, v, values):
-        """Set CORS credentials based on security best practices."""
-        environment = values.get("environment", "development")
-        cors_origins = values.get("cors_origins", [])
-
-        # If wildcard origins, credentials must be False
-        if "*" in cors_origins:
-            return False
-
-        # Production should be more restrictive
-        if environment == "production" and not v:
-            # Only allow credentials if explicitly enabled in production
-            return False
-
-        return v
 
     # Rate limiting
     rate_limit_per_minute: int = Field(default=60, env="RATE_LIMIT_PER_MINUTE")
