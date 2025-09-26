@@ -17,9 +17,11 @@ from sqlalchemy.orm import Session
 
 from pdf_to_markdown_mcp.models.request import ConvertSingleRequest, BatchConvertRequest
 from pdf_to_markdown_mcp.models.response import ConvertSingleResponse, BatchConvertResponse, ErrorResponse, ErrorType
+from pdf_to_markdown_mcp.models.dto import CreateDocumentDTO, DocumentDTO
 from pdf_to_markdown_mcp.db.session import get_db
-from pdf_to_markdown_mcp.db.models import Document
 from pdf_to_markdown_mcp.core.processor import PDFProcessor
+from pdf_to_markdown_mcp.core.dependencies import get_database_service
+from pdf_to_markdown_mcp.services.database import VectorDatabaseService
 from pdf_to_markdown_mcp.worker.tasks import process_pdf_document, process_pdf_batch
 from pdf_to_markdown_mcp.auth.security import RequireAuth, validate_path_security, validate_file_security
 
@@ -31,7 +33,7 @@ router = APIRouter()
 async def convert_single_pdf(
     request: ConvertSingleRequest,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
+    db_service: VectorDatabaseService = Depends(get_database_service),
     authenticated: bool = RequireAuth
 ) -> ConvertSingleResponse:
     """
@@ -58,12 +60,12 @@ async def convert_single_pdf(
         file_hash = _calculate_file_hash(validated_path)
 
         # Check if file already processed (based on hash)
-        existing_doc = db.query(Document).filter(Document.file_hash == file_hash).first()
+        existing_doc = await db_service.find_document_by_hash(file_hash)
 
         if existing_doc:
             logger.info(
                 f"Document already exists with hash {file_hash}",
-                extra={"document_id": existing_doc.id, "status": existing_doc.conversion_status}
+                extra={"document_id": existing_doc.id, "status": existing_doc.processing_status}
             )
 
             # Return existing document info
