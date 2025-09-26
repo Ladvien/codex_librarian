@@ -1,20 +1,8 @@
-# ==============================================================================
-# PDF to Markdown MCP Server - .gitignore
-# ==============================================================================
-
-# ==============================================================================
 # Python
-# ==============================================================================
-
-# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
-
-# Distribution / packaging
 .Python
 build/
 develop-eggs/
@@ -28,323 +16,57 @@ parts/
 sdist/
 var/
 wheels/
-share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
 MANIFEST
 
-# PyInstaller
-*.manifest
-*.spec
-
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
-cover/
-
-# Translations
-*.mo
-*.pot
-
-# ==============================================================================
-# Environment Files & Virtual Environments
-# ==============================================================================
-
-# Environment files
+# Virtual environments
+venv/
+.venv/
+ENV/
+env/
 .env
 .env.local
-.env.*.local
-.envrc
+.env.test
+.env.production
 
-# Virtual environments
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# ==============================================================================
-# Package Managers
-# ==============================================================================
-
-# UV
-uv.lock
-
-# Poetry
-poetry.lock
-
-# PDM
-pdm.lock
-.pdm.toml
-.pdm-python
-.pdm-build/
-
-# Pipenv
-Pipfile.lock
-
-# PEP 582
-__pypackages__/
-
-# ==============================================================================
-# FastAPI & Web Framework Specific
-# ==============================================================================
-
-# FastAPI static files
-static/
-media/
-
-# Session files
-sessions/
-
-# SSL certificates
-*.pem
-*.key
-*.crt
-*.csr
-
-# API documentation build
-docs/build/
-docs/_build/
-
-# ==============================================================================
-# Database & Storage
-# ==============================================================================
-
-# SQLite databases
-*.db
-*.sqlite
-*.sqlite3
-db.sqlite3
-db.sqlite3-journal
-test.db
-
-# PostgreSQL dumps
-*.sql
-
-# Database migrations (if auto-generated)
-# alembic/versions/*.py (uncomment if using auto-generated migrations)
-
-# ==============================================================================
-# Task Queue & Caching
-# ==============================================================================
-
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
-celery-worker.pid
-dump.rdb
-
-# Redis dumps
-*.rdb
-
-# ==============================================================================
-# PDF Processing & File Handling
-# ==============================================================================
-
-# Temporary processing files
-temp/
-tmp/
-/tmp/
-temp_files/
-temp_processing/
-
-# PDF processing cache
-mineru_cache/
-pdf_cache/
-
-# Extracted content
-extracted/
-processed/
-
-# Large files and uploads
-uploads/
-*.pdf.bak
-
-# ==============================================================================
-# Development & IDE
-# ==============================================================================
-
-# IDEs
-.idea/
+# IDE
 .vscode/
+.idea/
 *.swp
 *.swo
 *~
-
-# OS generated files
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
 
-# ==============================================================================
-# Logging & Monitoring
-# ==============================================================================
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
 
-# Log files
-*.log
-logs/
-app.log
-*.log.*
-
-# Monitoring data
-prometheus_data/
-grafana_data/
-
-# ==============================================================================
-# Code Quality Tools
-# ==============================================================================
-
-# MyPy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Ruff
-.ruff_cache/
-
-# Pyre type checker
-.pyre/
-
-# pytype static type analyzer
-.pytype/
-
-# Bandit security linter
-.bandit
-
-# ==============================================================================
-# Jupyter & Scientific Computing
-# ==============================================================================
-
-# Jupyter Notebook
+# Jupyter
 .ipynb_checkpoints
-*.ipynb_checkpoints/
 
-# IPython
-profile_default/
-ipython_config.py
+# MinerU
+/tmp/mineru_*/
 
-# ==============================================================================
-# Documentation
-# ==============================================================================
-
-# Sphinx documentation
-docs/_build/
-docs/build/
-/site
-
-# MkDocs
-site/
-
-# ==============================================================================
-# Deployment & Docker
-# ==============================================================================
-
-# Docker
-.dockerignore.old
-docker-compose.override.yml
-docker-compose.local.yml
-.docker/
-
-# Kubernetes
-k8s-secrets/
-*.kubeconfig
-
-# Terraform
-*.tfstate
-*.tfstate.backup
-.terraform/
-
-# ==============================================================================
-# Security & Secrets
-# ==============================================================================
-
-# API keys and secrets
-.secrets
-secrets/
-.env.production
-.env.staging
-
-# SSH keys
-id_rsa
-id_ed25519
-*.ppk
-
-# PyPI configuration
-.pypirc
-
-# ==============================================================================
-# Project-Specific
-# ==============================================================================
-
-# Output directories as per CLAUDE.md rules
-output/
-librarian_output/
-
-# Model files
-/models
-model_cache/
-
-# Legacy files
-talking.log
+# Project specific
+watch_pdf_test_output/
+*.log
+.monitor_state.json
 
 # Backup files
 *.bak
-*.backup
-*~
+*.old
+*.tmp
+*_backup.*
 
-# ==============================================================================
-# Testing
-# ==============================================================================
+# Database
+*.db
+*.sqlite3
 
-# Test databases
-test_*.db
-test_*.sqlite
-
-# Test outputs
-test_output/
-test_results/
-
-# Manual testing directories (may contain copyrighted PDFs)
-watch_pdf_test/
-watch_pdf_test_output/
-*.pdf
-*.PDF
-
-# Test service files
-watch_test.pid
-watch_test.log
-watch_test_service.py
-.env.test
-
-# ==============================================================================
-# Performance & Profiling
-# ==============================================================================
-
-# Profiling data
-.prof
-*.profile
-profiling_data/
-
-# Memory dumps
-*.dump
-*.hprof
+# Keep example env files
+!.env.example
+!.env.test.example
