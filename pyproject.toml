@@ -29,19 +29,24 @@ dependencies = [
     "pydantic[email]==2.11.9", # Exact: Ensures serialization consistency
     "pydantic-settings~=2.6.1", # Compatible: Config parsing is stable
     "uvicorn[standard]~=0.30.6", # Compatible: ASGI server updates OK
+    # IMPORTANT: transformers pinned to 4.45.2 for MinerU 2.0.6 compatibility
+    # MinerU formula recognition fails with transformers>=4.46 due to cache_position parameter
+    # See [tool.uv] section below for dependency override
+    "transformers==4.45.2", # Exact: MinerU MFR model compatibility
+    "tokenizers>=0.20,<0.21", # Compatible: Required by transformers 4.45.2
     # Database & Vector Storage - Conservative pinning for data integrity
     "sqlalchemy==2.0.43", # Exact: Major version boundary, ORM changes
     "psycopg2-binary~=2.9.9", # Compatible: Mature PostgreSQL driver
     "pgvector==0.4.1", # Exact: Specialized extension, breaking changes likely
     "alembic~=1.13.3", # Compatible: Migration tool, stable API
     # PDF Processing - Exact for consistent output
-    "mineru==2.0.6", # Exact: Core functionality, output consistency critical
+    "mineru[core]==2.0.6", # Exact: Core functionality with ML dependencies, output consistency critical
     # Task Queue & Background Processing - Stable, allow updates
     "celery~=5.5.3", # Compatible: Mature task queue system
     "redis~=5.2.0", # Compatible: Stable key-value store
     # AI/ML & Embeddings - Mixed strategy based on stability
     "ollama>=0.3.3", # Compatible: Allow updates for dependency resolution
-    "openai~=1.54.4", # Compatible: SDK handles API versioning well
+    "openai>=1.70.0,<2", # Compatible: Required by mineru[core]==2.0.6
     "numpy~=2.1.3", # Compatible: Computational library, stable
     "scipy~=1.14.1", # Compatible: Scientific computing, mature
     # File System Monitoring - Allow updates
@@ -55,6 +60,7 @@ dependencies = [
     # hashlib-compat removed - package not found in registry
     # streamlit removed - not used in MCP server, template artifact
     "psutil>=7.1.0",
+    "python-dotenv (>=1.1.1,<2.0.0)",
 ]
 
 [project.urls]
@@ -267,3 +273,10 @@ dev = [
     "pytest-mock>=3.14.1",
     "ruff>=0.13.1",
 ]
+
+# UV Configuration
+[tool.uv]
+# Override MinerU's incorrect transformers dependency declaration
+# MinerU 2.0.6 declares transformers>=4.51.1 but actually requires <4.46
+# to avoid cache_position parameter errors in UnimerMBART model
+override-dependencies = ["transformers==4.45.2"]

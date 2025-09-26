@@ -46,26 +46,47 @@ MAX_RETRIES = int(os.environ.get("DB_MAX_RETRIES", "3"))
 RETRY_DELAY = float(os.environ.get("DB_RETRY_DELAY", "1.0"))
 RETRY_BACKOFF_FACTOR = float(os.environ.get("DB_RETRY_BACKOFF_FACTOR", "2.0"))
 
-# Advanced engine configuration with enhanced connection pooling
-engine = create_engine(
-    DATABASE_URL,
-    poolclass=QueuePool,
-    pool_size=POOL_SIZE,
-    max_overflow=MAX_OVERFLOW,
-    pool_pre_ping=POOL_PRE_PING,
-    pool_recycle=POOL_RECYCLE,
-    pool_timeout=POOL_TIMEOUT,
-    echo=SQL_ECHO,
-    # Connection arguments for PostgreSQL optimization
-    connect_args={
+# Determine connection arguments based on database type
+connect_args = {}
+if DATABASE_URL.startswith("postgresql"):
+    # PostgreSQL-specific connection arguments
+    connect_args = {
         "connect_timeout": CONNECT_TIMEOUT,
         "application_name": "pdf_to_markdown_mcp",
         "options": "-c statement_timeout=300000",  # 5 minutes
-    },
-    # Additional engine options
-    future=True,
-    isolation_level="READ_COMMITTED",
-)
+    }
+elif DATABASE_URL.startswith("sqlite"):
+    # SQLite-specific connection arguments
+    connect_args = {
+        "check_same_thread": False,  # Allow SQLite to be used across threads
+    }
+
+# Build engine configuration based on database type
+engine_kwargs = {
+    "echo": SQL_ECHO,
+    "connect_args": connect_args,
+    "future": True,
+}
+
+if DATABASE_URL.startswith("postgresql"):
+    # PostgreSQL-specific configuration
+    engine_kwargs.update({
+        "poolclass": QueuePool,
+        "pool_size": POOL_SIZE,
+        "max_overflow": MAX_OVERFLOW,
+        "pool_pre_ping": POOL_PRE_PING,
+        "pool_recycle": POOL_RECYCLE,
+        "pool_timeout": POOL_TIMEOUT,
+        "isolation_level": "READ_COMMITTED",
+    })
+elif DATABASE_URL.startswith("sqlite"):
+    # SQLite-specific configuration
+    engine_kwargs.update({
+        "pool_pre_ping": POOL_PRE_PING,
+    })
+
+# Create the engine
+engine = create_engine(DATABASE_URL, **engine_kwargs)
 
 # Session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

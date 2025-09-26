@@ -38,8 +38,10 @@ logger = logging.getLogger(__name__)
 # File size limit (500MB as per architecture)
 MAX_FILE_SIZE_BYTES = 500 * 1024 * 1024
 
-# Processing timeout (5 minutes as per architecture)
-PROCESSING_TIMEOUT_SECONDS = 5 * 60
+# Processing timeout (20 minutes for large PDFs with OCR)
+# Note: OCR is CPU-only until paddlepaddle-gpu is installed
+# Large PDFs (200+ pages) can take 10-15 minutes with CPU OCR
+PROCESSING_TIMEOUT_SECONDS = 20 * 60
 
 # Streaming threshold - use streaming for files > 25MB (reduced from 50MB for memory safety)
 STREAMING_THRESHOLD_BYTES = 25 * 1024 * 1024
@@ -68,33 +70,25 @@ class MinerUService:
 
         # Import MinerU components (delayed import to handle missing dependencies)
         try:
-            from mineru.api import MinerUAPI
-            from mineru.config import MinerUConfig
-            from mineru.data_types import LayoutMode, OCRLanguage
+            from mineru.cli.common import do_parse, read_fn
+            from mineru.utils.enum_class import MakeMode
 
-            self.MinerUAPI = MinerUAPI
-            self.MinerUConfig = MinerUConfig
-            self.LayoutMode = LayoutMode
-            self.OCRLanguage = OCRLanguage
+            self.do_parse = do_parse
+            self.read_fn = read_fn
+            self.MakeMode = MakeMode
             self._mineru_available = True
 
         except ImportError as e:
             self.logger.error("MinerU library not available: %s", e)
-            self.MinerUAPI = None
-            self.MinerUConfig = None
-            self.LayoutMode = None
-            self.OCRLanguage = None
+            self.do_parse = None
+            self.read_fn = None
+            self.MakeMode = None
             self._mineru_available = False
 
-            # Fail fast in production mode
-            if settings.environment == "production" and not settings.mock_services:
-                if not self._mineru_available:
-                    raise processing_error(
-                        "MinerU library not available in production environment. "
-                        "Please install MinerU or enable mock services for development.",
-                        "dependency_validation",
-                        "DEPENDENCY_MISSING",
-                    )
+            if not self._mineru_available:
+                raise processing_error(
+                    "MinerU library not available. Please install MinerU."
+                )
 
     def validate_mineru_dependency(self) -> bool:
         """
@@ -110,16 +104,12 @@ class MinerUService:
         Validate that production requirements are met.
 
         Raises:
-            ProcessingError: If MinerU is not available in production
+            ProcessingError: If MinerU is not available
         """
-        if settings.environment == "production" and not settings.mock_services:
-            if not self._mineru_available:
-                raise processing_error(
-                    "MinerU library not available in production environment. "
-                    "Please install MinerU or enable mock services for development.",
-                    "dependency_validation",
-                    "DEPENDENCY_MISSING",
-                )
+        if not self._mineru_available:
+            raise processing_error(
+                "MinerU library not available. Please install MinerU."
+            )
 
     async def process_pdf(
         self, pdf_path: Path, options: ProcessingOptions
@@ -252,7 +242,7 @@ class MinerUService:
             self.logger.error("PDF processing timeout: %s", pdf_path)
             raise ProcessingError(
                 f"Processing timeout exceeded {PROCESSING_TIMEOUT_SECONDS}s",
-                pdf_path=str(pdf_path),
+                file_path=str(pdf_path),
                 error_code="TIMEOUT",
             )
         except ValidationError:
@@ -263,7 +253,7 @@ class MinerUService:
                 await progress_tracker.set_completion(success=False, error=str(e))
             self.logger.exception("PDF processing failed: %s", pdf_path)
             raise processing_error(
-                f"PDF processing failed: {e!s}", str(pdf_path), "mineru_processing"
+                f"PDF processing failed: {e!s}"
             )
 
     async def validate_pdf_file(self, pdf_path: Path) -> bool:
@@ -326,7 +316,7 @@ class MinerUService:
 
         return True
 
-    def _get_mineru_config(self, options: ProcessingOptions) -> Any:
+    def _get_mineru_config(self, options: ProcessingOptions) -> dict[str, Any]:
         """
         Generate MinerU configuration from processing options.
 
@@ -334,149 +324,134 @@ class MinerUService:
             options: Processing options
 
         Returns:
-            MinerU configuration object
+            Dictionary with do_parse parameters
         """
-        if not self.MinerUConfig:
-            # Mock configuration for testing
-            return type(
-                "MockConfig",
-                (),
-                {
-                    "layout_mode": "preserve" if options.preserve_layout else "auto",
-                    "ocr_language": options.ocr_language,
-                    "extract_tables": options.extract_tables,
-                    "extract_formulas": options.extract_formulas,
-                    "extract_images": options.extract_images,
-                    "chunk_for_embeddings": options.chunk_for_embeddings,
-                },
-            )()
-
-        # Real MinerU configuration
-        layout_mode = (
-            self.LayoutMode.PRESERVE
-            if options.preserve_layout
-            else self.LayoutMode.AUTO
-        )
-
-        # Map language codes to MinerU OCR languages
-        ocr_language_map = {
-            "eng": self.OCRLanguage.ENGLISH,
-            "chi_sim": self.OCRLanguage.CHINESE_SIMPLIFIED,
-            "chi_tra": self.OCRLanguage.CHINESE_TRADITIONAL,
-            "fra": self.OCRLanguage.FRENCH,
-            "deu": self.OCRLanguage.GERMAN,
-            "spa": self.OCRLanguage.SPANISH,
-            "jpn": self.OCRLanguage.JAPANESE,
-            "kor": self.OCRLanguage.KOREAN,
+        # Map language codes to MinerU language strings
+        language_map = {
+            "eng": "en",
+            "chi_sim": "ch",
+            "chi_tra": "chinese_cht",
+            "fra": "en",  # MinerU doesn't have French, fallback to English
+            "deu": "en",  # MinerU doesn't have German, fallback to English
+            "spa": "en",  # MinerU doesn't have Spanish, fallback to English
+            "jpn": "japan",
+            "kor": "korean",
         }
 
-        ocr_language = ocr_language_map.get(
-            options.ocr_language, self.OCRLanguage.ENGLISH
-        )
+        mineru_lang = language_map.get(options.ocr_language, "en")
 
-        return self.MinerUConfig(
-            layout_mode=layout_mode,
-            ocr_language=ocr_language,
-            extract_tables=options.extract_tables,
-            extract_formulas=options.extract_formulas,
-            extract_images=options.extract_images,
-            chunk_for_embeddings=options.chunk_for_embeddings,
-        )
+        return {
+            "backend": "pipeline",
+            "parse_method": "auto",
+            "p_formula_enable": options.extract_formulas,
+            "p_table_enable": options.extract_tables,
+            "p_lang": mineru_lang,
+            "f_dump_md": True,
+            "f_dump_middle_json": True,
+            "f_dump_content_list": False,
+            "f_dump_model_output": False,
+            "f_dump_orig_pdf": False,
+            "f_draw_layout_bbox": False,
+            "f_draw_span_bbox": False,
+            "f_make_md_mode": self.MakeMode.MM_MD if self.MakeMode else None,
+        }
 
     async def _process_with_mineru(
-        self, pdf_path: Path, config: Any
+        self, pdf_path: Path, config: dict[str, Any]
     ) -> ProcessingResult:
         """
         Internal method to process PDF with MinerU.
 
         Args:
             pdf_path: Path to PDF file
-            config: MinerU configuration
+            config: MinerU configuration dictionary
 
         Returns:
             ProcessingResult
         """
-        if not self.MinerUAPI:
-            # Validate production requirements before mock processing
-            if settings.environment == "production" and not settings.mock_services:
-                raise processing_error(
-                    "MinerU library not available in production environment",
-                    "dependency_validation",
-                    "DEPENDENCY_MISSING",
-                )
-            # Mock processing for testing/development only
-            return self._mock_mineru_processing(pdf_path, config)
+        if not self.do_parse:
+            raise processing_error(
+                "MinerU library not available"
+            )
 
-        # Real MinerU processing
-        api = self.MinerUAPI(config)
+        # Create temporary output directory
+        import tempfile
+        output_dir = Path(tempfile.mkdtemp(prefix="mineru_"))
 
-        # Process the PDF
-        result = await api.process_pdf(str(pdf_path))
+        try:
+            # Read PDF bytes
+            pdf_bytes = self.read_fn(pdf_path)
+            pdf_file_name = pdf_path.stem
 
-        return result
+            # Run MinerU parsing in thread pool (it's CPU-bound)
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                self.do_parse,
+                str(output_dir),
+                [pdf_file_name],
+                [pdf_bytes],
+                [config["p_lang"]],
+                config["backend"],
+                config["parse_method"],
+                config["p_formula_enable"],
+                config["p_table_enable"],
+                None,  # server_url
+                config["f_draw_layout_bbox"],
+                config["f_draw_span_bbox"],
+                config["f_dump_md"],
+                config["f_dump_middle_json"],
+                config["f_dump_model_output"],
+                config["f_dump_orig_pdf"],
+                config["f_dump_content_list"],
+                config["f_make_md_mode"],
+                0,  # start_page_id
+                None,  # end_page_id
+            )
 
-    def _mock_mineru_processing(self, pdf_path: Path, config: Any) -> ProcessingResult:
-        """
-        Mock MinerU processing for testing/development.
+            # Read generated markdown
+            md_dir = output_dir / pdf_file_name / config["parse_method"]
+            md_file = md_dir / f"{pdf_file_name}.md"
 
-        Args:
-            pdf_path: Path to PDF file
-            config: MinerU configuration
+            if not md_file.exists():
+                raise processing_error(f"MinerU did not generate markdown file: {md_file}")
 
-        Returns:
-            Mock ProcessingResult
-        """
-        self.logger.warning(
-            "Using mock MinerU processing (MinerU library not available) - "
-            "Environment: %s, Mock Services: %s",
-            settings.environment,
-            settings.mock_services,
-        )
+            markdown_content = md_file.read_text(encoding="utf-8")
 
-        # Generate file hash
-        file_hash = self._calculate_file_hash(pdf_path)
-        file_size = pdf_path.stat().st_size
+            # Extract plain text (strip markdown)
+            plain_text = self._markdown_to_plain_text(markdown_content)
 
-        # Mock processing metadata
-        metadata = ProcessingMetadata(
-            pages=1,
-            processing_time_ms=1500,
-            ocr_confidence=0.95,
-            file_size_bytes=file_size,
-            file_hash=file_hash,
-            tables_found=0,
-            formulas_found=0,
-            images_found=0,
-            chunks_created=0,
-            text_extraction_quality=0.98,
-            layout_preservation_quality=0.92,
-            language_detected="en",
-            mineru_version="mock-0.1.0",
-            processing_options={
-                "layout_mode": config.layout_mode,
-                "ocr_language": config.ocr_language,
-                "extract_tables": config.extract_tables,
-                "extract_formulas": config.extract_formulas,
-                "extract_images": config.extract_images,
-            },
-        )
+            # Try to read middle JSON for metadata
+            middle_json_file = md_dir / f"{pdf_file_name}_middle.json"
+            page_count = 1
+            if middle_json_file.exists():
+                import json
+                middle_json = json.loads(middle_json_file.read_text(encoding="utf-8"))
+                page_count = len(middle_json.get("pdf_info", []))
 
-        # Mock content
-        filename = pdf_path.name
-        markdown_content = (
-            f"# {filename}\n\nThis is mock content extracted from {filename}."
-        )
-        plain_text = f"{filename}\n\nThis is mock content extracted from {filename}."
+            # Create processing result
+            file_hash = self._calculate_file_hash(pdf_path)
+            file_size = pdf_path.stat().st_size
 
-        return ProcessingResult(
-            markdown_content=markdown_content,
-            plain_text=plain_text,
-            extracted_tables=[],
-            extracted_formulas=[],
-            extracted_images=[],
-            chunk_data=[],
-            processing_metadata=metadata,
-        )
+            metadata = ProcessingMetadata(
+                file_hash=file_hash,
+                file_size_bytes=file_size,
+                pages=page_count,
+                processing_time_ms=0,  # Will be updated by caller
+                mineru_version="2.0+",
+            )
+
+            return ProcessingResult(
+                markdown_content=markdown_content,
+                plain_text=plain_text,
+                processing_metadata=metadata,
+            )
+
+        finally:
+            # Clean up temporary directory
+            import shutil
+            if output_dir.exists():
+                shutil.rmtree(output_dir, ignore_errors=True)
 
     def _generate_chunks(
         self, text: str, chunk_size: int, overlap: int
@@ -541,6 +516,52 @@ class MinerUService:
         # Rough estimation: 1 token ≈ 4 characters (GPT-style tokenization)
         return max(1, len(text) // 4)
 
+    def _markdown_to_plain_text(self, markdown: str) -> str:
+        """
+        Convert markdown to plain text by stripping formatting.
+
+        Args:
+            markdown: Markdown content
+
+        Returns:
+            Plain text content
+        """
+        import re
+
+        text = markdown
+
+        # Remove code blocks
+        text = re.sub(r"```[\s\S]*?```", "", text)
+        text = re.sub(r"`[^`]+`", "", text)
+
+        # Remove headers
+        text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
+
+        # Remove links but keep text
+        text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)
+
+        # Remove images
+        text = re.sub(r"!\[([^\]]*)\]\([^\)]+\)", "", text)
+
+        # Remove bold/italic
+        text = re.sub(r"\*\*([^\*]+)\*\*", r"\1", text)
+        text = re.sub(r"\*([^\*]+)\*", r"\1", text)
+        text = re.sub(r"__([^_]+)__", r"\1", text)
+        text = re.sub(r"_([^_]+)_", r"\1", text)
+
+        # Remove list markers
+        text = re.sub(r"^\s*[-*+]\s+", "", text, flags=re.MULTILINE)
+        text = re.sub(r"^\s*\d+\.\s+", "", text, flags=re.MULTILINE)
+
+        # Remove horizontal rules
+        text = re.sub(r"^[-*_]{3,}\s*$", "", text, flags=re.MULTILINE)
+
+        # Clean up extra whitespace
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        text = text.strip()
+
+        return text
+
     def _calculate_file_hash(self, file_path: Path) -> str:
         """
         Calculate SHA-256 hash of file.
@@ -598,7 +619,7 @@ class MinerUService:
 
     def __repr__(self) -> str:
         """Detailed string representation."""
-        return f"MinerUService(config={self.config}, mineru_available={self.MinerUAPI is not None})"
+        return f"MinerUService(config={self.config}, mineru_available={self.do_parse is not None})"
 
     async def _validate_pdf_file_streaming(
         self,
@@ -695,7 +716,7 @@ class MinerUService:
     async def _process_with_mineru_streaming(
         self,
         pdf_path: Path,
-        config: Any,
+        config: dict[str, Any],
         output_dir: Path | None = None,
         progress_tracker: StreamingProgressTracker | None = None,
     ) -> ProcessingResult:
@@ -704,161 +725,23 @@ class MinerUService:
 
         Args:
             pdf_path: Path to PDF file
-            config: MinerU configuration
+            config: MinerU configuration dictionary
             output_dir: Optional output directory
             progress_tracker: Progress tracker for updates
 
         Returns:
             ProcessingResult
         """
-        if not self.MinerUAPI:
-            # Validate production requirements before mock processing
-            if settings.environment == "production" and not settings.mock_services:
-                raise processing_error(
-                    "MinerU library not available in production environment",
-                    "dependency_validation",
-                    "DEPENDENCY_MISSING",
-                )
-            # Use mock processing with streaming simulation for development only
-            return await self._mock_mineru_processing_streaming(
-                pdf_path, config, progress_tracker
-            )
-
-        # Real MinerU processing with streaming
-        api = self.MinerUAPI(config)
-
         if progress_tracker:
             await progress_tracker.update_progress(
                 bytes_processed=0, current_step="Initializing MinerU processing"
             )
 
-        # Process the PDF with progress tracking
-        # Note: Real MinerU integration would provide progress callbacks
-        result = await api.process_pdf(str(pdf_path))
+        # Use the same processing logic as non-streaming
+        # MinerU doesn't provide streaming progress callbacks
+        result = await self._process_with_mineru(pdf_path, config)
 
         return result
-
-    async def _mock_mineru_processing_streaming(
-        self,
-        pdf_path: Path,
-        config: Any,
-        progress_tracker: StreamingProgressTracker | None = None,
-    ) -> ProcessingResult:
-        """
-        Mock MinerU processing with streaming simulation.
-
-        Args:
-            pdf_path: Path to PDF file
-            config: MinerU configuration
-            progress_tracker: Progress tracker for updates
-
-        Returns:
-            Mock ProcessingResult
-        """
-        self.logger.warning(
-            "Using mock MinerU processing with streaming simulation "
-            "(MinerU library not available) - Environment: %s, Mock Services: %s",
-            settings.environment,
-            settings.mock_services,
-        )
-
-        file_size = pdf_path.stat().st_size
-
-        # Simulate streaming processing with progress updates
-        processing_steps = [
-            "Loading PDF structure",
-            "Extracting text content",
-            "Detecting tables",
-            "Processing formulas",
-            "Extracting images",
-            "Generating chunks",
-            "Finalizing output",
-        ]
-
-        bytes_per_step = file_size // len(processing_steps)
-
-        for i, step in enumerate(processing_steps):
-            if progress_tracker:
-                await progress_tracker.update_progress(
-                    bytes_processed=bytes_per_step, current_step=step
-                )
-
-            # Simulate processing time
-            await asyncio.sleep(0.2)
-
-        # Generate file hash for streaming mode
-        operation_id = f"hash_{uuid.uuid4().hex[:8]}"
-        file_hash = None
-
-        async for chunk in stream_large_file(
-            file_path=pdf_path,
-            operation_id=operation_id,
-            chunk_size=64 * 1024,  # 64KB chunks for hashing
-        ):
-            if file_hash is None:
-                import hashlib
-
-                file_hash = hashlib.sha256()
-            file_hash.update(chunk)
-
-        final_hash = file_hash.hexdigest() if file_hash else "mock_hash"
-
-        # Mock processing metadata
-        metadata = ProcessingMetadata(
-            pages=max(1, file_size // (1024 * 1024)),  # Estimate pages
-            processing_time_ms=2000,  # Simulate processing time
-            ocr_confidence=0.95,
-            file_size_bytes=file_size,
-            file_hash=final_hash,
-            tables_found=1 if config.extract_tables else 0,
-            formulas_found=2 if config.extract_formulas else 0,
-            images_found=1 if config.extract_images else 0,
-            chunks_created=0,
-            text_extraction_quality=0.98,
-            layout_preservation_quality=0.92,
-            language_detected="en",
-            mineru_version="mock-streaming-0.1.0",
-            processing_options={
-                "layout_mode": config.layout_mode,
-                "ocr_language": config.ocr_language,
-                "extract_tables": config.extract_tables,
-                "extract_formulas": config.extract_formulas,
-                "extract_images": config.extract_images,
-                "streaming_enabled": True,
-            },
-        )
-
-        # Mock content based on file size
-        filename = pdf_path.name
-        content_size = max(1000, file_size // 100)  # Estimate extracted text size
-
-        markdown_content = (
-            f"# {filename}\\n\\n"
-            f"This is mock content extracted from {filename} using streaming processing.\\n\\n"
-            f"File size: {file_size} bytes\\n"
-            f"Estimated content size: {content_size} characters\\n\\n"
-            + "Sample extracted content...\\n"
-            * (content_size // 30)
-        )
-
-        plain_text = (
-            f"{filename}\\n\\n"
-            f"This is mock content extracted from {filename} using streaming processing.\\n"
-            f"File size: {file_size} bytes\\n"
-            f"Estimated content size: {content_size} characters\\n\\n"
-            + "Sample extracted content...\\n"
-            * (content_size // 30)
-        )
-
-        return ProcessingResult(
-            markdown_content=markdown_content,
-            plain_text=plain_text,
-            extracted_tables=[],
-            extracted_formulas=[],
-            extracted_images=[],
-            chunk_data=[],
-            processing_metadata=metadata,
-        )
 
     def get_streaming_capabilities(self) -> dict[str, Any]:
         """Get information about streaming capabilities."""
@@ -874,5 +757,5 @@ class MinerUService:
                 "large_files": "1MB",
                 "hash_calculation": "64KB",
             },
-            "mineru_library_available": self.MinerUAPI is not None,
+            "mineru_library_available": self.do_parse is not None,
         }

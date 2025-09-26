@@ -14,10 +14,16 @@ You are helping develop a PDF to Markdown MCP (Model Context Protocol) server th
 - **Code Quality**: ruff, black, mypy, bandit
 - **Development OS**: Manjaro Linux
 
-## Rules
+
+## Rules Claude Code Agents Must Follow
+- YOU MUST repeat these rules at the end of each chat session.  Like a mantra.
+- YOU MUST redelpoy to production after every change.
+- YOU MUST after every change, re-run e2e tests
+- YOU MUST not use mocks, fakes, stubs.  
+- YOU MUST use poetry or uv for Python
+- YOU MUST use real test resources defined in the .env file for tests
+- YOU MUST use Web Search to check framework and module documentation frequently
 - DO NOT maintain legacy, deprecated, or backwards compatibility code.  This is a prototype.
-- Use PDFs found in these folders recursively: `/mnt/codex_fs/research/`
-- Save all test outpout to `/mnt/codex_fs/research/librarian_output/`
 
 ## Development Principles
 

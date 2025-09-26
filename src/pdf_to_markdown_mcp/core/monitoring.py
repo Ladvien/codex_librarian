@@ -71,9 +71,7 @@ except ImportError:
 
 
 # Context variable for correlation ID
-correlation_id_var: ContextVar[str | None] = ContextVar(
-    "correlation_id", default=None
-)
+correlation_id_var: ContextVar[str | None] = ContextVar("correlation_id", default=None)
 
 
 class HealthStatus(str, Enum):
@@ -277,9 +275,7 @@ class MetricsCollector:
             if PROMETHEUS_AVAILABLE:
                 self.processing_queue_gauge.labels(queue_type=queue_type).set(depth)
 
-            self.logger.debug(
-                "queue_depth_updated", queue_type=queue_type, depth=depth
-            )
+            self.logger.debug("queue_depth_updated", queue_type=queue_type, depth=depth)
 
         except Exception as e:
             self.logger.error(f"Failed to update queue depth metrics: {e}")
@@ -563,8 +559,8 @@ class HealthMonitor:
                 status = HealthStatus.HEALTHY
                 details = {"library_status": "available"}
             else:
-                status = HealthStatus.DEGRADED
-                details = {"library_status": "mock mode"}
+                status = HealthStatus.UNHEALTHY
+                details = {"library_status": "unavailable"}
 
             return ComponentHealth(
                 status=status, last_check=time.time(), details=details

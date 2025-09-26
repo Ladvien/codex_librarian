@@ -364,11 +364,6 @@ class Settings(BaseSettings):
     rate_limit_per_hour: int = Field(default=1000, env="RATE_LIMIT_PER_HOUR")
     rate_limit_burst: int = Field(default=10, env="RATE_LIMIT_BURST")
 
-    # Development settings
-    dev_mode: bool = Field(default=False, env="DEV_MODE")
-    mock_services: bool = Field(default=False, env="MOCK_SERVICES")
-    enable_debug_endpoints: bool = Field(default=False, env="ENABLE_DEBUG_ENDPOINTS")
-
     # Advanced configuration
     max_retries: int = Field(default=3, env="MAX_RETRIES")
     retry_delay_seconds: int = Field(default=5, env="RETRY_DELAY_SECONDS")

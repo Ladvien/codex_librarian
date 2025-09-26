@@ -60,23 +60,25 @@ else
     exit 1
 fi
 
-echo -e "${YELLOW}Step 2: Creating test user...${NC}"
-if user_exists "$TEST_USER"; then
-    echo -e "${YELLOW}  Test user '$TEST_USER' already exists, dropping and recreating...${NC}"
-    run_sql "DROP USER IF EXISTS $TEST_USER CASCADE;"
-fi
-
-run_sql "CREATE USER $TEST_USER WITH PASSWORD '$TEST_PASSWORD';"
-run_sql "ALTER USER $TEST_USER CREATEDB;"  # Allow creating databases for tests
-echo -e "${GREEN}✓ Created test user '$TEST_USER'${NC}"
-
-echo -e "${YELLOW}Step 3: Setting up test database...${NC}"
+echo -e "${YELLOW}Step 2: Setting up test database...${NC}"
 if db_exists "$TEST_DB_NAME"; then
     echo -e "${YELLOW}  Test database '$TEST_DB_NAME' already exists, dropping and recreating...${NC}"
     # Terminate active connections first
     run_sql "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='$TEST_DB_NAME' AND pid <> pg_backend_pid();"
     run_sql "DROP DATABASE IF EXISTS $TEST_DB_NAME;"
 fi
+
+echo -e "${YELLOW}Step 3: Creating test user...${NC}"
+if user_exists "$TEST_USER"; then
+    echo -e "${YELLOW}  Test user '$TEST_USER' already exists, dropping and recreating...${NC}"
+    run_sql "DROP USER IF EXISTS $TEST_USER;"
+fi
+
+run_sql "CREATE USER $TEST_USER WITH PASSWORD '$TEST_PASSWORD';"
+run_sql "ALTER USER $TEST_USER CREATEDB;"  # Allow creating databases for tests
+echo -e "${GREEN}✓ Created test user '$TEST_USER'${NC}"
+
+echo -e "${YELLOW}Step 4: Creating test database...${NC}"
 
 run_sql "CREATE DATABASE $TEST_DB_NAME OWNER $TEST_USER;"
 echo -e "${GREEN}✓ Created test database '$TEST_DB_NAME'${NC}"

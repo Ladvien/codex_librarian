@@ -70,8 +70,9 @@ fi
 echo -e "${YELLOW}Step 3: Testing database connection...${NC}"
 cd "$PROJECT_ROOT"
 
-# Simple Python script to test DB connection
-python3 -c "
+# Activate virtual environment and test DB connection
+source .venv/bin/activate
+python -c "
 import sys
 sys.path.insert(0, 'src')
 
@@ -223,7 +224,7 @@ echo -e "${YELLOW}Step 5: Starting watch service...${NC}"
 cd "$PROJECT_ROOT"
 
 # Start in background and capture PID
-python3 watch_test_service.py > "$LOG_FILE" 2>&1 &
+source .venv/bin/activate && python watch_test_service.py > "$LOG_FILE" 2>&1 &
 WATCH_PID=$!
 echo $WATCH_PID > "$PID_FILE"
 
