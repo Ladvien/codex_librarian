@@ -18,7 +18,6 @@ from sqlalchemy.orm import Session
 from pdf_to_markdown_mcp.models.request import ConvertSingleRequest, BatchConvertRequest
 from pdf_to_markdown_mcp.models.response import ConvertSingleResponse, BatchConvertResponse, ErrorResponse, ErrorType
 from pdf_to_markdown_mcp.models.dto import CreateDocumentDTO, DocumentDTO
-from pdf_to_markdown_mcp.db.session import get_db
 from pdf_to_markdown_mcp.core.processor import PDFProcessor
 from pdf_to_markdown_mcp.core.dependencies import get_database_service
 from pdf_to_markdown_mcp.services.database import VectorDatabaseService
@@ -79,17 +78,14 @@ async def convert_single_pdf(
                 file_size_bytes=existing_doc.file_size_bytes,
             )
 
-        # Create database record
-        document = Document(
-            source_path=str(request.file_path),
-            filename=request.file_path.name,
+        # Create database record using service layer
+        create_data = CreateDocumentDTO(
+            filename=validated_path.name,
+            file_path=str(validated_path),
             file_hash=file_hash,
-            file_size_bytes=request.file_path.stat().st_size,
-            conversion_status='pending'
+            size_bytes=file_validation["size_bytes"]
         )
-        db.add(document)
-        db.commit()
-        db.refresh(document)
+        document = await db_service.create_document(create_data)
 
         logger.info(
             f"Created document record with ID {document.id}",
@@ -117,7 +113,7 @@ async def convert_single_pdf(
 
         else:
             # Process synchronously without embeddings
-            processor = PDFProcessor(db)
+            processor = PDFProcessor(db_service)
             result = await processor.process_pdf(
                 file_path=request.file_path,
                 output_dir=request.output_dir,
@@ -175,7 +171,7 @@ async def convert_single_pdf(
 async def batch_convert_pdfs(
     request: BatchConvertRequest,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
+    db_service: VectorDatabaseService = Depends(get_database_service),
     authenticated: bool = RequireAuth
 ) -> BatchConvertResponse:
     """
@@ -220,7 +216,7 @@ async def batch_convert_pdfs(
         for file_path in pdf_files:
             try:
                 file_hash = _calculate_file_hash(file_path)
-                existing_doc = db.query(Document).filter(Document.file_hash == file_hash).first()
+                existing_doc = await db_service.find_document_by_hash(file_hash)
 
                 if existing_doc:
                     skipped_files.append({
@@ -291,6 +287,7 @@ def _calculate_file_hash(file_path: Path) -> str:
 async def stream_progress(
     job_id: str = None,
     batch_id: str = None,
+    authenticated: bool = RequireAuth
 ) -> StreamingResponse:
     """
     Stream real-time progress updates using Server-Sent Events.
@@ -352,13 +349,25 @@ async def stream_progress(
             }
             yield f"data: {json.dumps(error_data)}\n\n"
 
+    # Import settings for secure CORS configuration
+    from pdf_to_markdown_mcp.config import settings
+
+    # Set secure headers for SSE endpoint
+    secure_headers = {
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "Content-Security-Policy": "default-src 'self'",
+        "X-Frame-Options": "DENY",
+        "X-Content-Type-Options": "nosniff"
+    }
+
+    # Add CORS headers only if properly configured (not wildcard in production)
+    if settings.cors_origins and settings.cors_origins != ["*"]:
+        secure_headers["Access-Control-Allow-Origin"] = settings.cors_origins[0]
+        secure_headers["Access-Control-Allow-Headers"] = "Cache-Control, Authorization, X-Correlation-ID"
+
     return StreamingResponse(
         generate_progress_events(),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Headers": "Cache-Control",
-        }
+        headers=secure_headers
     )

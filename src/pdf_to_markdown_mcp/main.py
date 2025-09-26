@@ -27,6 +27,7 @@ from pdf_to_markdown_mcp.core.monitoring import (
     health_monitor,
     TracingManager
 )
+from pdf_to_markdown_mcp.middleware.security import SecurityHeadersMiddleware, RequestSizeMiddleware
 
 # Configure logging
 configure_logging()
@@ -168,7 +169,12 @@ app = FastAPI(
     redoc_url="/redoc" if settings.debug else None,
 )
 
-# Add middleware
+# Add security middleware (order matters - security headers should be added last)
+max_request_size = getattr(settings.processing, 'max_file_size_mb', 100) * 1024 * 1024
+app.add_middleware(RequestSizeMiddleware, max_request_size=max_request_size)
+app.add_middleware(SecurityHeadersMiddleware)
+
+# Add other middleware
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(RequestLoggingMiddleware)
 

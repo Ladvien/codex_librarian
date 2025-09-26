@@ -394,9 +394,54 @@ class Settings(BaseSettings):
     security: SecuritySettings = Field(default_factory=SecuritySettings)
     monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
 
-    @validator("cors_origins", "cors_methods", "cors_headers", pre=True)
+    @validator("cors_origins", pre=True)
+    def parse_and_secure_cors_origins(cls, v, values):
+        """Parse CORS settings and apply security-based defaults."""
+        # First, parse from JSON if it's a string
+        if isinstance(v, str):
+            try:
+                v = json.loads(v)
+            except json.JSONDecodeError:
+                v = [v]
+
+        # Get environment for security logic
+        environment = values.get("environment", "development")
+
+        # If no explicit CORS origins provided or default wildcard, apply security rules
+        if not v or v == ["*"]:
+            if environment == "production":
+                # Production: No origins allowed by default (must be explicitly configured)
+                return []
+            elif environment == "staging":
+                # Staging: Allow specific staging domains
+                return [
+                    "https://staging.myapp.com",
+                    "https://api-staging.myapp.com"
+                ]
+            else:  # development, testing
+                # Development: Allow localhost for development
+                return [
+                    "http://localhost:3000",
+                    "http://localhost:3001",
+                    "http://localhost:8080",
+                    "http://127.0.0.1:3000",
+                    "http://127.0.0.1:3001",
+                    "http://127.0.0.1:8080"
+                ]
+
+        # If origins explicitly provided, validate them
+        if environment == "production":
+            for origin in v:
+                if origin == "*":
+                    raise ValueError("Wildcard CORS origins (*) not allowed in production")
+                if not origin.startswith(("https://", "http://localhost:", "http://127.0.0.1:")):
+                    raise ValueError(f"Invalid origin for production: {origin}. Must use HTTPS or localhost for testing.")
+
+        return v
+
+    @validator("cors_methods", "cors_headers", pre=True)
     def parse_cors_settings(cls, v):
-        """Parse CORS settings from JSON string if needed."""
+        """Parse CORS methods and headers from JSON string if needed."""
         if isinstance(v, str):
             try:
                 return json.loads(v)

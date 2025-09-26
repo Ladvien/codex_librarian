@@ -138,7 +138,10 @@ class VectorDatabaseService:
         distance_metric: str = "cosine"
     ) -> List[VectorSearchResult]:
         """
-        Perform vector similarity search using PGVector.
+        Perform async vector similarity search using PGVector.
+
+        This optimized version uses async database operations to prevent
+        blocking the event loop and allow concurrent request handling.
 
         Args:
             query_embedding: Query vector (1536 dimensions for text embeddings)
@@ -150,104 +153,111 @@ class VectorDatabaseService:
         Returns:
             List of VectorSearchResult objects ordered by similarity
         """
+        from ..db.async_session import async_db_manager
+        from ..core.performance import get_performance_monitor
+
         try:
-            # Choose distance operator based on metric
-            distance_ops = {
-                "cosine": "<=>",
-                "euclidean": "<->",
-                "inner_product": "<#>"
-            }
+            # Performance monitoring
+            monitor = get_performance_monitor()
 
-            if distance_metric not in distance_ops:
-                raise ValidationError(f"Unsupported distance metric: {distance_metric}")
+            async with monitor.measure_performance("async_vector_similarity_search"):
+                # Choose distance operator based on metric
+                distance_ops = {
+                    "cosine": "<=>",
+                    "euclidean": "<->",
+                    "inner_product": "<#>"
+                }
 
-            distance_op = distance_ops[distance_metric]
+                if distance_metric not in distance_ops:
+                    raise ValidationError(f"Unsupported distance metric: {distance_metric}")
 
-            # Build query with proper PGVector syntax
-            base_query = f"""
-                SELECT
-                    de.id as embedding_id,
-                    de.document_id,
-                    de.chunk_text,
-                    de.page_number,
-                    de.chunk_index,
-                    de.metadata as chunk_metadata,
-                    d.filename,
-                    d.source_path,
-                    d.metadata as doc_metadata,
-                    CASE
-                        WHEN '{distance_metric}' = 'inner_product' THEN
-                            (de.embedding <#> :query_embedding::vector)
-                        ELSE
-                            1 - (de.embedding {distance_op} :query_embedding::vector)
-                    END as similarity_score
-                FROM document_embeddings de
-                JOIN documents d ON de.document_id = d.id
-                WHERE d.conversion_status = 'completed'
-            """
+                distance_op = distance_ops[distance_metric]
 
-            params = {
-                "query_embedding": query_embedding,
-                "top_k": top_k
-            }
+                # Build optimized async query with proper PGVector syntax
+                base_query = f"""
+                    SELECT
+                        de.id as embedding_id,
+                        de.document_id,
+                        de.chunk_text,
+                        de.page_number,
+                        de.chunk_index,
+                        de.metadata as chunk_metadata,
+                        d.filename,
+                        d.source_path,
+                        d.metadata as doc_metadata,
+                        CASE
+                            WHEN :distance_metric = 'inner_product' THEN
+                                (de.embedding <#> :query_embedding::vector)
+                            ELSE
+                                1 - (de.embedding {distance_op} :query_embedding::vector)
+                        END as similarity_score
+                    FROM document_embeddings de
+                    JOIN documents d ON de.document_id = d.id
+                    WHERE d.conversion_status = 'completed'
+                """
 
-            # Add similarity threshold
-            if distance_metric == "inner_product":
-                # For inner product, higher is more similar
-                base_query += " AND (de.embedding <#> :query_embedding::vector) >= :threshold"
-                params["threshold"] = similarity_threshold
-            else:
-                # For cosine and euclidean, convert to similarity (1 - distance)
-                base_query += f" AND 1 - (de.embedding {distance_op} :query_embedding::vector) >= :threshold"
-                params["threshold"] = similarity_threshold
+                params = {
+                    "query_embedding": query_embedding,
+                    "distance_metric": distance_metric,
+                    "top_k": top_k
+                }
 
-            # Add document filters
-            if document_filters:
-                if "document_id" in document_filters:
-                    base_query += " AND de.document_id = :document_id"
-                    params["document_id"] = document_filters["document_id"]
+                # Add similarity threshold with optimized filtering
+                if distance_metric == "inner_product":
+                    base_query += " AND (de.embedding <#> :query_embedding::vector) >= :threshold"
+                    params["threshold"] = similarity_threshold
+                else:
+                    base_query += f" AND 1 - (de.embedding {distance_op} :query_embedding::vector) >= :threshold"
+                    params["threshold"] = similarity_threshold
 
-                if "exclude_document_id" in document_filters:
-                    base_query += " AND de.document_id != :exclude_document_id"
-                    params["exclude_document_id"] = document_filters["exclude_document_id"]
+                # Add document filters with validation
+                if document_filters:
+                    if "document_id" in document_filters:
+                        base_query += " AND de.document_id = :document_id"
+                        params["document_id"] = int(document_filters["document_id"])
 
-            # Order and limit
-            if distance_metric == "inner_product":
-                base_query += " ORDER BY (de.embedding <#> :query_embedding::vector) DESC"
-            else:
-                base_query += f" ORDER BY de.embedding {distance_op} :query_embedding::vector ASC"
+                    if "exclude_document_id" in document_filters:
+                        base_query += " AND de.document_id != :exclude_document_id"
+                        params["exclude_document_id"] = int(document_filters["exclude_document_id"])
 
-            base_query += " LIMIT :top_k"
+                # Optimized ordering and limiting
+                if distance_metric == "inner_product":
+                    base_query += " ORDER BY (de.embedding <#> :query_embedding::vector) DESC"
+                else:
+                    base_query += f" ORDER BY de.embedding {distance_op} :query_embedding::vector ASC"
 
-            with self._get_session() as db:
-                result = db.execute(text(base_query), params)
+                base_query += " LIMIT :top_k"
 
-                results = []
-                for row in result:
-                    metadata = {}
-                    if row.chunk_metadata:
-                        metadata.update(row.chunk_metadata)
-                    if row.doc_metadata:
-                        metadata.update(row.doc_metadata)
+                # Execute async query
+                async with async_db_manager.get_async_session() as db:
+                    result = await db.execute(text(base_query), params)
 
-                    results.append(VectorSearchResult(
-                        document_id=row.document_id,
-                        chunk_id=row.embedding_id,
-                        filename=row.filename,
-                        source_path=row.source_path,
-                        content=row.chunk_text,
-                        similarity_score=float(row.similarity_score),
-                        page_number=row.page_number,
-                        chunk_index=row.chunk_index,
-                        metadata=metadata,
-                        search_type=f"vector_{distance_metric}"
-                    ))
+                    results = []
+                    for row in result:
+                        metadata = {}
+                        if row.chunk_metadata:
+                            metadata.update(row.chunk_metadata)
+                        if row.doc_metadata:
+                            metadata.update(row.doc_metadata)
 
-                logger.info(f"Vector search returned {len(results)} results")
-                return results
+                        results.append(VectorSearchResult(
+                            document_id=row.document_id,
+                            chunk_id=row.embedding_id,
+                            filename=row.filename,
+                            source_path=row.source_path,
+                            content=row.chunk_text,
+                            similarity_score=float(row.similarity_score),
+                            page_number=row.page_number,
+                            chunk_index=row.chunk_index,
+                            metadata=metadata,
+                            search_type=f"vector_{distance_metric}"
+                        ))
+
+                    logger.info(f"Async vector search returned {len(results)} results in optimized query")
+                    return results
 
         except Exception as e:
-            logger.error(f"Vector similarity search failed: {e}")
+            logger.error(f"Async vector similarity search failed: {e}")
             raise DatabaseError(f"Vector similarity search failed: {str(e)}")
 
     async def hybrid_search(

@@ -594,7 +594,8 @@ def process_pdf_document(
 
         # Retry unexpected errors with conservative strategy
         if self.request.retries < self.max_retries:
-            countdown = 60 * (2 ** self.request.retries)  # Conservative exponential backoff
+            retry_strategy = get_retry_strategy(e)
+            countdown = retry_strategy.get_delay(self.request.retries)
             logger.info(
                 f"Retrying after unexpected error in {countdown}s",
                 extra={'correlation_id': correlation_id}
@@ -988,7 +989,9 @@ def process_document_images(
     except Exception as e:
         logger.exception(f"Error processing document images: {e}")
         if self.request.retries < self.max_retries:
-            raise self.retry(exc=e, countdown=60 * (2 ** self.request.retries))
+            retry_strategy = get_retry_strategy(e)
+            countdown = retry_strategy.get_delay(self.request.retries)
+            raise self.retry(exc=e, countdown=countdown)
         raise ProcessingError(f"Image processing failed: {e}")
 
 
