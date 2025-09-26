@@ -70,3 +70,5 @@ watch_pdf_test_output/
 # Keep example env files
 !.env.example
 !.env.test.example
+watch_pdf_test/
+watch_pdf_test_output/
