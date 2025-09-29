@@ -1,0 +1,85 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+.venv/
+ENV/
+env/
+.env
+.env.local
+.env.test
+.env.production
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Claude Code - Project specific settings
+.claude/settings.local.json
+.claude/SESSION_NOTES.md
+.claude/output-styles/
+# Keep project context and reference docs
+!.claude/PROJECT_CONTEXT.md
+!.claude/QUICK_REFERENCE.md
+!.claude/agents/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# Jupyter
+.ipynb_checkpoints
+
+# MinerU
+/tmp/mineru_*/
+
+# Project specific
+watch_pdf_test_output/
+*.log
+.monitor_state.json
+
+# Backup files
+*.bak
+*.old
+*.tmp
+*_backup.*
+
+# Database
+*.db
+*.sqlite3
+
+# Keep example env files
+!.env.example
+!.env.test.example
+watch_pdf_test/
+watch_pdf_test_output/
+MinerU/
+dump.rdb

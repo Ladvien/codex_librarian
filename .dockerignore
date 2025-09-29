@@ -1,0 +1,94 @@
+# Git
+.git/
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+.venv/
+ENV/
+env/
+
+# Environment files (keep example)
+.env
+.env.local
+.env.test
+.env.production
+!.env.example
+!.env.test.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Claude Code
+.claude/settings.local.json
+.claude/SESSION_NOTES.md
+.claude/output-styles/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+tests/
+
+# Jupyter
+.ipynb_checkpoints
+
+# MinerU
+/tmp/mineru_*/
+
+# Backup files
+*.bak
+*.old
+*.tmp
+*_backup.*
+
+# Database
+*.db
+*.sqlite3
+
+# Logs
+*.log
+
+# Documentation (not needed in container)
+docs/
+README.md
+CLAUDE.md
+LICENSE
+
+# Development files
+examples/
+scripts/
+
+# CI/CD
+.github/
+.pre-commit-config.yaml
