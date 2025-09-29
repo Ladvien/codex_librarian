@@ -67,6 +67,9 @@ dependencies = [
     "torchvision>=0.23.0", # Vision utilities for PyTorch
     "nvidia-ml-py>=13.580.0", # Replacement for deprecated pynvml
     "prometheus-client>=0.23.1",
+    # MCP Server Framework - For semantic search tool
+    "fastmcp>=2.3.0",  # Compatible: FastMCP server framework
+    "asyncpg>=0.29.0",  # Compatible: Async PostgreSQL driver for MCP server
 ]
 
 [project.urls]

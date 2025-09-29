@@ -8,18 +8,20 @@ GPU-accelerated PDF processing system that converts PDFs to markdown with vector
 - Watches directories for new PDFs (configured via API)
 - GPU-accelerated conversion (5-10x faster than CPU)
 - Vector embeddings for semantic search
+- **MCP semantic search tool** - `search_library` for LLMs
 - MCP-compatible REST API
 - Persistent configuration survives restarts
 
 ## Tech Stack
 
 - **Language**: Python 3.11+
-- **Framework**: FastAPI + Celery
+- **Framework**: FastAPI + Celery + FastMCP
 - **Database**: PostgreSQL 17+ with PGVector
 - **Queue**: Redis (Docker)
 - **GPU**: CUDA 12.4+ (MinerU)
 - **Embeddings**: Ollama (nomic-embed-text)
 - **Process Management**: systemd services
+- **MCP Server**: FastMCP with semantic search tool
 
 ## Architecture
 
@@ -607,6 +609,146 @@ GROUP BY conversion_status;"
 
 4. Review this document for troubleshooting steps
 
+## MCP Semantic Search Server
+
+### Overview
+
+The MCP server provides a `search_library` tool that enables LLMs (like Claude) to semantically search the document library using hybrid search (vector similarity + BM25 keyword matching).
+
+**Key Features:**
+- 🔍 Hybrid search (vector + keyword) via Reciprocal Rank Fusion
+- 📄 Returns markdown file paths for direct document access
+- ⚡ Sub-second response times
+- 🔧 Zero .env dependency - all configuration via MCP client
+- 📅 Date range filtering support
+- 🎯 Configurable similarity thresholds
+
+### Quick Setup
+
+**1. Add to Claude Desktop config:**
+
+```json
+{
+  "mcpServers": {
+    "codex-librarian": {
+      "command": "uv",
+      "args": ["run", "python", "-m", "pdf_to_markdown_mcp.mcp.server"],
+      "cwd": "/mnt/datadrive_m2/codex_librarian",
+      "env": {
+        "DATABASE_URL": "postgresql://codex_librarian:PASSWORD@192.168.1.104:5432/codex_librarian",
+        "OLLAMA_URL": "http://localhost:11434"
+      }
+    }
+  }
+}
+```
+
+**2. Restart Claude Desktop**
+
+**3. Test the tool:**
+```
+Search my library for "neural networks"
+```
+
+### Configuration Reference
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `DATABASE_URL` | ✅ | - | PostgreSQL connection string |
+| `OLLAMA_URL` | No | `http://localhost:11434` | Ollama API endpoint |
+| `OLLAMA_MODEL` | No | `nomic-embed-text` | Embedding model |
+| `DB_POOL_MIN_SIZE` | No | `2` | Min connections |
+| `DB_POOL_MAX_SIZE` | No | `10` | Max connections |
+| `MCP_LOG_LEVEL` | No | `INFO` | Logging level |
+| `SEARCH_DEFAULT_LIMIT` | No | `10` | Default results |
+| `SEARCH_MAX_LIMIT` | No | `50` | Max results |
+| `SEARCH_DEFAULT_SIMILARITY` | No | `0.7` | Similarity threshold |
+
+### Tool Usage
+
+```python
+search_library(
+    query: str,              # Natural language query (required)
+    limit: int = 10,         # Max results (1-50)
+    min_similarity: float = 0.7,  # Similarity threshold (0.0-1.0)
+    tags: list[str] = None,  # Tag filters (future)
+    date_from: str = None,   # ISO 8601 date filter
+    date_to: str = None      # ISO 8601 date filter
+)
+```
+
+**Response includes:**
+- `document_id` - Database ID
+- `filename` - Original PDF filename
+- `markdown_path` - Path to converted markdown file
+- `similarity_score` - Relevance score (0.0-1.0)
+- `excerpt` - Text snippet from document
+- `page_number` - Source page number
+- `created_at` - Processing timestamp
+
+### Troubleshooting
+
+**MCP server won't start:**
+```bash
+# Check configuration
+cat ~/.config/claude/claude_desktop_config.json
+
+# Test database connection
+psql "postgresql://user:pass@host:5432/db" -c "SELECT 1"
+
+# Verify Ollama is running
+curl http://localhost:11434/api/tags
+```
+
+**No results found:**
+```sql
+-- Check document count
+psql -h 192.168.1.104 -U codex_librarian -d codex_librarian -c "
+SELECT COUNT(*) FROM documents WHERE conversion_status = 'completed';
+SELECT COUNT(*) FROM document_embeddings;
+"
+```
+
+**Slow searches:**
+```sql
+-- Ensure HNSW index exists
+SELECT indexname FROM pg_indexes WHERE tablename = 'document_embeddings';
+
+-- Create if missing
+CREATE INDEX idx_embeddings_hnsw ON document_embeddings
+  USING hnsw (embedding vector_cosine_ops)
+  WITH (m = 16, ef_construction = 64);
+```
+
+### Documentation
+
+See **`docs/MCP_SETUP.md`** for:
+- Detailed setup instructions
+- Configuration examples
+- Performance tuning
+- Security considerations
+- Advanced usage
+
+### Architecture
+
+The MCP server runs as a separate process from the FastAPI server:
+
+```
+┌──────────────────────┐
+│ Claude Desktop       │
+│ (MCP Client)         │
+└──────────┬───────────┘
+           │ stdio
+           ▼
+┌──────────────────────┐
+│ FastMCP Server       │
+│ - search_library     │
+└──────────┬───────────┘
+           │
+           ├──▶ PostgreSQL + PGVector (vector similarity)
+           └──▶ Ollama (query embeddings)
+```
+
 ## Notes for AI Assistants
 
 When helping with this project:
@@ -617,3 +759,4 @@ When helping with this project:
 - Test database changes with Alembic migrations first
 - Monitor logs after making changes
 - Use the verification checklist after deployments
+- **For MCP issues**: Check `docs/MCP_SETUP.md` first
