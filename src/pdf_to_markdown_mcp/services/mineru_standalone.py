@@ -187,29 +187,63 @@ class MinerUStandaloneService:
         total_start = time.time()
 
         try:
-            # GPU memory check before processing to prevent OOM errors
-            # This is critical to prevent race conditions when multiple tasks
-            # are queued and try to allocate GPU memory simultaneously
+            # GPU memory reservation using Redis lock to prevent race conditions
+            # This eliminates TOCTOU (Time Of Check, Time Of Use) vulnerabilities
             from pdf_to_markdown_mcp.utils.gpu_utils import get_available_gpu_memory
 
             gpu_check_start = time.time()
             min_gpu_memory_gb = float(os.getenv("MINERU_MIN_GPU_MEMORY_GB", "7.0"))
-            available_memory = get_available_gpu_memory()
-            timings['gpu_memory_check_ms'] = (time.time() - gpu_check_start) * 1000
 
-            if available_memory < min_gpu_memory_gb:
-                error_msg = (
-                    f"Insufficient GPU memory: {available_memory:.2f} GB available, "
-                    f"{min_gpu_memory_gb:.2f} GB required. Waiting for memory to free up."
+            # Try to reserve GPU memory using Redis lock
+            gpu_lock_key = f"gpu_memory_lock:instance_{self.instance_id}"
+            gpu_lock_timeout = 300  # 5 minutes max processing time
+
+            # Try to acquire lock (blocking with timeout)
+            lock_acquired = False
+            try:
+                # SETNX returns True if lock was acquired
+                lock_acquired = await self.redis_client.set(
+                    gpu_lock_key,
+                    request.request_id,
+                    nx=True,  # Only set if not exists
+                    ex=gpu_lock_timeout  # Auto-expire after timeout
                 )
-                logger.warning(error_msg)
-                raise RuntimeError(error_msg)
 
-            logger.info(
-                f"GPU memory check passed: {available_memory:.2f} GB available "
-                f"(required: {min_gpu_memory_gb:.2f} GB) "
-                f"[{timings['gpu_memory_check_ms']:.1f}ms]"
-            )
+                if not lock_acquired:
+                    error_msg = (
+                        f"Could not acquire GPU memory lock for instance {self.instance_id}. "
+                        f"Another job may be using the GPU. Request will retry."
+                    )
+                    logger.warning(error_msg)
+                    raise RuntimeError(error_msg)
+
+                # Lock acquired! Now check actual GPU memory
+                available_memory = get_available_gpu_memory()
+                timings['gpu_memory_check_ms'] = (time.time() - gpu_check_start) * 1000
+
+                if available_memory < min_gpu_memory_gb:
+                    error_msg = (
+                        f"Insufficient GPU memory: {available_memory:.2f} GB available, "
+                        f"{min_gpu_memory_gb:.2f} GB required"
+                    )
+                    logger.warning(error_msg)
+                    # Release lock before raising error
+                    await self.redis_client.delete(gpu_lock_key)
+                    lock_acquired = False
+                    raise RuntimeError(error_msg)
+
+                logger.info(
+                    f"GPU memory reserved for instance {self.instance_id}: "
+                    f"{available_memory:.2f} GB available (required: {min_gpu_memory_gb:.2f} GB) "
+                    f"[{timings['gpu_memory_check_ms']:.1f}ms]"
+                )
+
+            except Exception as e:
+                # Clean up lock if we acquired it
+                if lock_acquired:
+                    await self.redis_client.delete(gpu_lock_key)
+                    lock_acquired = False
+                raise
 
             # Read PDF file
             pdf_read_start = time.time()
@@ -339,6 +373,11 @@ class MinerUStandaloneService:
                     )
                     logger.info(f"Saved markdown to: {output_path}")
 
+                    # Release GPU memory lock before returning
+                    if lock_acquired:
+                        await self.redis_client.delete(gpu_lock_key)
+                        logger.debug(f"Released GPU memory lock for instance {self.instance_id}")
+
                     return ProcessingResult(
                         request_id=request.request_id,
                         success=True,
@@ -359,6 +398,14 @@ class MinerUStandaloneService:
 
         except Exception as e:
             logger.error(f"Error processing PDF: {e}\n{traceback.format_exc()}")
+
+            # Critical: Release GPU memory lock on error
+            if lock_acquired:
+                try:
+                    await self.redis_client.delete(gpu_lock_key)
+                    logger.info(f"Released GPU memory lock after error for instance {self.instance_id}")
+                except Exception as lock_error:
+                    logger.error(f"Failed to release GPU lock: {lock_error}")
 
             # Critical: Release GPU memory on error to prevent memory leaks
             if gpu_memory_allocated and torch.cuda.is_available():
