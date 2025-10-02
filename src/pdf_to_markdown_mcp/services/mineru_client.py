@@ -96,6 +96,9 @@ class MinerUClient:
             request_queue = self.request_queue
             result_queue = self.result_queue
 
+        # Use request-specific key instead of shared queue to eliminate request ID mismatches
+        result_key = f"mineru_result:{request_id}"
+
         # Create request
         request = {
             "request_id": request_id,
@@ -105,51 +108,48 @@ class MinerUClient:
                 "extract_tables": extract_tables,
                 "language": language,
             },
-            "callback_queue": result_queue
+            "result_key": result_key  # Changed from callback_queue to result_key
         }
 
         try:
             # Send request to MinerU service
             logger.info(
                 f"Sending PDF to MinerU instance {instance_id}: {pdf_path} "
-                f"(request: {request_id})"
+                f"(request: {request_id}, result_key: {result_key})"
             )
             request_data = json.dumps(request)
             self.redis_client.lpush(request_queue, request_data.encode('utf-8'))
 
-            # Wait for result
-            logger.info(f"Waiting for MinerU result (timeout: {self.timeout}s)")
-            result = self.redis_client.blpop(result_queue, timeout=self.timeout)
+            # Wait for result using request-specific key (no more request ID mismatches!)
+            logger.info(f"Waiting for MinerU result at key: {result_key} (timeout: {self.timeout}s)")
 
-            if result:
-                _, result_data = result
-                result_dict = json.loads(result_data)
+            # Poll for result with timeout (blocking on specific key)
+            result_data = self.redis_client.blpop(result_key, timeout=self.timeout)
 
-                # Verify it's our result
-                if result_dict.get("request_id") == request_id:
-                    if result_dict.get("success"):
-                        logger.info(f"MinerU processing successful for request {request_id}")
-                        return {
-                            "success": True,
-                            "markdown": result_dict.get("markdown"),
-                            "metadata": result_dict.get("metadata", {})
-                        }
-                    else:
-                        error = result_dict.get("error", "Unknown error")
-                        logger.error(f"MinerU processing failed: {error}")
-                        return {
-                            "success": False,
-                            "error": error
-                        }
+            if result_data:
+                _, result_json = result_data
+                result_dict = json.loads(result_json)
+
+                # Clean up result key after reading
+                self.redis_client.delete(result_key)
+
+                if result_dict.get("success"):
+                    logger.info(f"MinerU processing successful for request {request_id}")
+                    return {
+                        "success": True,
+                        "markdown": result_dict.get("markdown"),
+                        "metadata": result_dict.get("metadata", {})
+                    }
                 else:
-                    logger.warning(f"Received result for different request: {result_dict.get('request_id')}")
-                    # Put it back at the end of queue for the correct client (avoid infinite loop)
-                    self.redis_client.rpush(result_queue, result_data)
+                    error = result_dict.get("error", "Unknown error")
+                    logger.error(f"MinerU processing failed: {error}")
                     return {
                         "success": False,
-                        "error": "Request ID mismatch"
+                        "error": error
                     }
             else:
+                # Timeout - clean up key
+                self.redis_client.delete(result_key)
                 logger.error(f"Timeout waiting for MinerU result (waited {self.timeout}s)")
                 return {
                     "success": False,

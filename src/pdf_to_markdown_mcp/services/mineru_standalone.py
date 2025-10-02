@@ -50,7 +50,7 @@ class ProcessingRequest(BaseModel):
     request_id: str
     pdf_path: str
     options: Dict[str, Any] = {}
-    callback_queue: str = "mineru_results"
+    result_key: str  # Request-specific Redis key for result delivery (eliminates request ID mismatches)
 
 
 class ProcessingResult(BaseModel):
@@ -400,11 +400,15 @@ class MinerUStandaloneService:
                     # Process PDF
                     result = await self.process_pdf(request)
 
-                    # Send result back via Redis
+                    # Send result back via Redis using request-specific key
                     result_data = result.model_dump_json().encode('utf-8')
-                    await self.redis_client.lpush(request.callback_queue, result_data)
+                    result_key = request.result_key  # Use request-specific key instead of shared queue
+                    await self.redis_client.lpush(result_key, result_data)
 
-                    logger.info(f"Completed job: {request.request_id}, success: {result.success}")
+                    # Set expiry on result key (5 minutes) to prevent memory leaks
+                    await self.redis_client.expire(result_key, 300)
+
+                    logger.info(f"Completed job: {request.request_id}, success: {result.success}, result_key: {result_key}")
 
             except Exception as e:
                 logger.error(f"Error in processing loop: {e}\n{traceback.format_exc()}")

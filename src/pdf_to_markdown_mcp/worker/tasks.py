@@ -662,29 +662,64 @@ def process_pdf_document(
         # Enhanced task coordination with error handling
         downstream_tasks = []
 
-        # Queue embedding generation as separate task with enhanced options
+        # Queue embedding generation with backpressure control
         if processing_result.chunk_data:
             try:
-                embedding_task = generate_embeddings.apply_async(
-                    kwargs={
-                        "document_id": document_id,
-                        "content": processing_result.plain_text,
-                        "chunks": [chunk.model_dump() for chunk in processing_result.chunk_data],
-                        "correlation_id": correlation_id,
-                        "parent_task_id": self.request.id,
-                    },
-                    priority=5,  # Medium priority for embeddings
-                    retry=True,
-                )
-                downstream_tasks.append(("embeddings", embedding_task.id))
+                # BACKPRESSURE: Check embedding queue depth before queueing
+                # This prevents Ollama overload during PDF processing bursts
+                from celery import current_app
 
-                logger.info(
-                    f"Queued embedding generation task {embedding_task.id}",
-                    extra={
-                        "correlation_id": correlation_id,
-                        "document_id": document_id,
-                    },
-                )
+                MAX_EMBEDDING_QUEUE_DEPTH = 500  # Configurable threshold
+
+                # Get active queue length (approximate)
+                inspector = current_app.control.inspect()
+                active_tasks = inspector.active()
+                reserved_tasks = inspector.reserved()
+
+                embedding_queue_depth = 0
+                if active_tasks:
+                    for worker, tasks in active_tasks.items():
+                        embedding_queue_depth += sum(1 for t in tasks if t['name'] == 'worker.tasks.generate_embeddings')
+                if reserved_tasks:
+                    for worker, tasks in reserved_tasks.items():
+                        embedding_queue_depth += sum(1 for t in tasks if t['name'] == 'worker.tasks.generate_embeddings')
+
+                if embedding_queue_depth >= MAX_EMBEDDING_QUEUE_DEPTH:
+                    logger.warning(
+                        f"Embedding queue depth ({embedding_queue_depth}) exceeds threshold ({MAX_EMBEDDING_QUEUE_DEPTH}). "
+                        f"Deferring embedding generation for document {document_id}. "
+                        f"Embeddings will be generated when queue clears.",
+                        extra={
+                            "correlation_id": correlation_id,
+                            "document_id": document_id,
+                            "queue_depth": embedding_queue_depth,
+                        },
+                    )
+                    # Mark document as needing embeddings but don't queue yet
+                    # Background job will pick it up later
+                else:
+                    # Queue depth is manageable, proceed with queueing
+                    embedding_task = generate_embeddings.apply_async(
+                        kwargs={
+                            "document_id": document_id,
+                            "content": processing_result.plain_text,
+                            "chunks": [chunk.model_dump() for chunk in processing_result.chunk_data],
+                            "correlation_id": correlation_id,
+                            "parent_task_id": self.request.id,
+                        },
+                        priority=5,  # Medium priority for embeddings
+                        retry=True,
+                    )
+                    downstream_tasks.append(("embeddings", embedding_task.id))
+
+                    logger.info(
+                        f"Queued embedding generation task {embedding_task.id} (queue depth: {embedding_queue_depth})",
+                        extra={
+                            "correlation_id": correlation_id,
+                            "document_id": document_id,
+                            "queue_depth": embedding_queue_depth,
+                        },
+                    )
             except Exception as e:
                 logger.error(
                     f"Failed to queue embedding generation: {e}",
