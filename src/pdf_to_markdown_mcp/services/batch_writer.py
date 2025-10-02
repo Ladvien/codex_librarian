@@ -372,27 +372,44 @@ class BatchWriter:
                         self.queue.append(request)
 
     def _write_document_content(self, db: Session, request: dict):
-        """Write document content record to database."""
+        """Write document content record to database using upsert pattern."""
         from ..db.models import DocumentContent
 
         data = request["data"]
-        content_record = DocumentContent(
-            document_id=data["document_id"],
-            markdown_content=data["markdown_content"],
-            plain_text=data["plain_text"],
-            page_count=data["page_count"],
-            has_images=data["has_images"],
-            has_tables=data["has_tables"],
-            processing_time_ms=data["processing_time_ms"],
-        )
-        db.add(content_record)
-        # Note: flush() is unnecessary here - db.commit() in _flush_batch will persist changes
-        # Removed redundant flush() to improve performance (Issue #9 fix)
 
-        logger.debug(
-            f"Wrote document_content for document {data['document_id']}",
-            extra={"correlation_id": request.get("correlation_id")}
-        )
+        # Use upsert pattern to prevent duplicates (get-or-create)
+        content_record = db.query(DocumentContent).filter(
+            DocumentContent.document_id == data["document_id"]
+        ).first()
+
+        if content_record:
+            # Update existing record
+            content_record.markdown_content = data["markdown_content"]
+            content_record.plain_text = data["plain_text"]
+            content_record.page_count = data["page_count"]
+            content_record.has_images = data["has_images"]
+            content_record.has_tables = data["has_tables"]
+            content_record.processing_time_ms = data["processing_time_ms"]
+            logger.debug(
+                f"Updated existing document_content for document {data['document_id']}",
+                extra={"correlation_id": request.get("correlation_id")}
+            )
+        else:
+            # Create new record
+            content_record = DocumentContent(
+                document_id=data["document_id"],
+                markdown_content=data["markdown_content"],
+                plain_text=data["plain_text"],
+                page_count=data["page_count"],
+                has_images=data["has_images"],
+                has_tables=data["has_tables"],
+                processing_time_ms=data["processing_time_ms"],
+            )
+            db.add(content_record)
+            logger.debug(
+                f"Created new document_content for document {data['document_id']}",
+                extra={"correlation_id": request.get("correlation_id")}
+            )
 
     def _write_document_update(self, db: Session, request: dict):
         """Write document status update to database (single record, for backward compatibility)."""

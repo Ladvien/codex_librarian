@@ -556,16 +556,32 @@ def process_pdf_document(
                 with get_db_session() as db:
                     from ..db.models import DocumentContent
 
-                    content_record = DocumentContent(
-                        document_id=document_id,
-                        markdown_content=processing_result.markdown_content,
-                        plain_text=processing_result.plain_text,
-                        page_count=processing_result.processing_metadata.pages,
-                        has_images=len(processing_result.extracted_images) > 0,
-                        has_tables=len(processing_result.extracted_tables) > 0,
-                        processing_time_ms=processing_result.processing_metadata.processing_time_ms,
-                    )
-                    db.add(content_record)
+                    # Use upsert pattern to prevent duplicates (get-or-create)
+                    content_record = db.query(DocumentContent).filter(
+                        DocumentContent.document_id == document_id
+                    ).first()
+
+                    if content_record:
+                        # Update existing record
+                        content_record.markdown_content = processing_result.markdown_content
+                        content_record.plain_text = processing_result.plain_text
+                        content_record.page_count = processing_result.processing_metadata.pages
+                        content_record.has_images = len(processing_result.extracted_images) > 0
+                        content_record.has_tables = len(processing_result.extracted_tables) > 0
+                        content_record.processing_time_ms = processing_result.processing_metadata.processing_time_ms
+                    else:
+                        # Create new record
+                        content_record = DocumentContent(
+                            document_id=document_id,
+                            markdown_content=processing_result.markdown_content,
+                            plain_text=processing_result.plain_text,
+                            page_count=processing_result.processing_metadata.pages,
+                            has_images=len(processing_result.extracted_images) > 0,
+                            has_tables=len(processing_result.extracted_tables) > 0,
+                            processing_time_ms=processing_result.processing_metadata.processing_time_ms,
+                        )
+                        db.add(content_record)
+
                     db.flush()  # Get the ID before commit
                     content_record_id = content_record.id
 
