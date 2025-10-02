@@ -1000,15 +1000,22 @@ def generate_embeddings(
             raise error
 
         # Enhanced batch processing with error isolation
+        import time
+
         batch_size = settings.embedding.batch_size
         embeddings_generated = 0
         failed_chunks = []
         embedding_records = []
 
+        # Performance timing
+        embedding_start_time = time.time()
+        batch_timings = []
+
         progress.update(message="Processing embeddings in batches")
 
         # Process batches synchronously using asyncio.run for each batch
         for i in range(0, len(chunks), batch_size):
+            batch_start = time.time()
             batch_chunks = chunks[i : i + batch_size]
             batch_texts = [chunk["text"] for chunk in batch_chunks]
 
@@ -1042,8 +1049,24 @@ def generate_embeddings(
                     embedding_records.append(embedding_record)
 
                 embeddings_generated += len(embeddings)
+
+                # Track batch timing
+                batch_elapsed = time.time() - batch_start
+                batch_timings.append(batch_elapsed)
+
+                # Calculate running throughput
+                total_elapsed = time.time() - embedding_start_time
+                embeddings_per_second = embeddings_generated / total_elapsed if total_elapsed > 0 else 0
+
                 progress.update(
-                    message=f"Generated {embeddings_generated} embeddings ({i + len(batch_chunks)}/{len(chunks)} chunks)"
+                    message=f"Generated {embeddings_generated} embeddings ({i + len(batch_chunks)}/{len(chunks)} chunks) "
+                    f"[{embeddings_per_second:.1f} emb/sec]"
+                )
+
+                logger.info(
+                    f"Batch {i // batch_size + 1}: {len(embeddings)} embeddings in {batch_elapsed:.2f}s "
+                    f"({len(embeddings) / batch_elapsed:.1f} emb/sec) | "
+                    f"Running avg: {embeddings_per_second:.1f} emb/sec"
                 )
 
             except Exception as e:
@@ -1063,6 +1086,18 @@ def generate_embeddings(
                     })
 
 
+        # Calculate final throughput metrics
+        total_embedding_time = time.time() - embedding_start_time
+        final_embeddings_per_second = embeddings_generated / total_embedding_time if total_embedding_time > 0 else 0
+        avg_batch_time = sum(batch_timings) / len(batch_timings) if batch_timings else 0
+
+        logger.info(
+            f"Embedding generation complete: {embeddings_generated} embeddings in {total_embedding_time:.2f}s | "
+            f"Throughput: {final_embeddings_per_second:.1f} emb/sec | "
+            f"Avg batch time: {avg_batch_time:.2f}s | "
+            f"Batches: {len(batch_timings)}"
+        )
+
         progress.update(message="Saving embeddings to database")
 
         # Enhanced database operations with transaction management
@@ -1072,12 +1107,17 @@ def generate_embeddings(
                 from ..db.models import DocumentEmbedding
 
                 # Save all successful embedding records in transaction
-                for record_data in embedding_records:
-                    embedding_record = DocumentEmbedding(**record_data)
-                    db.add(embedding_record)
-
+                # PERFORMANCE: Use bulk_insert_mappings for 10-100x faster inserts
+                db_write_start = time.time()
+                db.bulk_insert_mappings(DocumentEmbedding, embedding_records)
                 db.commit()
+                db_write_time = time.time() - db_write_start
                 records_saved = len(embedding_records)
+
+                logger.info(
+                    f"Bulk inserted {records_saved} embeddings in {db_write_time:.2f}s "
+                    f"({records_saved / db_write_time:.1f} records/sec)"
+                )
 
                 # Update DocumentContent tracking fields after successful embedding save
                 content_record = db.query(DocumentContent).filter(

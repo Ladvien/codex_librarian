@@ -172,6 +172,8 @@ class MinerUStandaloneService:
 
     async def process_pdf(self, request: ProcessingRequest) -> ProcessingResult:
         """Process a single PDF file with GPU memory management."""
+        import time
+
         logger.info(
             f"Instance {self.instance_id}: Processing PDF: {request.pdf_path} "
             f"(request: {request.request_id})"
@@ -180,14 +182,20 @@ class MinerUStandaloneService:
         # Track GPU memory state for cleanup on error
         gpu_memory_allocated = False
 
+        # Performance timing for each stage
+        timings = {}
+        total_start = time.time()
+
         try:
             # GPU memory check before processing to prevent OOM errors
             # This is critical to prevent race conditions when multiple tasks
             # are queued and try to allocate GPU memory simultaneously
             from pdf_to_markdown_mcp.utils.gpu_utils import get_available_gpu_memory
 
+            gpu_check_start = time.time()
             min_gpu_memory_gb = float(os.getenv("MINERU_MIN_GPU_MEMORY_GB", "7.0"))
             available_memory = get_available_gpu_memory()
+            timings['gpu_memory_check_ms'] = (time.time() - gpu_check_start) * 1000
 
             if available_memory < min_gpu_memory_gb:
                 error_msg = (
@@ -199,10 +207,12 @@ class MinerUStandaloneService:
 
             logger.info(
                 f"GPU memory check passed: {available_memory:.2f} GB available "
-                f"(required: {min_gpu_memory_gb:.2f} GB)"
+                f"(required: {min_gpu_memory_gb:.2f} GB) "
+                f"[{timings['gpu_memory_check_ms']:.1f}ms]"
             )
 
             # Read PDF file
+            pdf_read_start = time.time()
             pdf_path = Path(request.pdf_path)
             if not pdf_path.exists():
                 raise FileNotFoundError(f"PDF not found: {pdf_path}")
@@ -231,10 +241,14 @@ class MinerUStandaloneService:
 
                 # Run MinerU processing (blocking call)
                 pdf_bytes = self.read_fn(str(pdf_path))
+                timings['pdf_read_ms'] = (time.time() - pdf_read_start) * 1000
+                logger.info(f"PDF read completed [{timings['pdf_read_ms']:.1f}ms]")
 
                 # Mark GPU memory as allocated for error cleanup
                 gpu_memory_allocated = True
 
+                # Stage 1-4: MinerU GPU processing (layout, OCR, tables, markdown)
+                mineru_start = time.time()
                 # do_parse expects lists as arguments
                 await asyncio.get_event_loop().run_in_executor(
                     None,
@@ -256,12 +270,15 @@ class MinerUStandaloneService:
                     config.get("f_dump_orig_pdf", False),
                     config.get("f_dump_content_list", False)
                 )
+                timings['mineru_process_ms'] = (time.time() - mineru_start) * 1000
+                logger.info(f"MinerU processing completed [{timings['mineru_process_ms']:.1f}ms]")
 
                 # Processing is complete, no return value from do_parse
                 result = {"page_count": 0, "processing_time": 0}
 
                 # Read the generated markdown
                 # MinerU creates files in different possible locations
+                md_find_start = time.time()
                 parse_method = config.get("parse_method", "auto")
 
                 # Try multiple possible paths where MinerU might save the file
@@ -287,10 +304,15 @@ class MinerUStandaloneService:
                         md_path = md_files[0]
                         logger.info(f"Found markdown file at: {md_path}")
 
+                timings['md_find_ms'] = (time.time() - md_find_start) * 1000
+
                 if md_path and md_path.exists():
+                    md_read_start = time.time()
                     markdown = md_path.read_text(encoding='utf-8')
+                    timings['md_read_ms'] = (time.time() - md_read_start) * 1000
 
                     # Save to actual output directory
+                    md_write_start = time.time()
                     output_base_dir = Path("/mnt/codex_fs/research/librarian_output")
                     output_base_dir.mkdir(parents=True, exist_ok=True)
 
@@ -300,6 +322,21 @@ class MinerUStandaloneService:
 
                     # Save markdown file
                     output_path.write_text(markdown, encoding='utf-8')
+                    timings['md_write_ms'] = (time.time() - md_write_start) * 1000
+
+                    # Calculate total time
+                    timings['total_ms'] = (time.time() - total_start) * 1000
+
+                    logger.info(
+                        f"Processing complete for {pdf_path.name} - "
+                        f"Total: {timings['total_ms']:.1f}ms | "
+                        f"GPU Check: {timings.get('gpu_memory_check_ms', 0):.1f}ms | "
+                        f"PDF Read: {timings.get('pdf_read_ms', 0):.1f}ms | "
+                        f"MinerU: {timings.get('mineru_process_ms', 0):.1f}ms | "
+                        f"MD Find: {timings.get('md_find_ms', 0):.1f}ms | "
+                        f"MD Read: {timings.get('md_read_ms', 0):.1f}ms | "
+                        f"MD Write: {timings.get('md_write_ms', 0):.1f}ms"
+                    )
                     logger.info(f"Saved markdown to: {output_path}")
 
                     return ProcessingResult(
@@ -310,6 +347,7 @@ class MinerUStandaloneService:
                             "pages": result.get("page_count", 0),
                             "processing_time": result.get("processing_time", 0),
                             "output_path": str(output_path),
+                            "timings": timings,  # Add detailed timing breakdown
                         }
                     )
                 else:

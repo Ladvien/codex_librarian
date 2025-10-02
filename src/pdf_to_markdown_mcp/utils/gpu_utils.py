@@ -5,22 +5,28 @@ Provides utilities for checking GPU memory availability to prevent
 CUDA OOM errors when multiple processes share the GPU.
 """
 
+import functools
 import logging
 import subprocess
+import time
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+# Cache configuration for GPU memory checks
+_GPU_MEMORY_CACHE_TTL = 5  # seconds
 
-def get_gpu_memory_info() -> tuple[float, float]:
+
+@functools.lru_cache(maxsize=1)
+def _get_gpu_memory_info_cached(cache_key: int) -> tuple[float, float]:
     """
-    Get GPU memory usage information.
+    Internal cached GPU memory check.
+
+    Args:
+        cache_key: Time-based key for cache invalidation (seconds // TTL)
 
     Returns:
         Tuple of (used_memory_gb, total_memory_gb)
-
-    Raises:
-        RuntimeError: If nvidia-smi command fails
     """
     try:
         result = subprocess.run(
@@ -43,6 +49,7 @@ def get_gpu_memory_info() -> tuple[float, float]:
         used_gb = used_mb / 1024
         total_gb = total_mb / 1024
 
+        logger.debug(f"GPU memory check (cache_key={cache_key}): {used_gb:.2f}/{total_gb:.2f} GB")
         return used_gb, total_gb
 
     except subprocess.CalledProcessError as e:
@@ -51,6 +58,26 @@ def get_gpu_memory_info() -> tuple[float, float]:
         raise RuntimeError("nvidia-smi command timed out")
     except (ValueError, IndexError) as e:
         raise RuntimeError(f"Failed to parse nvidia-smi output: {e}")
+
+
+def get_gpu_memory_info() -> tuple[float, float]:
+    """
+    Get GPU memory usage information with automatic 5-second caching.
+
+    Returns:
+        Tuple of (used_memory_gb, total_memory_gb)
+
+    Raises:
+        RuntimeError: If nvidia-smi command fails
+
+    Note:
+        Results are cached for 5 seconds to avoid subprocess overhead.
+        Cache automatically invalidates based on wall-clock time.
+    """
+    # Generate cache key based on current time divided by TTL
+    # This ensures cache invalidates every TTL seconds
+    cache_key = int(time.time() / _GPU_MEMORY_CACHE_TTL)
+    return _get_gpu_memory_info_cached(cache_key)
 
 
 def get_available_gpu_memory() -> float:

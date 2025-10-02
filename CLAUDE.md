@@ -59,6 +59,248 @@ GPU-accelerated PDF processing system that converts PDFs to markdown with vector
                  └─ pdf-celery-beat.service
 ```
 
+## Pipeline Mental Model
+
+> **⚠️ IMPORTANT**: Keep this section updated as the system evolves. This is the source of truth for understanding data flow, bottlenecks, and performance characteristics.
+
+### Complete Data Flow (PDF → Embeddings)
+
+```
+1. FILE DISCOVERY (< 1 sec)
+   ┌─────────────────────────────────────────────────┐
+   │ Watchdog (worker/indexer.py)                    │
+   │ - Monitors watch directories                    │
+   │ - Triggers on new .pdf files                    │
+   │ - Creates document record in database           │
+   └─────────────────┬───────────────────────────────┘
+                     │ conversion_status: 'pending'
+                     ▼
+
+2. CELERY TASK QUEUE (< 1 sec)
+   ┌─────────────────────────────────────────────────┐
+   │ Redis Queue: "celery"                           │
+   │ - Task: process_pdf_document                    │
+   │ - Priority: Normal                              │
+   │ - Worker: pdf-celery-worker (solo pool)         │
+   └─────────────────┬───────────────────────────────┘
+                     │ Task dequeued by worker
+                     ▼
+
+3. PDF PROCESSING TASK (10-60 sec per PDF)
+   ┌─────────────────────────────────────────────────┐
+   │ Celery Worker (worker/tasks.py:process_pdf)     │
+   │ - Updates status: 'processing'                  │
+   │ - Checks GPU memory availability                │
+   │ - Calls MinerU client                           │
+   │ - ⚠️ BLOCKS HERE waiting for MinerU result      │
+   └─────────────────┬───────────────────────────────┘
+                     │ Redis RPC call (synchronous)
+                     ▼
+
+4. GPU PROCESSING (5-30 sec per PDF)
+   ┌─────────────────────────────────────────────────┐
+   │ MinerU Standalone (services/mineru_standalone)  │
+   │ - Reads from Redis: mineru_requests_N           │
+   │ - Loads PDF into GPU memory                     │
+   │ - Stage 1: Layout detection (GPU)               │
+   │ - Stage 2: OCR processing (GPU)                 │
+   │ - Stage 3: Table/formula extraction (GPU)       │
+   │ - Stage 4: Markdown generation (CPU)            │
+   │ - Writes result to Redis: mineru_results_N      │
+   │ ⚠️ NO TIMING INSTRUMENTATION (BLIND SPOT)       │
+   └─────────────────┬───────────────────────────────┘
+                     │ Result returned via Redis
+                     ▼
+
+5. MARKDOWN WRITE (< 1 sec)
+   ┌─────────────────────────────────────────────────┐
+   │ Back to Celery Worker                           │
+   │ - Writes markdown to OUTPUT_DIRECTORY           │
+   │ - Option: Async file I/O (if enabled)           │
+   │ - Option: Batch database write (if enabled)     │
+   │ - Updates status: 'completed'                   │
+   │ - Queues downstream: generate_embeddings        │
+   └─────────────────┬───────────────────────────────┘
+                     │ Async task queued
+                     ▼
+
+6. EMBEDDING GENERATION (5-30 sec per document)
+   ┌─────────────────────────────────────────────────┐
+   │ Celery Worker (worker/tasks.py:generate_embeds) │
+   │ - Reads markdown content                        │
+   │ - Chunks text (1000 chars, 200 overlap)         │
+   │ - Batches chunks (batch_size=32)                │
+   │ - Calls Ollama API (concurrent requests=8)      │
+   │ - Writes embeddings to database                 │
+   │ ⚠️ INDIVIDUAL INSERTS (10-100x slow)            │
+   │ - Updates embedding_status: 'completed'         │
+   └─────────────────┬───────────────────────────────┘
+                     │ DONE
+                     ▼
+   ✅ Document fully processed and searchable
+```
+
+### Performance Characteristics
+
+| Stage | Expected Time | Bottleneck Type | Critical Path |
+|-------|--------------|-----------------|---------------|
+| File Discovery | < 1 sec | I/O | No |
+| Queue Wait | < 5 sec | Concurrency | Yes (if backlog) |
+| GPU Memory Check | 50-100 ms | Subprocess | Yes |
+| MinerU Processing | 5-30 sec | GPU/CPU | **YES (CRITICAL)** |
+| Markdown Write | < 1 sec | I/O | Yes (if sync) |
+| Embedding Generation | 5-30 sec | Network/CPU | **YES (CRITICAL)** |
+| Database Writes | < 1 sec | Database | Yes (if individual) |
+| **Total (10-page PDF)** | **15-60 sec** | - | - |
+
+### Component Interactions & Timing
+
+```
+┌──────────────┐  1. Queue task      ┌──────────────┐
+│   Celery     │◄────────────────────│   Indexer    │
+│   Worker     │                     └──────────────┘
+└──────┬───────┘                     < 1 sec
+       │
+       │ 2. Request PDF processing (BLOCKING)
+       │    worker/tasks.py:413-418
+       ▼
+┌──────────────┐  3. Push request    ┌──────────────┐
+│   MinerU     │◄────────────────────│    Redis     │
+│   Client     │                     │  Queue (RPC) │
+│              │  4. Block wait      │              │
+│              │─────────────────────▶              │
+└──────────────┘  (up to 300 sec)    └──────────────┘
+       ▲                                     │
+       │                                     │ 3. Pop request
+       │ 6. Return result                    ▼
+       │                              ┌──────────────┐
+       │                              │   MinerU     │
+       │                              │  Standalone  │
+       └──────────────────────────────│  (3 GPU      │
+         5. Push result to Redis      │   instances) │
+                                      └──────────────┘
+                                      5-30 sec (GPU)
+```
+
+### Known Bottlenecks & Optimization Targets
+
+> **From Performance Review (2025-10)** - See performance review commits for details
+
+#### 🔴 **Critical Bottlenecks**
+
+1. **Synchronous Redis Blocking** (`services/mineru_client.py:122`)
+   - **Impact**: Worker blocked for up to 300s waiting for result
+   - **Effect**: Serializes all processing, prevents parallelism
+   - **Solution**: Async Redis with callbacks or pub/sub
+   - **Expected Gain**: 2-3x throughput
+
+2. **Individual Embedding Inserts** (`worker/tasks.py:1074-1077`)
+   - **Impact**: N individual `db.add()` calls instead of bulk
+   - **Effect**: 10-100x slower for large documents (100+ embeddings)
+   - **Solution**: Use `bulk_insert_mappings()`
+   - **Expected Gain**: 10-100x faster
+
+3. **Zero MinerU Timing Instrumentation** (`services/mineru_standalone.py:173-340`)
+   - **Impact**: Cannot identify which stage is slow (layout, OCR, etc.)
+   - **Effect**: Blind to actual bottlenecks inside GPU processing
+   - **Solution**: Add stage-level timing
+   - **Expected Gain**: Infinite visibility, zero perf cost
+
+#### ⚠️ **High-Impact Issues**
+
+4. **Request ID Mismatches** (`services/mineru_client.py:144-151`)
+   - **Cause**: Shared result queue, order-dependent retrieval
+   - **Effect**: Head-of-line blocking, cascading delays
+   - **Solution**: Request-specific Redis keys
+   - **Expected Gain**: Eliminate mismatches
+
+5. **GPU Memory Race Conditions** (`services/mineru_standalone.py:192-198`)
+   - **Cause**: Check-then-use pattern without reservation
+   - **Effect**: OOM errors after check passes, retry storms
+   - **Solution**: Redis-based GPU memory reservation
+   - **Expected Gain**: Eliminate OOM errors
+
+6. **No Backpressure** (`worker/tasks.py:668-679`)
+   - **Cause**: Always queue embeddings regardless of system load
+   - **Effect**: Ollama overload during PDF processing bursts
+   - **Solution**: Check queue depth before queueing
+   - **Expected Gain**: Prevent service degradation
+
+### Performance Metrics & Observability
+
+#### Current Metrics (Existing)
+- ✅ Task-level progress tracking (`worker/tasks.py:62-126`)
+- ✅ GPU memory availability checks (`utils/gpu_utils.py`)
+- ✅ Batch writer performance (`services/batch_writer.py`)
+- ✅ Connection pool monitoring (`db/session.py:284-387`)
+- ✅ Document processing counters (`core/monitoring.py`)
+
+#### Missing Metrics (To Add)
+- ❌ MinerU stage-level timing (layout, OCR, markdown generation)
+- ❌ Pages-per-minute throughput
+- ❌ GPU utilization during processing
+- ❌ End-to-end pipeline latency (file → embeddings)
+- ❌ Queue wait time analysis
+- ❌ Embeddings-per-second throughput
+- ❌ Database query performance tracking
+
+### Resource Utilization
+
+| Resource | Capacity | Typical Usage | Saturation Point |
+|----------|----------|---------------|------------------|
+| GPU Memory | 24 GB | 1-8 GB per PDF | > 20 GB (OOM risk) |
+| CPU | 16 cores | 30-60% | > 90% (throttling) |
+| Redis Memory | 2 GB | 100-500 MB | > 1.5 GB (eviction) |
+| DB Connections | 20 + 10 overflow | 5-15 | > 25 (timeout) |
+| Ollama Concurrency | 8 concurrent | 4-8 | > 8 (queueing) |
+| MinerU Instances | 3 GPU instances | 1-3 active | > 3 (queuing) |
+
+### Queue Depths (Healthy vs Warning)
+
+| Queue | Healthy | Warning | Critical | Recovery |
+|-------|---------|---------|----------|----------|
+| `mineru_requests_N` | < 5 | 5-20 | > 20 | Clear or add instance |
+| `celery` (PDF tasks) | < 50 | 50-200 | > 200 | Scale workers |
+| `embeddings` | < 100 | 100-500 | > 500 | Backpressure needed |
+| `batch_writer` (memory) | < 5000 | 5000-9000 | > 9000 | Data loss risk |
+
+### Optimization Roadmap
+
+> **Phase 1: Observability** (Week 1)
+> - Add MinerU stage timing
+> - Add embeddings/sec metrics
+> - Add end-to-end latency tracking
+> - Add queue wait time metrics
+
+> **Phase 2: Quick Wins** (Week 1)
+> - Bulk embedding inserts (10-100x gain)
+> - Enable async file I/O (10-20% gain)
+> - Enable batch DB writes (10-20% gain)
+> - Cache GPU memory checks (eliminate overhead)
+
+> **Phase 3: Architectural** (Week 2)
+> - Request-specific Redis keys
+> - Async Redis communication (2-3x gain)
+> - GPU memory reservation system
+> - Backpressure for embedding queue
+
+> **Phase 4: Validation** (Week 3)
+> - Performance regression tests
+> - Load testing (100+ documents)
+> - Metrics validation
+> - Document baselines
+
+**Expected Combined Impact: 20-50x improvement**
+
+---
+
+> **⚠️ MAINTENANCE NOTE**: Update this section whenever:
+> - Adding new pipeline stages
+> - Changing queue configurations
+> - Modifying processing logic
+> - Implementing performance optimizations
+> - Discovering new bottlenecks
+
 ## Project Structure
 
 ```
