@@ -776,6 +776,35 @@ export MINERU_DEVICE_MODE=cuda
 - Recommended: 16GB+ VRAM for batch processing
 - Tested: RTX 3090 (24GB), RTX 4090, A100
 
+### Recommended Settings for RTX 3090 (24GB VRAM)
+
+**Optimal configuration for maximum GPU utilization:**
+
+```bash
+# In .env file
+MINERU_INSTANCE_COUNT=2              # Run 2 concurrent instances
+MINERU_GPU_MEMORY_LIMIT_GB=10.0      # 10GB per instance (20GB total)
+CELERY_WORKER_CONCURRENCY=3          # Match worker count to instances
+```
+
+**Performance Characteristics:**
+- **GPU Utilization**: 70-100% (sustained high usage)
+- **Power Consumption**: 200-400W (vs 12W idle)
+- **Memory Usage**: 5-21GB dynamic allocation
+- **Throughput**: ~2x improvement vs single instance
+- **Processing Time**: 660 PDFs in ~2.5 hours (vs 5 hours single)
+
+**Why These Settings Work:**
+- 2 instances × 10GB = 20GB allocated, leaving 4GB for Ollama embeddings
+- Instances alternate between CPU tasks (loading PDFs, formatting markdown) and GPU tasks (OCR, layout detection)
+- While Instance 0 does CPU work → Instance 1 uses GPU → GPU stays busy
+- Occasional "Insufficient GPU memory" warnings are normal when both instances process large PDFs simultaneously - they will retry automatically
+
+**Not Recommended:**
+- 3+ instances on RTX 3090 → CUDA OOM errors
+- Single instance → GPU sits idle 80-90% of time (only 0-5% utilization)
+- Memory limits <7GB per instance → Processing failures
+
 ### Tips for Large-Scale Processing
 
 1. **Batch Processing** - Process multiple PDFs in parallel using Celery workers

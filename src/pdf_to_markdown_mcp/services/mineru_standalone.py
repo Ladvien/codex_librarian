@@ -65,7 +65,7 @@ class ProcessingResult(BaseModel):
 class MinerUStandaloneService:
     """Standalone MinerU processing service with GPU support."""
 
-    def __init__(self, redis_url: str = None):
+    def __init__(self, redis_url: str = None, instance_id: int = 0):
         # Get redis URL from settings if not provided
         if redis_url is None:
             # Try to get from environment or use default
@@ -74,36 +74,79 @@ class MinerUStandaloneService:
             redis_db = os.getenv("REDIS_DB", "0")
             redis_url = f"redis://{redis_host}:{redis_port}/{redis_db}"
         self.redis_url = redis_url
+        self.instance_id = instance_id
         self.redis_client: Optional[redis.Redis] = None
         self.mineru_initialized = False
         self.running = True
         self.do_parse = None
         self.read_fn = None
 
-        # Queue names
-        self.request_queue = "mineru_requests"
-        self.result_queue = "mineru_results"
+        # Queue names - instance-specific to support multiple workers
+        self.request_queue = f"mineru_requests_{instance_id}"
+        self.result_queue = f"mineru_results_{instance_id}"
+
+        # GPU memory management
+        self.gpu_memory_limit_gb = float(os.getenv("MINERU_GPU_MEMORY_LIMIT_GB", "7.0"))
 
     async def initialize(self):
         """Initialize Redis connection and MinerU."""
-        logger.info("Initializing MinerU Standalone Service...")
+        logger.info(
+            f"Initializing MinerU Standalone Service [Instance {self.instance_id}]..."
+        )
 
         # Connect to Redis
         self.redis_client = redis.from_url(self.redis_url, decode_responses=False)
         await self.redis_client.ping()
-        logger.info("Connected to Redis")
+        logger.info(
+            f"Instance {self.instance_id}: Connected to Redis, "
+            f"listening on queue: {self.request_queue}"
+        )
 
-        # Check GPU availability
+        # Check GPU availability and configure memory limits
         if torch.cuda.is_available():
             device_count = torch.cuda.device_count()
             device_name = torch.cuda.get_device_name(0)
             memory_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+
+            # Set per-process memory fraction to prevent OOM with multiple instances
+            # Critical: Add locking to prevent race condition during memory allocation
+            try:
+                # Calculate memory fraction based on expected number of instances
+                # Leave some buffer for system and other processes
+                instance_count = int(os.getenv("MINERU_INSTANCE_COUNT", "1"))
+                memory_fraction = min(0.9 / instance_count, 0.8)  # Max 80% per instance
+
+                # Critical: Set memory fraction only once per process (not per instance)
+                # Check if already set by looking at allocated memory
+                if torch.cuda.memory_allocated(0) == 0:
+                    # First time initialization - set memory fraction
+                    torch.cuda.set_per_process_memory_fraction(memory_fraction, device=0)
+                    logger.info(
+                        f"Instance {self.instance_id}: GPU memory fraction set to "
+                        f"{memory_fraction*100:.1f}% ({memory_fraction*memory_gb:.1f}GB limit)"
+                    )
+                else:
+                    logger.info(
+                        f"Instance {self.instance_id}: GPU memory fraction already configured "
+                        f"({torch.cuda.memory_allocated(0) / (1024**3):.2f}GB allocated)"
+                    )
+
+                logger.info(
+                    f"Instance {self.instance_id}: GPU configured - {device_count} device(s), "
+                    f"{device_name}, {memory_gb:.1f}GB total, "
+                    f"target limit {memory_fraction*100:.1f}% ({memory_fraction*memory_gb:.1f}GB)"
+                )
+            except Exception as mem_error:
+                logger.warning(
+                    f"Instance {self.instance_id}: Failed to set GPU memory limit: {mem_error}"
+                )
+
             logger.info(
-                f"GPU available: {device_count} device(s), "
+                f"Instance {self.instance_id}: GPU available: {device_count} device(s), "
                 f"using {device_name} with {memory_gb:.1f}GB memory"
             )
         else:
-            logger.warning("No GPU available, will use CPU (slower)")
+            logger.warning(f"Instance {self.instance_id}: No GPU available, will use CPU (slower)")
 
         # Initialize MinerU
         try:
@@ -128,10 +171,37 @@ class MinerUStandaloneService:
             raise
 
     async def process_pdf(self, request: ProcessingRequest) -> ProcessingResult:
-        """Process a single PDF file."""
-        logger.info(f"Processing PDF: {request.pdf_path} (request: {request.request_id})")
+        """Process a single PDF file with GPU memory management."""
+        logger.info(
+            f"Instance {self.instance_id}: Processing PDF: {request.pdf_path} "
+            f"(request: {request.request_id})"
+        )
+
+        # Track GPU memory state for cleanup on error
+        gpu_memory_allocated = False
 
         try:
+            # GPU memory check before processing to prevent OOM errors
+            # This is critical to prevent race conditions when multiple tasks
+            # are queued and try to allocate GPU memory simultaneously
+            from pdf_to_markdown_mcp.utils.gpu_utils import get_available_gpu_memory
+
+            min_gpu_memory_gb = float(os.getenv("MINERU_MIN_GPU_MEMORY_GB", "7.0"))
+            available_memory = get_available_gpu_memory()
+
+            if available_memory < min_gpu_memory_gb:
+                error_msg = (
+                    f"Insufficient GPU memory: {available_memory:.2f} GB available, "
+                    f"{min_gpu_memory_gb:.2f} GB required. Waiting for memory to free up."
+                )
+                logger.warning(error_msg)
+                raise RuntimeError(error_msg)
+
+            logger.info(
+                f"GPU memory check passed: {available_memory:.2f} GB available "
+                f"(required: {min_gpu_memory_gb:.2f} GB)"
+            )
+
             # Read PDF file
             pdf_path = Path(request.pdf_path)
             if not pdf_path.exists():
@@ -161,6 +231,9 @@ class MinerUStandaloneService:
 
                 # Run MinerU processing (blocking call)
                 pdf_bytes = self.read_fn(str(pdf_path))
+
+                # Mark GPU memory as allocated for error cleanup
+                gpu_memory_allocated = True
 
                 # do_parse expects lists as arguments
                 await asyncio.get_event_loop().run_in_executor(
@@ -248,6 +321,17 @@ class MinerUStandaloneService:
 
         except Exception as e:
             logger.error(f"Error processing PDF: {e}\n{traceback.format_exc()}")
+
+            # Critical: Release GPU memory on error to prevent memory leaks
+            if gpu_memory_allocated and torch.cuda.is_available():
+                try:
+                    import gc
+                    gc.collect()
+                    torch.cuda.empty_cache()
+                    logger.info(f"Instance {self.instance_id}: GPU memory cache cleared after error")
+                except Exception as cleanup_error:
+                    logger.error(f"Instance {self.instance_id}: Failed to clear GPU memory: {cleanup_error}")
+
             return ProcessingResult(
                 request_id=request.request_id,
                 success=False,
@@ -256,7 +340,10 @@ class MinerUStandaloneService:
 
     async def process_queue(self):
         """Main processing loop - monitors Redis queue for jobs."""
-        logger.info(f"Starting queue processor, monitoring: {self.request_queue}")
+        logger.info(
+            f"Instance {self.instance_id}: Starting queue processor, "
+            f"monitoring: {self.request_queue}"
+        )
 
         while self.running:
             try:
@@ -286,20 +373,36 @@ class MinerUStandaloneService:
                 await asyncio.sleep(1)  # Brief pause on error
 
     async def shutdown(self):
-        """Clean shutdown of service."""
+        """Clean shutdown of service with proper resource cleanup."""
         logger.info("Shutting down MinerU service...")
         self.running = False
+
+        # Critical: Ensure Redis connection is properly closed
         if self.redis_client:
-            await self.redis_client.close()
-        logger.info("Shutdown complete")
+            try:
+                await self.redis_client.close()
+                logger.info(f"Instance {self.instance_id}: Redis connection closed")
+            except Exception as e:
+                logger.error(f"Instance {self.instance_id}: Error closing Redis: {e}")
+            finally:
+                self.redis_client = None
+
+        logger.info(f"Instance {self.instance_id}: Shutdown complete")
 
     async def run(self):
-        """Main service entry point."""
+        """Main service entry point with guaranteed cleanup."""
         try:
             await self.initialize()
             await self.process_queue()
+        except Exception as e:
+            logger.error(f"Fatal error in service run: {e}", exc_info=True)
+            raise
         finally:
-            await self.shutdown()
+            # Critical: Always cleanup resources, even on error
+            try:
+                await self.shutdown()
+            except Exception as shutdown_error:
+                logger.error(f"Error during shutdown: {shutdown_error}", exc_info=True)
 
 
 def handle_signal(sig, frame):
@@ -310,13 +413,30 @@ def handle_signal(sig, frame):
 
 async def main():
     """Main entry point."""
+    import argparse
     global service
 
-    # Get Redis URL from environment or use settings
-    redis_url = os.getenv("REDIS_URL", None)
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description="MinerU Standalone GPU Service")
+    parser.add_argument(
+        "--instance-id",
+        type=int,
+        default=0,
+        help="Instance ID for multi-instance deployment (default: 0)"
+    )
+    parser.add_argument(
+        "--redis-url",
+        type=str,
+        default=None,
+        help="Redis URL (default: from environment or localhost:6379)"
+    )
+    args = parser.parse_args()
 
-    # Create and run service (will use settings if redis_url is None)
-    service = MinerUStandaloneService(redis_url)
+    # Get Redis URL from args, environment, or use default
+    redis_url = args.redis_url or os.getenv("REDIS_URL", None)
+
+    # Create and run service with instance ID
+    service = MinerUStandaloneService(redis_url=redis_url, instance_id=args.instance_id)
 
     # Set up signal handlers
     signal.signal(signal.SIGINT, handle_signal)

@@ -52,8 +52,29 @@ class EmbeddingSettings(BaseSettings):
     # Ollama settings
     ollama_url: str = Field(default="http://localhost:11434", env="OLLAMA_URL")
 
+    # Ollama performance optimization
+    ollama_concurrency_limit: int = Field(
+        default=8,
+        ge=1,
+        le=32,
+        env="OLLAMA_CONCURRENCY_LIMIT",
+        description="Number of concurrent embedding requests to Ollama (4-10x speedup)",
+    )
+    ollama_batch_size: int = Field(
+        default=16,
+        ge=1,
+        env="OLLAMA_BATCH_SIZE",
+        description="Batch size optimized for Ollama's sequential processing",
+    )
+
     # OpenAI settings
     openai_api_key: str | None = Field(default=None, env="OPENAI_API_KEY")
+    openai_batch_size: int = Field(
+        default=100,
+        ge=1,
+        env="OPENAI_BATCH_SIZE",
+        description="Batch size optimized for OpenAI's batch API support",
+    )
 
     class Config:
         env_prefix = "EMBEDDING_"
@@ -72,6 +93,18 @@ class ProcessingSettings(BaseSettings):
     extract_images: bool = Field(default=True, env="EXTRACT_IMAGES")
     extract_tables: bool = Field(default=True, env="EXTRACT_TABLES")
     mineru_device: str = Field(default="cuda", env="MINERU_DEVICE_MODE")
+
+    # Multi-instance MinerU settings (NEW)
+    mineru_instance_count: int = Field(default=3, env="MINERU_INSTANCE_COUNT")
+    mineru_gpu_memory_limit_gb: float = Field(default=7.0, env="MINERU_GPU_MEMORY_LIMIT_GB")
+
+    # Batch writing settings (NEW)
+    enable_batch_writes: bool = Field(default=True, env="ENABLE_BATCH_WRITES")
+    batch_write_size: int = Field(default=5, env="BATCH_WRITE_SIZE")
+    batch_write_max_delay_seconds: float = Field(default=10.0, env="BATCH_WRITE_MAX_DELAY_SECONDS")
+
+    # Async file I/O settings (NEW)
+    enable_async_file_io: bool = Field(default=True, env="ENABLE_ASYNC_FILE_IO")
 
     # Chunking settings
     chunk_size: int = Field(default=1000, env="CHUNK_SIZE")

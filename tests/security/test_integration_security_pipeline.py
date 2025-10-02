@@ -219,12 +219,12 @@ class TestCompleteAttackChainPrevention:
         # Given
         memory_exhaustion_attacks = [
             {
-                "large_payload": "A" * 10000 + "'; DROP TABLE documents; --",
+                "large_payload": "A" * 60000 + "'; DROP TABLE documents; --",  # >50KB limit
                 "file_size": 600 * 1024 * 1024,  # 600MB - over limit
                 "description": "Large text payload with SQL injection",
             },
             {
-                "large_payload": "x" * 5000 + "../../../etc/passwd",
+                "large_payload": "x" * 55000 + "../../../etc/passwd",  # >50KB limit
                 "file_size": 1000 * 1024 * 1024,  # 1GB - way over limit
                 "description": "Large payload with path traversal",
             },

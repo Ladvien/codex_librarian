@@ -312,80 +312,115 @@ class TestEmbeddingService:
             return service
 
     @pytest.mark.asyncio
-    async def test_generate_embeddings_ollama_provider(self, embedding_service):
+    async def test_generate_embeddings_ollama_provider(self, mock_ollama_embedder, mock_openai_embedder):
         """Test embedding generation with Ollama provider."""
-        # Given
-        texts = ["Test text 1", "Test text 2"]
-        expected_embeddings = [[0.1, 0.2], [0.3, 0.4]]
+        # Given - Create service with Ollama provider (default)
+        config = EmbeddingConfig(provider=EmbeddingProvider.OLLAMA)
 
-        embedding_service.config.provider = EmbeddingProvider.OLLAMA
-        embedding_service.ollama_embedder.embed_texts.return_value = expected_embeddings
+        with (
+            patch("pdf_to_markdown_mcp.services.embeddings.OllamaEmbedder") as mock_ollama_cls,
+            patch("pdf_to_markdown_mcp.services.embeddings.OpenAIEmbedder") as mock_openai_cls,
+        ):
+            mock_ollama_cls.return_value = mock_ollama_embedder
+            mock_openai_cls.return_value = mock_openai_embedder
 
-        # When
-        result = await embedding_service.generate_embeddings(texts)
+            service = EmbeddingService(config)
+            service.ollama_embedder = mock_ollama_embedder
+            service.openai_embedder = mock_openai_embedder
 
-        # Then
-        assert isinstance(result, EmbeddingResult)
-        assert result.embeddings == expected_embeddings
-        assert result.provider == EmbeddingProvider.OLLAMA
-        assert result.model == "nomic-embed-text"
-        assert len(result.embeddings) == 2
+            texts = ["Test text 1", "Test text 2"]
+            expected_embeddings = [[0.1, 0.2], [0.3, 0.4]]
 
-        embedding_service.ollama_embedder.embed_texts.assert_called_once_with(texts)
-        embedding_service.openai_embedder.embed_texts.assert_not_called()
+            mock_ollama_embedder.embed_texts.return_value = expected_embeddings
+
+            # When
+            result = await service.generate_embeddings(texts)
+
+            # Then
+            assert isinstance(result, EmbeddingResult)
+            assert result.embeddings == expected_embeddings
+            assert result.provider == EmbeddingProvider.OLLAMA
+            assert result.model == "nomic-embed-text"
+            assert len(result.embeddings) == 2
+
+            mock_ollama_embedder.embed_texts.assert_called_once_with(texts)
+            mock_openai_embedder.embed_texts.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_generate_embeddings_openai_provider(self, embedding_service):
+    async def test_generate_embeddings_openai_provider(self, mock_ollama_embedder, mock_openai_embedder):
         """Test embedding generation with OpenAI provider."""
-        # Given
-        texts = ["Test text 1", "Test text 2"]
-        expected_embeddings = [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]
+        # Given - Create service with OpenAI provider
+        config = EmbeddingConfig(provider=EmbeddingProvider.OPENAI)
 
-        embedding_service.config.provider = EmbeddingProvider.OPENAI
-        embedding_service.openai_embedder.embed_texts.return_value = expected_embeddings
+        with (
+            patch("pdf_to_markdown_mcp.services.embeddings.OllamaEmbedder") as mock_ollama_cls,
+            patch("pdf_to_markdown_mcp.services.embeddings.OpenAIEmbedder") as mock_openai_cls,
+        ):
+            mock_ollama_cls.return_value = mock_ollama_embedder
+            mock_openai_cls.return_value = mock_openai_embedder
 
-        # When
-        result = await embedding_service.generate_embeddings(texts)
+            service = EmbeddingService(config)
+            service.ollama_embedder = mock_ollama_embedder
+            service.openai_embedder = mock_openai_embedder
 
-        # Then
-        assert isinstance(result, EmbeddingResult)
-        assert result.embeddings == expected_embeddings
-        assert result.provider == EmbeddingProvider.OPENAI
-        assert result.model == "text-embedding-3-small"
-        assert len(result.embeddings) == 2
+            texts = ["Test text 1", "Test text 2"]
+            expected_embeddings = [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]
 
-        embedding_service.openai_embedder.embed_texts.assert_called_once_with(
-            texts, dimensions=1536
-        )
-        embedding_service.ollama_embedder.embed_texts.assert_not_called()
+            mock_openai_embedder.embed_texts.return_value = expected_embeddings
+
+            # When
+            result = await service.generate_embeddings(texts)
+
+            # Then
+            assert isinstance(result, EmbeddingResult)
+            assert result.embeddings == expected_embeddings
+            assert result.provider == EmbeddingProvider.OPENAI
+            assert result.model == "text-embedding-3-small"
+            assert len(result.embeddings) == 2
+
+            mock_openai_embedder.embed_texts.assert_called_once_with(
+                texts, dimensions=1536
+            )
+            mock_ollama_embedder.embed_texts.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_generate_embeddings_batch_processing(self, embedding_service):
+    async def test_generate_embeddings_batch_processing(self, mock_ollama_embedder, mock_openai_embedder):
         """Test batch processing with large text input."""
-        # Given
-        texts = [f"Text {i}" for i in range(25)]  # Larger than batch_size=10
-        embedding_service.config.batch_size = 10
-        embedding_service.config.provider = EmbeddingProvider.OLLAMA
+        # Given - Create service with batch size 10
+        config = EmbeddingConfig(provider=EmbeddingProvider.OLLAMA, batch_size=10)
 
-        # Mock embedder to return different embeddings for each batch
-        embedding_service.ollama_embedder.embed_texts.side_effect = [
-            [[0.1, 0.2]] * 10,  # First batch: 10 embeddings
-            [[0.3, 0.4]] * 10,  # Second batch: 10 embeddings
-            [[0.5, 0.6]] * 5,  # Third batch: 5 embeddings
-        ]
+        with (
+            patch("pdf_to_markdown_mcp.services.embeddings.OllamaEmbedder") as mock_ollama_cls,
+            patch("pdf_to_markdown_mcp.services.embeddings.OpenAIEmbedder") as mock_openai_cls,
+        ):
+            mock_ollama_cls.return_value = mock_ollama_embedder
+            mock_openai_cls.return_value = mock_openai_embedder
 
-        # When
-        result = await embedding_service.generate_embeddings(texts)
+            service = EmbeddingService(config)
+            service.ollama_embedder = mock_ollama_embedder
+            service.openai_embedder = mock_openai_embedder
 
-        # Then
-        assert len(result.embeddings) == 25
-        assert embedding_service.ollama_embedder.embed_texts.call_count == 3
+            texts = [f"Text {i}" for i in range(25)]  # Larger than batch_size=10
 
-        # Verify batch calls
-        calls = embedding_service.ollama_embedder.embed_texts.call_args_list
-        assert len(calls[0][0][0]) == 10  # First batch size
-        assert len(calls[1][0][0]) == 10  # Second batch size
-        assert len(calls[2][0][0]) == 5  # Third batch size
+            # Mock embedder to return different embeddings for each batch
+            mock_ollama_embedder.embed_texts.side_effect = [
+                [[0.1, 0.2]] * 10,  # First batch: 10 embeddings
+                [[0.3, 0.4]] * 10,  # Second batch: 10 embeddings
+                [[0.5, 0.6]] * 5,  # Third batch: 5 embeddings
+            ]
+
+            # When
+            result = await service.generate_embeddings(texts)
+
+            # Then
+            assert len(result.embeddings) == 25
+            assert mock_ollama_embedder.embed_texts.call_count == 3
+
+            # Verify batch calls
+            calls = mock_ollama_embedder.embed_texts.call_args_list
+            assert len(calls[0][0][0]) == 10  # First batch size
+            assert len(calls[1][0][0]) == 10  # Second batch size
+            assert len(calls[2][0][0]) == 5  # Third batch size
 
     @pytest.mark.asyncio
     async def test_generate_embeddings_empty_input(self, embedding_service):
@@ -405,78 +440,124 @@ class TestEmbeddingService:
         embedding_service.openai_embedder.embed_texts.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_generate_embeddings_with_retry_on_failure(self, embedding_service):
+    async def test_generate_embeddings_with_retry_on_failure(self, mock_ollama_embedder, mock_openai_embedder):
         """Test retry mechanism on embedding failure."""
-        # Given
-        texts = ["Test text"]
-        embedding_service.config.provider = EmbeddingProvider.OLLAMA
-        embedding_service.config.max_retries = 3
+        # Given - Create service with specific retry config
+        config = EmbeddingConfig(provider=EmbeddingProvider.OLLAMA, max_retries=3)
 
-        # First two calls fail, third succeeds
-        embedding_service.ollama_embedder.embed_texts.side_effect = [
-            EmbeddingError("Temporary failure"),
-            EmbeddingError("Another failure"),
-            [[0.1, 0.2, 0.3]],  # Success on third try
-        ]
+        with (
+            patch("pdf_to_markdown_mcp.services.embeddings.OllamaEmbedder") as mock_ollama_cls,
+            patch("pdf_to_markdown_mcp.services.embeddings.OpenAIEmbedder") as mock_openai_cls,
+        ):
+            mock_ollama_cls.return_value = mock_ollama_embedder
+            mock_openai_cls.return_value = mock_openai_embedder
 
-        # When
-        result = await embedding_service.generate_embeddings(texts)
+            service = EmbeddingService(config)
+            service.ollama_embedder = mock_ollama_embedder
+            service.openai_embedder = mock_openai_embedder
 
-        # Then
-        assert result.embeddings == [[0.1, 0.2, 0.3]]
-        assert embedding_service.ollama_embedder.embed_texts.call_count == 3
+            texts = ["Test text"]
+
+            # First two calls fail, third succeeds
+            mock_ollama_embedder.embed_texts.side_effect = [
+                EmbeddingError("Temporary failure"),
+                EmbeddingError("Another failure"),
+                [[0.1, 0.2, 0.3]],  # Success on third try
+            ]
+
+            # When
+            result = await service.generate_embeddings(texts)
+
+            # Then
+            assert result.embeddings == [[0.1, 0.2, 0.3]]
+            assert mock_ollama_embedder.embed_texts.call_count == 3
 
     @pytest.mark.asyncio
-    async def test_generate_embeddings_max_retries_exceeded(self, embedding_service):
+    async def test_generate_embeddings_max_retries_exceeded(self, mock_ollama_embedder, mock_openai_embedder):
         """Test failure after max retries exceeded."""
-        # Given
-        texts = ["Test text"]
-        embedding_service.config.provider = EmbeddingProvider.OLLAMA
-        embedding_service.config.max_retries = 2
+        # Given - Create service with specific retry config
+        config = EmbeddingConfig(provider=EmbeddingProvider.OLLAMA, max_retries=2)
 
-        embedding_service.ollama_embedder.embed_texts.side_effect = EmbeddingError(
-            "Persistent failure"
-        )
+        with (
+            patch("pdf_to_markdown_mcp.services.embeddings.OllamaEmbedder") as mock_ollama_cls,
+            patch("pdf_to_markdown_mcp.services.embeddings.OpenAIEmbedder") as mock_openai_cls,
+        ):
+            mock_ollama_cls.return_value = mock_ollama_embedder
+            mock_openai_cls.return_value = mock_openai_embedder
 
-        # When/Then
-        with pytest.raises(EmbeddingError) as exc_info:
-            await embedding_service.generate_embeddings(texts)
+            service = EmbeddingService(config)
+            service.ollama_embedder = mock_ollama_embedder
+            service.openai_embedder = mock_openai_embedder
 
-        assert "Max retries (2) exceeded" in str(exc_info.value)
-        assert (
-            embedding_service.ollama_embedder.embed_texts.call_count == 3
-        )  # Initial + 2 retries
+            texts = ["Test text"]
+
+            mock_ollama_embedder.embed_texts.side_effect = EmbeddingError(
+                "Persistent failure"
+            )
+
+            # When/Then
+            with pytest.raises(EmbeddingError) as exc_info:
+                await service.generate_embeddings(texts)
+
+            assert "Max retries (2) exceeded" in str(exc_info.value)
+            assert (
+                mock_ollama_embedder.embed_texts.call_count == 3
+            )  # Initial + 2 retries
 
     @pytest.mark.asyncio
-    async def test_health_check_ollama_healthy(self, embedding_service):
+    async def test_health_check_ollama_healthy(self, mock_ollama_embedder, mock_openai_embedder):
         """Test health check when Ollama is healthy."""
-        # Given
-        embedding_service.config.provider = EmbeddingProvider.OLLAMA
-        embedding_service.ollama_embedder.embed_texts.return_value = [[0.1, 0.2]]
+        # Given - Create service with Ollama provider
+        config = EmbeddingConfig(provider=EmbeddingProvider.OLLAMA)
 
-        # When
-        is_healthy = await embedding_service.health_check()
+        with (
+            patch("pdf_to_markdown_mcp.services.embeddings.OllamaEmbedder") as mock_ollama_cls,
+            patch("pdf_to_markdown_mcp.services.embeddings.OpenAIEmbedder") as mock_openai_cls,
+        ):
+            mock_ollama_cls.return_value = mock_ollama_embedder
+            mock_openai_cls.return_value = mock_openai_embedder
 
-        # Then
-        assert is_healthy is True
-        embedding_service.ollama_embedder.embed_texts.assert_called_once_with(
-            ["health check"]
-        )
+            service = EmbeddingService(config)
+            service.ollama_embedder = mock_ollama_embedder
+            service.openai_embedder = mock_openai_embedder
+
+            mock_ollama_embedder.embed_texts.return_value = [[0.1, 0.2]]
+
+            # When
+            is_healthy = await service.health_check()
+
+            # Then
+            assert is_healthy is True
+            mock_ollama_embedder.embed_texts.assert_called_once_with(
+                ["health check"]
+            )
 
     @pytest.mark.asyncio
-    async def test_health_check_service_unhealthy(self, embedding_service):
+    async def test_health_check_service_unhealthy(self, mock_ollama_embedder, mock_openai_embedder):
         """Test health check when service is unhealthy."""
-        # Given
-        embedding_service.config.provider = EmbeddingProvider.OPENAI
-        embedding_service.openai_embedder.embed_texts.side_effect = Exception(
-            "Service down"
-        )
+        # Given - Create service with OpenAI provider
+        config = EmbeddingConfig(provider=EmbeddingProvider.OPENAI)
 
-        # When
-        is_healthy = await embedding_service.health_check()
+        with (
+            patch("pdf_to_markdown_mcp.services.embeddings.OllamaEmbedder") as mock_ollama_cls,
+            patch("pdf_to_markdown_mcp.services.embeddings.OpenAIEmbedder") as mock_openai_cls,
+        ):
+            mock_ollama_cls.return_value = mock_ollama_embedder
+            mock_openai_cls.return_value = mock_openai_embedder
 
-        # Then
-        assert is_healthy is False
+            service = EmbeddingService(config)
+            service.ollama_embedder = mock_ollama_embedder
+            service.openai_embedder = mock_openai_embedder
+
+            mock_openai_embedder.embed_texts.side_effect = Exception(
+                "Service down"
+            )
+
+            # When
+            is_healthy = await service.health_check()
+
+            # Then
+            assert is_healthy is False
 
     @pytest.mark.asyncio
     async def test_similarity_search_cosine(self, embedding_service):

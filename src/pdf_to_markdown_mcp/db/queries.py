@@ -53,6 +53,20 @@ def _validate_string(value: Any, field_name: str, max_length: int = 1000) -> str
         raise ValueError(f"Invalid string value for {field_name}")
     if len(value) > max_length:
         raise ValueError(f"{field_name} exceeds maximum length of {max_length}")
+
+    # Check for dangerous SQL keywords that might indicate injection attempts
+    dangerous_keywords = [
+        "DROP TABLE", "DROP DATABASE", "DELETE FROM", "TRUNCATE",
+        "ALTER TABLE", "CREATE TABLE", "INSERT INTO", "UPDATE ",
+        "UNION SELECT", "UNION ALL", "EXEC(", "EXECUTE(",
+        "--", "/*", "*/", "xp_", "sp_", ";--"
+    ]
+
+    value_upper = value.upper()
+    for keyword in dangerous_keywords:
+        if keyword in value_upper:
+            raise ValueError(f"Invalid {field_name}: contains dangerous SQL pattern")
+
     return value
 
 
@@ -217,7 +231,14 @@ class SearchQueries:
         """
 
         search_query = text(base_query)
-        result = db.execute(search_query, params)
+
+        try:
+            result = db.execute(search_query, params)
+        except SQLAlchemyError as e:
+            # Sanitize error message to prevent information disclosure
+            from pdf_to_markdown_mcp.auth.security import sanitize_error_message
+            sanitized_msg = sanitize_error_message(str(e))
+            raise SQLAlchemyError(sanitized_msg) from None
 
         # Create result objects
         class SearchResult:

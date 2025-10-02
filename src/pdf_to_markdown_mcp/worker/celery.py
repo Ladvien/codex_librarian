@@ -260,17 +260,19 @@ def create_celery_app() -> Celery:
             "index-document-embeddings": {
                 "task": "pdf_to_markdown_mcp.worker.embedding_indexer.index_document_embeddings",
                 "schedule": 300.0,  # Every 5 minutes
-                "options": {"priority": 3, "kwargs": {"batch_size": 5}},
+                "kwargs": {"batch_size": 10},
+                "options": {"priority": 3, "queue": "maintenance"},
             },
             "check-embedding-status": {
                 "task": "pdf_to_markdown_mcp.worker.embedding_indexer.check_embedding_status",
                 "schedule": 1800.0,  # Every 30 minutes
-                "options": {"priority": 1},
+                "options": {"priority": 1, "queue": "maintenance"},
             },
             "reset-stuck-embeddings": {
                 "task": "pdf_to_markdown_mcp.worker.embedding_indexer.reset_stuck_processing_status",
                 "schedule": 900.0,  # Every 15 minutes
-                "options": {"priority": 2, "kwargs": {"timeout_minutes": 30}},
+                "kwargs": {"timeout_minutes": 30},
+                "options": {"priority": 2, "queue": "maintenance"},
             },
         },
         # Enhanced beat scheduler persistence with backup
@@ -553,6 +555,7 @@ celery_app = app  # Alias for compatibility
 # Auto-discover tasks in the tasks and indexer modules
 app.autodiscover_tasks(["pdf_to_markdown_mcp.worker"], related_name="tasks")
 app.autodiscover_tasks(["pdf_to_markdown_mcp.worker"], related_name="indexer")
+app.autodiscover_tasks(["pdf_to_markdown_mcp.worker"], related_name="embedding_indexer")
 
 
 # Enhanced monitoring and management functions

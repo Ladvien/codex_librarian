@@ -12,6 +12,7 @@ Test Categories:
 5. Error handling and edge cases
 """
 
+import hashlib
 from unittest.mock import Mock
 
 import pytest
@@ -53,7 +54,7 @@ class TestDocumentQueries:
         doc.id = 1
         doc.filename = "test.pdf"
         doc.source_path = "/test/path.pdf"
-        doc.file_hash = "abc123def456"
+        doc.file_hash = hashlib.sha256(b"abc123def456").hexdigest()
         doc.conversion_status = "completed"
         doc.file_size_bytes = 1024000
         doc.created_at = "2025-09-26T10:00:00Z"

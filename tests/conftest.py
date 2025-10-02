@@ -1,12 +1,19 @@
 """
-Pytest configuration and fixtures for PDF to Markdown MCP Server tests.
+Pytest configuration and fixtures for PDF to Markdown MCP Server UNIT TESTS.
 
-This module provides comprehensive test configuration including:
-- Database fixtures with proper setup/teardown
-- Mock services for external dependencies
+⚠️  UNIT TESTS ONLY - Uses mocked services and SQLite database
+    For integration/e2e tests with real services (PostgreSQL, GPU, Redis, Ollama),
+    see tests/integration_conftest.py
+
+This module provides comprehensive UNIT test configuration including:
+- Database fixtures with SQLite (NOT PostgreSQL - mocked for speed)
+- Mock services for all external dependencies (Redis, Ollama, MinerU, Celery)
 - Test data factories and utilities
 - Async test configuration
 - Test database isolation
+
+All fixtures here use MOCKS and CPU-only processing for fast unit tests.
+They do NOT connect to real services or use GPU.
 """
 
 import asyncio
@@ -73,11 +80,31 @@ def test_db_url_async(temp_db_file):
 def sync_engine(test_db_url):
     """Create synchronous database engine for tests."""
     from src.pdf_to_markdown_mcp.db.models import Base
+    from sqlalchemy import Table
 
     engine = create_engine(test_db_url, echo=False)
 
-    # Create all tables
-    Base.metadata.create_all(engine)
+    # For SQLite, skip tables with Vector columns (pgvector not supported)
+    if "sqlite" in test_db_url:
+        # Create only tables without vector columns
+        tables_to_create = []
+        for table_name, table in Base.metadata.tables.items():
+            # Skip tables with vector columns
+            has_vector = False
+            for column in table.columns:
+                column_type_name = str(column.type)
+                if "VECTOR" in column_type_name.upper() or "pgvector" in column_type_name.lower():
+                    has_vector = True
+                    break
+            if not has_vector:
+                tables_to_create.append(table)
+
+        # Create only the non-vector tables
+        if tables_to_create:
+            Base.metadata.create_all(engine, tables=tables_to_create)
+    else:
+        # For PostgreSQL, create all tables normally
+        Base.metadata.create_all(engine)
 
     yield engine
 
@@ -191,16 +218,21 @@ This is the end of the test document.
 @pytest.fixture
 def document_factory():
     """Factory for creating test Document instances."""
+    import hashlib
     from datetime import datetime
 
     from src.pdf_to_markdown_mcp.db.models import Document
 
     def _create_document(**kwargs):
+        # Generate proper SHA-256 hash
+        hash_input = f"hash_{uuid.uuid4()}"
+        file_hash = hashlib.sha256(hash_input.encode()).hexdigest()
+
         defaults = {
             "file_path": f"/tmp/test_{uuid.uuid4()}.pdf",
             "file_name": f"test_document_{uuid.uuid4()}.pdf",
             "file_size": 12345,
-            "file_hash": f"hash_{uuid.uuid4()}",
+            "file_hash": file_hash,
             "mime_type": "application/pdf",
             "status": "pending",
             "created_at": datetime.utcnow(),
@@ -295,6 +327,20 @@ def mock_redis():
     mock.set.return_value = True
     mock.delete.return_value = True
     mock.keys.return_value = []
+    return mock
+
+
+@pytest.fixture
+def mock_redis_client():
+    """Mock Redis client for MinerU pool testing."""
+    mock = Mock()
+    mock.ping.return_value = True
+    mock.llen.return_value = 0  # Queue length
+    mock.get.return_value = None
+    mock.set.return_value = True
+    mock.delete.return_value = True
+    mock.keys.return_value = []
+    mock.close.return_value = None
     return mock
 
 
@@ -430,6 +476,25 @@ def pytest_collection_modifyitems(config, items):
             for keyword in ["batch", "large", "stress", "performance"]
         ):
             item.add_marker(pytest.mark.slow)
+
+
+# Monitoring Fixtures
+# Initialize monitoring globals immediately at import time for tests
+from pdf_to_markdown_mcp.core import monitoring as _monitoring_module
+_monitoring_module._initialize_globals()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def initialize_monitoring():
+    """Initialize monitoring globals for testing."""
+    # Already initialized above, but ensure it's ready
+    if _monitoring_module.health_monitor is None:
+        _monitoring_module._initialize_globals()
+
+    yield
+
+    # Don't cleanup - let other tests use the same instances
+    # This is session-scoped so it's fine to keep them alive
 
 
 # Test Environment Validation

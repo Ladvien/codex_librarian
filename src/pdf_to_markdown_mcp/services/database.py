@@ -785,7 +785,7 @@ class VectorDatabaseService:
                 if update_data.error_message is not None:
                     document.error_details = update_data.error_message
                 if update_data.processed_at is not None:
-                    document.converted_at = update_data.processed_at
+                    document.updated_at = update_data.processed_at
                 if update_data.metadata is not None:
                     document.meta_data = update_data.metadata
 
@@ -802,7 +802,7 @@ class VectorDatabaseService:
             db.rollback()
             raise DatabaseError(f"Failed to update document: {e}")
 
-    async def get_document_by_id(self, document_id: int) -> Optional["DocumentDTO"]:
+    async def get_document_by_id(self, document_id: int) -> Optional[Document]:
         """
         Get document by ID.
 
@@ -810,7 +810,7 @@ class VectorDatabaseService:
             document_id: Document ID
 
         Returns:
-            DocumentDTO or None if not found
+            Document model or None if not found
         """
 
         try:
@@ -819,11 +819,84 @@ class VectorDatabaseService:
                 if not document:
                     return None
 
-                return self._convert_to_dto(document)
+                # Detach from session to prevent issues with session closure
+                db.expunge(document)
+                return document
 
         except Exception as e:
             logger.error(f"Error getting document {document_id}: {e}")
             raise DatabaseError(f"Failed to get document: {e}")
+
+    async def get_document_by_hash(self, file_hash: str) -> Optional[Document]:
+        """
+        Get document by file hash.
+
+        Args:
+            file_hash: SHA-256 file hash
+
+        Returns:
+            Document model or None if not found
+        """
+
+        try:
+            with self._get_session() as db:
+                document = db.query(Document).filter(Document.file_hash == file_hash).first()
+                if not document:
+                    return None
+
+                # Detach from session to prevent issues with session closure
+                db.expunge(document)
+                return document
+
+        except Exception as e:
+            logger.error(f"Error getting document by hash {file_hash}: {e}")
+            raise DatabaseError(f"Failed to get document: {e}")
+
+    async def save_document(self, document: Document) -> None:
+        """
+        Save (update) an existing document model to database.
+
+        Args:
+            document: Document model to save
+        """
+
+        try:
+            with self._get_session() as db:
+                # Merge the detached object back into the session
+                db.merge(document)
+                db.commit()
+                logger.debug(f"Saved document {document.id}")
+
+        except Exception as e:
+            logger.error(f"Error saving document {document.id}: {e}")
+            raise DatabaseError(f"Failed to save document: {e}")
+
+    async def update_document_status(
+        self, document_id: int, status: str, error_message: str | None = None
+    ) -> None:
+        """
+        Update document processing status.
+
+        Args:
+            document_id: Document ID
+            status: New processing status
+            error_message: Optional error message
+        """
+
+        try:
+            with self._get_session() as db:
+                document = db.query(Document).filter(Document.id == document_id).first()
+                if not document:
+                    raise DatabaseError(f"Document {document_id} not found")
+
+                document.conversion_status = status
+                document.error_message = error_message
+                db.commit()
+                logger.debug(f"Updated document {document_id} status to {status}")
+
+        except Exception as e:
+            logger.error(f"Error updating document status {document_id}: {e}")
+            raise DatabaseError(f"Failed to update document status: {e}")
 
     async def delete_document(self, document_id: int) -> bool:
         """
@@ -865,6 +938,14 @@ class VectorDatabaseService:
         """
         from ..models.dto import DocumentDTO, ProcessingStatusType
 
+        # Get page_count and processing_time from DocumentContent if available
+        page_count = None
+        processing_time_seconds = None
+        if document.content:
+            page_count = document.content.page_count
+            if document.content.processing_time_ms:
+                processing_time_seconds = document.content.processing_time_ms / 1000.0
+
         return DocumentDTO(
             id=document.id,
             filename=document.filename,
@@ -874,10 +955,10 @@ class VectorDatabaseService:
             processing_status=ProcessingStatusType(document.conversion_status),
             created_at=document.created_at,
             updated_at=document.updated_at,
-            processed_at=document.converted_at,
-            page_count=document.page_count,
-            processing_time_seconds=document.processing_duration_seconds,
-            error_message=document.error_details,
+            processed_at=document.updated_at if document.conversion_status == "completed" else None,
+            page_count=page_count,
+            processing_time_seconds=processing_time_seconds,
+            error_message=document.error_message,
             metadata=document.meta_data or {},
         )
 

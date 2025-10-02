@@ -19,15 +19,16 @@ logger = logging.getLogger(__name__)
 
 
 class MinerUClient:
-    """Client for communicating with standalone MinerU service."""
+    """Client for communicating with standalone MinerU service (pool-aware)."""
 
-    def __init__(self, redis_url: str = None, timeout: int = 300):
+    def __init__(self, redis_url: str = None, timeout: int = 300, use_pool: bool = None):
         """
         Initialize MinerU client.
 
         Args:
             redis_url: Redis connection URL (uses config if not provided)
             timeout: Maximum time to wait for processing (seconds)
+            use_pool: Whether to use pool of instances (None = auto-detect from env)
         """
         # Get redis URL from settings if not provided
         if redis_url is None:
@@ -37,9 +38,28 @@ class MinerUClient:
         self.timeout = timeout
         self.redis_client = redis.from_url(redis_url, decode_responses=False)
 
-        # Queue names (must match standalone service)
-        self.request_queue = "mineru_requests"
-        self.result_queue = "mineru_results"
+        # Determine if we should use pool mode
+        if use_pool is None:
+            import os
+            instance_count = int(os.getenv("MINERU_INSTANCE_COUNT", "1"))
+            use_pool = instance_count > 1
+
+        self.use_pool = use_pool
+
+        if self.use_pool:
+            # Use pool manager for multi-instance support
+            from .mineru_pool import get_mineru_pool
+            self.pool_manager = get_mineru_pool()
+            logger.info(
+                f"MinerU Client initialized with pool support "
+                f"({self.pool_manager.instance_count} instances)"
+            )
+        else:
+            # Legacy single-instance mode
+            self.pool_manager = None
+            self.request_queue = "mineru_requests"
+            self.result_queue = "mineru_results"
+            logger.info("MinerU Client initialized in single-instance mode")
 
     def process_pdf_sync(
         self,
@@ -63,6 +83,19 @@ class MinerUClient:
         # Generate unique request ID
         request_id = str(uuid.uuid4())
 
+        # Select instance to use
+        if self.use_pool:
+            # Update pool health and get best instance
+            self.pool_manager.check_pool_health()
+            instance_id = self.pool_manager.get_next_instance(prefer_least_loaded=True)
+            request_queue, result_queue = self.pool_manager.get_queue_names(instance_id)
+            logger.info(f"Selected instance {instance_id} for request {request_id}")
+        else:
+            # Single-instance mode
+            instance_id = 0
+            request_queue = self.request_queue
+            result_queue = self.result_queue
+
         # Create request
         request = {
             "request_id": request_id,
@@ -72,18 +105,21 @@ class MinerUClient:
                 "extract_tables": extract_tables,
                 "language": language,
             },
-            "callback_queue": self.result_queue
+            "callback_queue": result_queue
         }
 
         try:
             # Send request to MinerU service
-            logger.info(f"Sending PDF to MinerU service: {pdf_path} (request: {request_id})")
+            logger.info(
+                f"Sending PDF to MinerU instance {instance_id}: {pdf_path} "
+                f"(request: {request_id})"
+            )
             request_data = json.dumps(request)
-            self.redis_client.lpush(self.request_queue, request_data.encode('utf-8'))
+            self.redis_client.lpush(request_queue, request_data.encode('utf-8'))
 
             # Wait for result
             logger.info(f"Waiting for MinerU result (timeout: {self.timeout}s)")
-            result = self.redis_client.blpop(self.result_queue, timeout=self.timeout)
+            result = self.redis_client.blpop(result_queue, timeout=self.timeout)
 
             if result:
                 _, result_data = result
@@ -108,7 +144,7 @@ class MinerUClient:
                 else:
                     logger.warning(f"Received result for different request: {result_dict.get('request_id')}")
                     # Put it back at the end of queue for the correct client (avoid infinite loop)
-                    self.redis_client.rpush(self.result_queue, result_data)
+                    self.redis_client.rpush(result_queue, result_data)
                     return {
                         "success": False,
                         "error": "Request ID mismatch"
@@ -169,15 +205,24 @@ class MinerUClient:
             # Check Redis connection
             self.redis_client.ping()
 
-            # Check if service is processing by looking at queue lengths
-            request_queue_len = self.redis_client.llen(self.request_queue)
-            result_queue_len = self.redis_client.llen(self.result_queue)
+            if self.use_pool:
+                # Check pool health
+                pool_health = self.pool_manager.check_pool_health()
+                logger.info(
+                    f"MinerU pool health - {pool_health['healthy_instances']}/"
+                    f"{pool_health['total_instances']} instances healthy"
+                )
+                return pool_health["pool_healthy"]
+            else:
+                # Check single instance
+                request_queue_len = self.redis_client.llen(self.request_queue)
+                result_queue_len = self.redis_client.llen(self.result_queue)
 
-            logger.info(
-                f"MinerU service queues - Requests: {request_queue_len}, "
-                f"Results: {result_queue_len}"
-            )
-            return True
+                logger.info(
+                    f"MinerU service queues - Requests: {request_queue_len}, "
+                    f"Results: {result_queue_len}"
+                )
+                return True
 
         except Exception as e:
             logger.error(f"MinerU service health check failed: {e}")

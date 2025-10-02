@@ -486,8 +486,21 @@ def resync_filesystem_to_database(self) -> dict[str, Any]:
     logger.info("Starting filesystem resync task")
 
     try:
+        # Load watch directories from database configuration
+        from ..db.session import get_db_session
+        from ..services.config_service import ConfigurationService
+
+        watch_dirs = None
+        with get_db_session() as db:
+            config = ConfigurationService.load_from_database(db)
+            if 'watch_directories' in config:
+                watch_dirs = config['watch_directories']
+                logger.info(f"Using watch_directories from database: {watch_dirs}")
+            else:
+                logger.warning("No watch_directories in database, using .env defaults")
+
         indexer = DirectoryIndexer()
-        stats = indexer.resync_database()
+        stats = indexer.resync_database(custom_watch_dirs=watch_dirs)
 
         logger.info(
             f"Resync complete: {stats.get('new_files', 0)} new, "

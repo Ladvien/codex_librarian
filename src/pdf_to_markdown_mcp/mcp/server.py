@@ -295,6 +295,86 @@ async def perform_hybrid_search(
     return final_results
 
 
+async def _search_library_impl(
+    query: str,
+    limit: int | None = None,
+    min_similarity: float | None = None,
+    tags: list[str] | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    ctx: Context | None = None,
+) -> dict[str, Any]:
+    """Core implementation of search_library for testing."""
+    start_time = time.time()
+
+    # Apply defaults
+    if limit is None:
+        limit = config.search_default_limit
+    if min_similarity is None:
+        min_similarity = config.search_default_similarity
+
+    # Validate parameters
+    if not query or not query.strip():
+        raise ValueError("Query parameter is required and cannot be empty")
+
+    if limit < 1 or limit > config.search_max_limit:
+        raise ValueError(
+            f"Limit must be between 1 and {config.search_max_limit}, got {limit}"
+        )
+
+    if not 0.0 <= min_similarity <= 1.0:
+        raise ValueError(
+            f"min_similarity must be between 0.0 and 1.0, got {min_similarity}"
+        )
+
+    if tags:
+        logger.warning("Tag filtering not yet implemented, ignoring tags parameter")
+
+    # Log search request
+    if ctx:
+        await ctx.info(f"Searching for: '{query}' (limit={limit}, threshold={min_similarity})")
+
+    logger.info(
+        f"Search request: query='{query[:50]}...', limit={limit}, "
+        f"min_similarity={min_similarity}"
+    )
+
+    try:
+        # Generate query embedding
+        query_embedding = await generate_query_embedding(query)
+
+        # Perform hybrid search
+        results = await perform_hybrid_search(
+            query_embedding=query_embedding,
+            query_text=query,
+            limit=limit,
+            min_similarity=min_similarity,
+            date_from=date_from,
+            date_to=date_to,
+        )
+
+        duration_ms = int((time.time() - start_time) * 1000)
+
+        response = {
+            "results": results,
+            "query": query,
+            "total_results": len(results),
+            "search_duration_ms": duration_ms,
+        }
+
+        logger.info(
+            f"Search completed: found {len(results)} documents in {duration_ms}ms"
+        )
+
+        return response
+
+    except Exception as e:
+        logger.error(f"Search failed: {e}", exc_info=True)
+        if ctx:
+            await ctx.error(f"Search failed: {e}")
+        raise
+
+
 @mcp.tool()
 async def search_library(
     query: str,
@@ -351,76 +431,16 @@ async def search_library(
             "search_duration_ms": 45
         }
     """
-    start_time = time.time()
-
-    # Apply defaults
-    if limit is None:
-        limit = config.search_default_limit
-    if min_similarity is None:
-        min_similarity = config.search_default_similarity
-
-    # Validate parameters
-    if not query or not query.strip():
-        raise ValueError("Query parameter is required and cannot be empty")
-
-    if limit < 1 or limit > config.search_max_limit:
-        raise ValueError(
-            f"Limit must be between 1 and {config.search_max_limit}, got {limit}"
-        )
-
-    if not 0.0 <= min_similarity <= 1.0:
-        raise ValueError(
-            f"min_similarity must be between 0.0 and 1.0, got {min_similarity}"
-        )
-
-    if tags:
-        logger.warning("Tag filtering not yet implemented, ignoring tags parameter")
-
-    # Log search request
-    if ctx:
-        await ctx.info(f"Searching for: '{query}' (limit={limit}, threshold={min_similarity})")
-
-    logger.info(
-        f"Search request: query='{query[:50]}...', limit={limit}, "
-        f"min_similarity={min_similarity}"
+    # Delegate to implementation function
+    return await _search_library_impl(
+        query=query,
+        limit=limit,
+        min_similarity=min_similarity,
+        tags=tags,
+        date_from=date_from,
+        date_to=date_to,
+        ctx=ctx,
     )
-
-    try:
-        # Generate query embedding
-        query_embedding = await generate_query_embedding(query)
-
-        # Perform hybrid search
-        results = await perform_hybrid_search(
-            query_embedding=query_embedding,
-            query_text=query,
-            limit=limit,
-            min_similarity=min_similarity,
-            date_from=date_from,
-            date_to=date_to,
-        )
-
-        # Calculate duration
-        duration_ms = round((time.time() - start_time) * 1000, 2)
-
-        logger.info(
-            f"Search completed: {len(results)} results in {duration_ms}ms"
-        )
-
-        if ctx:
-            await ctx.info(f"Found {len(results)} results in {duration_ms}ms")
-
-        return {
-            "results": results,
-            "query": query,
-            "total_results": len(results),
-            "search_duration_ms": duration_ms,
-        }
-
-    except Exception as e:
-        logger.exception(f"Search failed: {e}")
-        if ctx:
-            await ctx.error(f"Search failed: {e}")
-        raise RuntimeError(f"Search failed: {e}") from e
 
 
 async def ensure_db_pool() -> DatabasePool:

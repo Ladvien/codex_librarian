@@ -5,6 +5,7 @@ This test suite verifies the complete directory mirroring pipeline from
 PDF file detection through to final Markdown output with preserved structure.
 """
 
+import hashlib
 import os
 import tempfile
 import time
@@ -186,6 +187,7 @@ Generated on: {time.strftime("%Y-%m-%d %H:%M:%S")}
 
         return create_result
 
+    @pytest.mark.asyncio
     async def test_complete_directory_mirroring_pipeline(
         self,
         temp_directories,
@@ -239,17 +241,20 @@ Generated on: {time.strftime("%Y-%m-%d %H:%M:%S")}
         # Phase 3: Test task queue integration with mirroring
         print("\n=== Phase 3: Testing Task Queue Integration ===")
 
-        # Mock file validation results
-        mock_validation = {
-            "valid": True,
-            "hash": "test_hash_123",
-            "size_bytes": 1024,
-            "mime_type": "application/pdf",
-        }
-
         # Queue files for processing with mirror information
         document_ids = []
-        for mirror_info in processed_files:
+        for i, mirror_info in enumerate(processed_files):
+            # Create unique hash for each file (proper SHA-256 format)
+            hash_input = f"test_hash_{i}_{mirror_info['source_path'].name}"
+            file_hash = hashlib.sha256(hash_input.encode()).hexdigest()
+
+            mock_validation = {
+                "valid": True,
+                "hash": file_hash,
+                "size_bytes": 1024,
+                "mime_type": "application/pdf",
+            }
+
             doc_id = task_queue.queue_pdf_processing(
                 str(mirror_info["source_path"]),
                 mock_validation,
@@ -280,14 +285,14 @@ Generated on: {time.strftime("%Y-%m-%d %H:%M:%S")}
 
         # Mock processor with file creation
         with patch(
-            "pdf_to_markdown_mcp.services.mineru.MinerUService"
+            "pdf_to_markdown_mcp.core.processor.MinerUService"
         ) as mock_mineru_class:
             mock_service = Mock()
             mock_mineru_class.return_value = mock_service
 
             # Configure mock to create actual output files
             async def mock_process_pdf(
-                file_path, output_dir=None, output_filename=None, options=None
+                file_path=None, output_dir=None, output_filename=None, options=None, **kwargs
             ):
                 source_file = Path(file_path)
 

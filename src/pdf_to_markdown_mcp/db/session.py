@@ -105,14 +105,16 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
     operations involving vector similarity search.
     """
     if "postgresql" in DATABASE_URL:
-        with dbapi_connection.cursor() as cursor:
-            try:
-                cursor.execute("CREATE EXTENSION IF NOT EXISTS vector;")
-                dbapi_connection.commit()
-                logger.info("PGVector extension enabled")
-            except Exception as e:
-                logger.warning(f"Could not enable PGVector extension: {e}")
-                dbapi_connection.rollback()
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+            dbapi_connection.commit()
+            logger.info("PGVector extension enabled")
+        except Exception as e:
+            logger.warning(f"Could not enable PGVector extension: {e}")
+            dbapi_connection.rollback()
+        finally:
+            cursor.close()
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -157,11 +159,20 @@ def get_db() -> Generator[Session, None, None]:
         except Exception as e:
             if session:
                 logger.error(f"Database session error: {e}")
-                session.rollback()
+                try:
+                    session.rollback()
+                except Exception as rollback_error:
+                    logger.error(f"Error during rollback: {rollback_error}")
                 raise
         finally:
+            # Critical: Defensive session cleanup to prevent leaks
             if session:
-                session.close()
+                try:
+                    session.close()
+                except Exception as close_error:
+                    logger.error(f"Error closing session: {close_error}")
+                finally:
+                    session = None
 
 
 @contextmanager
@@ -207,11 +218,20 @@ def get_db_session() -> Generator[Session, None, None]:
         except Exception as e:
             if session:
                 logger.error(f"Database session error: {e}")
-                session.rollback()
+                try:
+                    session.rollback()
+                except Exception as rollback_error:
+                    logger.error(f"Error during rollback: {rollback_error}")
                 raise
         finally:
+            # Critical: Defensive session cleanup to prevent leaks
             if session:
-                session.close()
+                try:
+                    session.close()
+                except Exception as close_error:
+                    logger.error(f"Error closing session: {close_error}")
+                finally:
+                    session = None
 
 
 def create_tables():

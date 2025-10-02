@@ -16,15 +16,13 @@ from typing import Any
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from pdf_to_markdown_mcp.config import settings
+
 logger = logging.getLogger(__name__)
 
-# Security configuration from environment variables
+# Security configuration from settings (can be overridden for testing)
 API_KEY = os.environ.get("API_KEY", "")
 REQUIRE_AUTH = os.environ.get("REQUIRE_AUTH", "false").lower() == "true"
-ALLOWED_PATHS = [
-    "/tmp/pdf_to_markdown_mcp",
-    os.environ.get("OUTPUT_DIRECTORY", "/mnt/codex_fs/research/librarian_output/"),
-]
 
 
 class SecurityManager:
@@ -58,29 +56,41 @@ class SecurityManager:
 security_manager = SecurityManager()
 
 
-def validate_path_security(path: Path) -> Path:
+def validate_path_security(path: Path | str) -> Path:
     """
     Validate file path to prevent directory traversal attacks.
 
     Args:
-        path: Path to validate
+        path: Path to validate (Path object or string)
 
     Returns:
         Validated and resolved path
 
     Raises:
-        ValueError: If path is invalid or contains traversal attempts
+        HTTPException: If path is invalid or contains traversal attempts
     """
+    # Convert to Path object if string
+    if isinstance(path, str):
+        path = Path(path)
+
     try:
         # Resolve the path to eliminate any .. components
         resolved_path = path.resolve()
 
+        # Get allowed directories from settings
+        allowed_paths = [
+            Path(settings.INPUT_DIRECTORY).resolve() if hasattr(settings, 'INPUT_DIRECTORY') else None,
+            Path(settings.OUTPUT_DIRECTORY).resolve(),
+            Path("/tmp/pdf_to_markdown_mcp").resolve(),
+        ]
+        # Filter out None values
+        allowed_paths = [p for p in allowed_paths if p is not None]
+
         # Check if the resolved path starts with any allowed directory
         allowed = False
-        for allowed_dir in ALLOWED_PATHS:
+        for allowed_dir in allowed_paths:
             try:
-                allowed_dir_resolved = Path(allowed_dir).resolve()
-                if str(resolved_path).startswith(str(allowed_dir_resolved)):
+                if str(resolved_path).startswith(str(allowed_dir)):
                     allowed = True
                     break
             except Exception:
@@ -92,82 +102,139 @@ def validate_path_security(path: Path) -> Path:
                 extra={
                     "path": str(path),
                     "resolved": str(resolved_path),
-                    "allowed": ALLOWED_PATHS,
+                    "allowed": [str(p) for p in allowed_paths],
                 },
             )
-            raise ValueError(f"Access denied to path: {path}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Path outside allowed directories"
+            )
 
         # Additional security checks
         path_str = str(resolved_path).lower()
+        filename = resolved_path.name.lower()
 
-        # Block common dangerous paths
-        dangerous_patterns = [
+        # Block common dangerous directory paths
+        dangerous_dir_patterns = [
             "/etc/",
             "/root/",
             "/home/",
             "/usr/bin/",
             "/bin/",
-            "passwd",
-            "shadow",
-            ".ssh",
-            ".env",
-            "config",
+            "/proc/",
+            "/dev/",
+            "/sys/",
+            "\\windows\\system32",
         ]
 
-        for pattern in dangerous_patterns:
+        for pattern in dangerous_dir_patterns:
             if pattern in path_str:
                 logger.warning(
                     f"Blocked potentially dangerous path: {path}",
                     extra={"pattern": pattern, "path": str(path)},
                 )
-                raise ValueError(f"Access denied to dangerous path: {path}")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Access denied to dangerous path"
+                )
+
+        # Block dangerous filenames (check the actual filename, not the full path)
+        dangerous_filenames = [
+            "passwd", "shadow", "hosts", "resolv.conf", "fstab", "sudoers",
+            ".env", ".env.local", "config.json", "database.yml", "secrets.json",
+            "private.key", "boot.ini", "ntuser.dat", "system.ini", "win.ini",
+            "id_rsa", "id_dsa", "authorized_keys", "known_hosts", ".ssh",
+        ]
+
+        for dangerous_name in dangerous_filenames:
+            if dangerous_name in filename or filename == dangerous_name:
+                logger.warning(
+                    f"Blocked dangerous filename: {filename}",
+                    extra={"filename": filename, "path": str(path)},
+                )
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Access denied to dangerous path"
+                )
 
         return resolved_path
 
+    except HTTPException:
+        # Re-raise HTTPException as-is
+        raise
     except Exception as e:
         logger.error(f"Path validation error: {e}", extra={"path": str(path)})
-        raise ValueError(f"Invalid path: {path}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid path provided"
+        )
 
 
-def validate_file_security(file_path: Path) -> dict[str, Any]:
+def validate_file_security(file_path: Path | str) -> dict[str, Any]:
     """
     Comprehensive file security validation.
 
     Args:
-        file_path: Path to file to validate
+        file_path: Path to file to validate (Path object or string)
 
     Returns:
         Dict with validation results
 
     Raises:
-        ValueError: If file fails security validation
+        HTTPException: If file fails security validation
     """
+    # Convert to Path object if string
+    if isinstance(file_path, str):
+        file_path = Path(file_path)
+
     if not file_path.exists():
-        raise ValueError(f"File not found: {file_path}")
+        raise HTTPException(
+            status_code=404,
+            detail=f"File not found"
+        )
 
     if not file_path.is_file():
-        raise ValueError(f"Path is not a file: {file_path}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Path is not a file"
+        )
 
-    # Validate file size
-    max_size = int(os.environ.get("MAX_FILE_SIZE_MB", "500")) * 1024 * 1024
+    # Validate file size using settings
+    max_size_mb = getattr(settings, 'MAX_FILE_SIZE_MB', 500)
+    max_size = int(max_size_mb) * 1024 * 1024
     file_size = file_path.stat().st_size
 
     if file_size > max_size:
-        raise ValueError(f"File size {file_size} exceeds maximum {max_size} bytes")
+        raise HTTPException(
+            status_code=413,
+            detail=f"File size exceeds maximum allowed size"
+        )
 
     # Validate file type
     allowed_types = [".pdf"]
     if file_path.suffix.lower() not in allowed_types:
-        raise ValueError(f"File type {file_path.suffix} not allowed")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Only PDF files are allowed"
+        )
 
     # Basic file content validation (PDF header check)
     try:
         with open(file_path, "rb") as f:
             header = f.read(8)
             if not header.startswith(b"%PDF-"):
-                raise ValueError("Invalid PDF file format")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid PDF file format"
+                )
+    except HTTPException:
+        # Re-raise HTTPException as-is
+        raise
     except Exception as e:
-        raise ValueError(f"File validation error: {e}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"File validation error: {str(e)}"
+        )
 
     return {
         "path": str(file_path),

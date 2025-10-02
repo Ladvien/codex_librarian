@@ -544,6 +544,123 @@ GROUP BY conversion_status;"
 ./scripts/restart_services.sh
 ```
 
+## Testing
+
+### Test Suite Overview
+
+The project has **three distinct test categories**:
+
+1. **Unit Tests** (fast, mocked) - SQLite, CPU-only, no external services
+2. **Integration Tests** (real services) - PostgreSQL, GPU, Redis, Ollama
+3. **End-to-End Tests** (full pipeline) - Complete workflow validation
+
+### Quick Test Commands
+
+```bash
+# Fast unit tests (10-30 seconds) - no prerequisites
+./scripts/test_unit.sh
+
+# Integration tests (2-5 minutes) - requires GPU + services
+./scripts/test_integration.sh
+
+# Validate environment before integration tests
+./scripts/validate_test_env.sh
+
+# Run specific test categories
+pytest -m unit              # Unit tests only
+pytest -m integration       # Integration tests only
+pytest -m e2e               # End-to-end tests only
+pytest -m gpu               # GPU-dependent tests only
+
+# Run with coverage
+./scripts/test_unit.sh --cov
+```
+
+### Integration Test Prerequisites
+
+Integration and e2e tests require:
+- ✅ NVIDIA GPU with CUDA 12.4+
+- ✅ PostgreSQL 17+ with PGVector (192.168.1.104)
+- ✅ Redis server (localhost:6379)
+- ✅ Ollama with nomic-embed-text model
+- ✅ MinerU standalone service running
+
+**Validate prerequisites:**
+```bash
+./scripts/validate_test_env.sh
+```
+
+Example output:
+```
+✅ PostgreSQL connection
+✅ PGVector extension
+✅ nvidia-smi available
+  GPU: NVIDIA GeForce RTX 3090
+  Memory: 24576 MiB
+✅ CUDA available in Python
+  CUDA Version: 12.4
+✅ Redis server
+✅ Ollama service
+✅ Ollama model (nomic-embed-text)
+⚠️  MinerU process running (optional)
+⚠️  Celery worker (optional)
+
+All required prerequisites met!
+```
+
+### Key Differences: Unit vs Integration Tests
+
+| Aspect | Unit Tests | Integration Tests |
+|--------|-----------|-------------------|
+| Database | SQLite (mocked) | PostgreSQL + PGVector |
+| GPU | CPU-only | Real CUDA GPU |
+| Services | All mocked | Real Redis, Ollama, MinerU |
+| Duration | 10-30 seconds | 2-5 minutes |
+| Purpose | Fast feedback | Real validation |
+| CI/CD | Every commit | Pre-deployment |
+
+### Test Organization
+
+```
+tests/
+├── unit/              # Fast mocked tests
+├── integration/       # Real service tests
+├── e2e/              # Full pipeline tests
+├── fixtures/
+│   ├── real_database.py    # Real PostgreSQL
+│   ├── real_gpu.py          # GPU validation
+│   └── real_services.py     # Real Redis/Ollama
+└── README.md         # Comprehensive test documentation
+```
+
+**For complete testing documentation**, see **`tests/README.md`**
+
+### Common Test Issues
+
+**GPU tests failing:**
+```bash
+# Check GPU availability
+nvidia-smi
+python -c "import torch; print(f'CUDA: {torch.cuda.is_available()}')"
+
+# Verify environment
+export CUDA_VISIBLE_DEVICES=0
+export MINERU_DEVICE_MODE=cuda
+```
+
+**Integration tests skipped:**
+```bash
+# Check what's missing
+./scripts/validate_test_env.sh
+
+# Start missing services
+sudo systemctl start redis
+sudo systemctl start ollama
+ollama pull nomic-embed-text
+```
+
+**See `tests/README.md` for detailed troubleshooting.**
+
 ## Do Not Section
 
 ### Never

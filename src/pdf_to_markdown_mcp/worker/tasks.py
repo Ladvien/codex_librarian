@@ -34,6 +34,31 @@ from .celery import app
 logger = logging.getLogger(__name__)
 
 
+def _run_async_in_sync_context(coro):
+    """
+    Run async coroutine in sync context safely.
+
+    Critical: Avoids event loop conflicts in Celery workers by creating
+    a new event loop for each call. This prevents the "Cannot run event loop
+    while another is running" error.
+
+    Args:
+        coro: Async coroutine to run
+
+    Returns:
+        Result of the coroutine
+    """
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        try:
+            loop.close()
+        except Exception as e:
+            logger.warning(f"Error closing event loop: {e}")
+
+
 class ProgressTracker:
     """Helper class for tracking and reporting task progress with persistent state."""
 
@@ -352,6 +377,37 @@ def process_pdf_document(
         progress.update(message="Extracting content with MinerU GPU service")
 
         try:
+            # GPU memory check before processing to prevent OOM errors
+            from ..utils.gpu_utils import has_sufficient_gpu_memory
+
+            # Get GPU memory requirement from settings (default: 7.0 GB)
+            min_gpu_memory_gb = float(os.getenv("MINERU_MIN_GPU_MEMORY_GB", "7.0"))
+
+            if not has_sufficient_gpu_memory(required_gb=min_gpu_memory_gb):
+                # Insufficient GPU memory - retry with delay to wait for memory to free up
+                retry_delay = int(os.getenv("GPU_MEMORY_RETRY_DELAY", "15"))
+
+                logger.warning(
+                    f"Insufficient GPU memory for PDF processing, retrying in {retry_delay}s",
+                    extra={
+                        "correlation_id": correlation_id,
+                        "document_id": document_id,
+                        "required_memory_gb": min_gpu_memory_gb,
+                        "retry_delay": retry_delay
+                    }
+                )
+
+                # Raise Retry to requeue the task
+                raise self.retry(
+                    exc=ResourceError(
+                        f"Insufficient GPU memory (need {min_gpu_memory_gb} GB)",
+                        resource_type="gpu_memory",
+                        correlation_id=correlation_id,
+                        error_code="PDF_GPU_MEMORY"
+                    ),
+                    countdown=retry_delay
+                )
+
             # Process PDF with standalone MinerU service via client
             # The service handles all GPU resource management internally
             result = mineru_client.process_pdf_sync(
@@ -445,13 +501,22 @@ def process_pdf_document(
             track_error(e, "process_pdf_document", "result_validation")
             raise
 
-        # Enhanced database operations with transaction management
+        # Enhanced database operations with batch writing for better performance
         content_record_id = None
-        try:
-            with get_db_session() as db:
-                from ..db.models import DocumentContent
+        output_file_path = None
 
-                content_record = DocumentContent(
+        try:
+            # Check if batch writing is enabled via environment
+            use_batch_writes = os.getenv("ENABLE_BATCH_WRITES", "false").lower() == "true"
+
+            if use_batch_writes:
+                # Use batch writer for better performance (non-blocking)
+                from ..services.batch_writer import get_batch_writer
+
+                batch_writer = get_batch_writer()
+
+                # Queue document content write
+                batch_writer.queue_document_content(
                     document_id=document_id,
                     markdown_content=processing_result.markdown_content,
                     plain_text=processing_result.plain_text,
@@ -459,63 +524,127 @@ def process_pdf_document(
                     has_images=len(processing_result.extracted_images) > 0,
                     has_tables=len(processing_result.extracted_tables) > 0,
                     processing_time_ms=processing_result.processing_metadata.processing_time_ms,
+                    correlation_id=correlation_id
                 )
-                db.add(content_record)
-                db.flush()  # Get the ID before commit
-                content_record_id = content_record.id
 
-                # Update document status with metadata
-                document = db.query(Document).filter(Document.id == document_id).first()
-                if document:
-                    document.conversion_status = "completed"
-                    document.updated_at = datetime.utcnow()
-
-                    # Get existing metadata or create new dict
-                    metadata = document.meta_data if document.meta_data else {}
-                    if not isinstance(metadata, dict):
-                        metadata = {}
-
-                    # Update with new data
-                    metadata["processing_completed_at"] = datetime.utcnow().isoformat()
-                    metadata["correlation_id"] = correlation_id
-                    metadata["content_stats"] = {
+                # Queue document status update
+                metadata = {
+                    "processing_completed_at": datetime.utcnow().isoformat(),
+                    "correlation_id": correlation_id,
+                    "content_stats": {
                         "markdown_length": len(processing_result.markdown_content),
                         "plain_text_length": len(processing_result.plain_text),
                         "chunks_count": len(processing_result.chunk_data),
                         "has_tables": len(processing_result.extracted_tables) > 0,
                         "has_images": len(processing_result.extracted_images) > 0,
                     }
+                }
+                batch_writer.queue_document_update(
+                    document_id=document_id,
+                    status="completed",
+                    metadata=metadata,
+                    correlation_id=correlation_id
+                )
 
-                    # Assign back to trigger SQLAlchemy change detection
-                    document.meta_data = metadata
+                logger.info(
+                    f"Queued database writes for document {document_id} to batch writer",
+                    extra={"correlation_id": correlation_id, "document_id": document_id}
+                )
 
-                db.commit()
+            else:
+                # Original immediate write path (for compatibility/fallback)
+                with get_db_session() as db:
+                    from ..db.models import DocumentContent
 
-                # Write markdown file to disk if output_path is specified
+                    content_record = DocumentContent(
+                        document_id=document_id,
+                        markdown_content=processing_result.markdown_content,
+                        plain_text=processing_result.plain_text,
+                        page_count=processing_result.processing_metadata.pages,
+                        has_images=len(processing_result.extracted_images) > 0,
+                        has_tables=len(processing_result.extracted_tables) > 0,
+                        processing_time_ms=processing_result.processing_metadata.processing_time_ms,
+                    )
+                    db.add(content_record)
+                    db.flush()  # Get the ID before commit
+                    content_record_id = content_record.id
+
+                    # Update document status with metadata
+                    document = db.query(Document).filter(Document.id == document_id).first()
+                    if document:
+                        document.conversion_status = "completed"
+                        document.updated_at = datetime.utcnow()
+
+                        # Get existing metadata or create new dict
+                        metadata = document.meta_data if document.meta_data else {}
+                        if not isinstance(metadata, dict):
+                            metadata = {}
+
+                        # Update with new data
+                        metadata["processing_completed_at"] = datetime.utcnow().isoformat()
+                        metadata["correlation_id"] = correlation_id
+                        metadata["content_stats"] = {
+                            "markdown_length": len(processing_result.markdown_content),
+                            "plain_text_length": len(processing_result.plain_text),
+                            "chunks_count": len(processing_result.chunk_data),
+                            "has_tables": len(processing_result.extracted_tables) > 0,
+                            "has_images": len(processing_result.extracted_images) > 0,
+                        }
+
+                        # Assign back to trigger SQLAlchemy change detection
+                        document.meta_data = metadata
+
+                    db.commit()
+
+            # Get output path for file writing (works for both batch and immediate modes)
+            with get_db_session() as db:
+                document = db.query(Document).filter(Document.id == document_id).first()
                 if document and document.output_path:
-                    try:
-                        output_file_path = Path(document.output_path)
-                        output_file_path.parent.mkdir(parents=True, exist_ok=True)
+                    output_file_path = Path(document.output_path)
+
+            # Write markdown file to disk (async if enabled)
+            if output_file_path:
+                try:
+                    # Check if async file I/O is enabled
+                    use_async_file_io = os.getenv("ENABLE_ASYNC_FILE_IO", "false").lower() == "true"
+
+                    output_file_path.parent.mkdir(parents=True, exist_ok=True)
+
+                    if use_async_file_io:
+                        # Write asynchronously in thread pool (non-blocking)
+                        # Use ThreadPoolExecutor instead of asyncio in sync context
+                        from concurrent.futures import ThreadPoolExecutor
+                        with ThreadPoolExecutor(max_workers=1) as executor:
+                            future = executor.submit(
+                                output_file_path.write_text,
+                                processing_result.markdown_content,
+                                "utf-8"
+                            )
+                            future.result()  # Wait for completion
+                    else:
+                        # Synchronous write (original behavior)
                         output_file_path.write_text(
                             processing_result.markdown_content, encoding="utf-8"
                         )
-                        logger.info(
-                            f"Wrote markdown file to {output_file_path}",
-                            extra={
-                                "correlation_id": correlation_id,
-                                "document_id": document_id,
-                                "file_size": len(processing_result.markdown_content),
-                            },
-                        )
-                    except Exception as file_error:
-                        logger.error(
-                            f"Failed to write markdown file to {document.output_path}: {file_error}",
-                            extra={
-                                "correlation_id": correlation_id,
-                                "document_id": document_id,
-                            },
-                            exc_info=True,
-                        )
+
+                    logger.info(
+                        f"Wrote markdown file to {output_file_path}",
+                        extra={
+                            "correlation_id": correlation_id,
+                            "document_id": document_id,
+                            "file_size": len(processing_result.markdown_content),
+                            "async": use_async_file_io,
+                        },
+                    )
+                except Exception as file_error:
+                    logger.error(
+                        f"Failed to write markdown file to {output_file_path}: {file_error}",
+                        extra={
+                            "correlation_id": correlation_id,
+                            "document_id": document_id,
+                        },
+                        exc_info=True,
+                    )
 
         except Exception as e:
             db_error = DatabaseError(
@@ -856,8 +985,9 @@ def generate_embeddings(
             raise error
 
         # Initialize embedding service directly
+        # Critical: Use helper to avoid event loop conflicts in Celery
         try:
-            embedding_service = asyncio.run(create_embedding_service())
+            embedding_service = _run_async_in_sync_context(create_embedding_service())
             if not embedding_service:
                 raise ProcessingError("Service initialization returned None")
         except Exception as e:
@@ -884,8 +1014,8 @@ def generate_embeddings(
 
             try:
                 # Generate embeddings for batch synchronously
-                # Run the async embedding service in a sync context
-                embeddings_result = asyncio.run(
+                # Critical: Use helper to avoid event loop conflicts in Celery
+                embeddings_result = _run_async_in_sync_context(
                     embedding_service.generate_embeddings(batch_texts)
                 )
 
@@ -1297,11 +1427,12 @@ def health_check(self) -> dict[str, Any]:
         try:
             from ..services.embeddings import create_embedding_service
 
-            embedding_service = asyncio.run(create_embedding_service())
+            # Critical: Use helper to avoid event loop conflicts in Celery
+            embedding_service = _run_async_in_sync_context(create_embedding_service())
             # Try a simple embedding generation
-            test_embedding = asyncio.run(embedding_service.generate_embeddings(
-                ["health check test"]
-            ))
+            test_embedding = _run_async_in_sync_context(
+                embedding_service.generate_embeddings(["health check test"])
+            )
             health_status["checks"]["embedding_service"] = "healthy"
         except Exception as embed_error:
             health_status["checks"]["embedding_service"] = f"unhealthy: {embed_error}"

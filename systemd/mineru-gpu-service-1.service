@@ -1,0 +1,49 @@
+[Unit]
+Description=MinerU GPU Processing Service - Instance 1
+After=network.target redis.service
+Wants=redis.service
+
+[Service]
+Type=simple
+User=ladvien
+Group=ladvien
+WorkingDirectory=/mnt/datadrive_m2/codex_librarian
+
+# Environment configuration
+Environment="CUDA_VISIBLE_DEVICES=0"
+Environment="MINERU_DEVICE_MODE=cuda"
+Environment="MINERU_INSTANCE_COUNT=3"
+Environment="MINERU_GPU_MEMORY_LIMIT_GB=7.0"
+Environment="REDIS_HOST=localhost"
+Environment="REDIS_PORT=6379"
+Environment="REDIS_DB=0"
+
+# GPU optimization
+Environment="PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512"
+Environment="CUDA_MODULE_LOADING=LAZY"
+
+# Start MinerU instance 1
+ExecStart=/mnt/datadrive_m2/codex_librarian/.venv/bin/python \
+    /mnt/datadrive_m2/codex_librarian/src/pdf_to_markdown_mcp/services/mineru_standalone.py \
+    --instance-id 1
+
+# Logging
+StandardOutput=append:/var/log/mineru-gpu-service-1.log
+StandardError=append:/var/log/mineru-gpu-service-1.log
+
+# Restart policy
+Restart=always
+RestartSec=10s
+StartLimitBurst=5
+StartLimitIntervalSec=300
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=16G
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

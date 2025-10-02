@@ -22,12 +22,12 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    JSON,
     String,
     Text,
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
@@ -80,7 +80,7 @@ class Document(Base):
         index=True,  # Add index for status filtering
     )
     error_message = Column(Text)
-    meta_data = Column("metadata", JSONB)  # Map to 'metadata' column in database
+    meta_data = Column("metadata", JSON)  # Map to 'metadata' column in database
 
     # Directory mirroring fields
     source_relative_path = Column(Text, index=True)  # Relative to watch directory
@@ -182,7 +182,7 @@ class DocumentEmbedding(Base):
     chunk_index = Column(Integer)
     chunk_text = Column(Text)
     embedding = Column(Vector(768))  # Text embeddings dimension (nomic-embed-text)
-    meta_data = Column("metadata", JSONB)  # Map to 'metadata' column
+    meta_data = Column("metadata", JSON)  # Map to 'metadata' column
     created_at = Column(
         DateTime, default=datetime.utcnow, server_default=text("CURRENT_TIMESTAMP")
     )
@@ -225,7 +225,7 @@ class DocumentImage(Base):
     ocr_text = Column(Text)
     ocr_confidence = Column(Float)
     image_embedding = Column(Vector(512))  # CLIP embeddings dimension
-    meta_data = Column("metadata", JSONB)  # Map to 'metadata' column
+    meta_data = Column("metadata", JSON)  # Map to 'metadata' column
     created_at = Column(
         DateTime, default=datetime.utcnow, server_default=text("CURRENT_TIMESTAMP")
     )
@@ -339,7 +339,7 @@ class ServerConfiguration(Base):
 
     id = Column(Integer, primary_key=True)
     config_key = Column(String, nullable=False, unique=True, index=True)
-    config_value = Column(JSONB, nullable=False)
+    config_value = Column(JSON, nullable=False)
     updated_at = Column(
         DateTime,
         default=datetime.utcnow,

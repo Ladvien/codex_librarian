@@ -1,0 +1,20 @@
+[Unit]
+Description=MinerU GPU Processing Pool (All Instances)
+After=network.target redis.service
+Wants=redis.service mineru-gpu-service-0.service mineru-gpu-service-1.service mineru-gpu-service-2.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+
+# Start all MinerU instances
+ExecStart=/bin/sh -c 'systemctl start mineru-gpu-service-0 mineru-gpu-service-1 mineru-gpu-service-2'
+
+# Stop all MinerU instances
+ExecStop=/bin/sh -c 'systemctl stop mineru-gpu-service-0 mineru-gpu-service-1 mineru-gpu-service-2'
+
+# Restart all MinerU instances
+ExecReload=/bin/sh -c 'systemctl restart mineru-gpu-service-0 mineru-gpu-service-1 mineru-gpu-service-2'
+
+[Install]
+WantedBy=multi-user.target

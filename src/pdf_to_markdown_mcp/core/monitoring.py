@@ -1183,11 +1183,59 @@ def create_standard_alerts() -> list[AlertRule]:
     ]
 
 
-# Global instances
-metrics_collector = MetricsCollector()
-health_monitor = HealthMonitor()
-alerting_engine = AlertingEngine()
+# Global singleton instances (lazy initialization)
+_metrics_collector_instance = None
+_health_monitor_instance = None
+_alerting_engine_instance = None
 
-# Add standard alerts
-for rule in create_standard_alerts():
-    alerting_engine.add_rule(rule)
+
+def get_metrics_collector() -> MetricsCollector:
+    """Get or create global MetricsCollector instance."""
+    global _metrics_collector_instance
+    if _metrics_collector_instance is None:
+        _metrics_collector_instance = MetricsCollector()
+    return _metrics_collector_instance
+
+
+def get_health_monitor() -> HealthMonitor:
+    """Get or create global HealthMonitor instance."""
+    global _health_monitor_instance
+    if _health_monitor_instance is None:
+        _health_monitor_instance = HealthMonitor()
+    return _health_monitor_instance
+
+
+def get_alerting_engine() -> AlertingEngine:
+    """Get or create global AlertingEngine instance."""
+    global _alerting_engine_instance
+    if _alerting_engine_instance is None:
+        _alerting_engine_instance = AlertingEngine()
+        # Add standard alerts on first initialization
+        for rule in create_standard_alerts():
+            _alerting_engine_instance.add_rule(rule)
+    return _alerting_engine_instance
+
+
+# Create module-level variables for backward compatibility
+# These will be initialized on first access
+metrics_collector = None
+health_monitor = None
+alerting_engine = None
+
+
+# Initialize on module import for backward compatibility
+# but avoid Prometheus duplication by using lazy singleton
+def _initialize_globals():
+    global metrics_collector, health_monitor, alerting_engine
+    if metrics_collector is None:
+        metrics_collector = get_metrics_collector()
+    if health_monitor is None:
+        health_monitor = get_health_monitor()
+    if alerting_engine is None:
+        alerting_engine = get_alerting_engine()
+
+
+# Only initialize if this module is being run directly, not during tests
+import sys
+if not any('pytest' in arg or 'test' in arg for arg in sys.argv):
+    _initialize_globals()

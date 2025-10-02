@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 @router.get("/health", response_model=dict[str, Any])
-async def get_health() -> dict[str, Any]:
+async def get_health(response: Response) -> dict[str, Any]:
     """
     Comprehensive system health check.
 
@@ -39,6 +39,15 @@ async def get_health() -> dict[str, Any]:
     - MinerU service availability
     """
     correlation_id = TracingManager.get_correlation_id()
+
+    # Generate a correlation ID if one doesn't exist
+    if not correlation_id:
+        import uuid
+        correlation_id = str(uuid.uuid4())
+        TracingManager.set_correlation_id(correlation_id)
+
+    # Add correlation ID to response headers
+    response.headers["X-Correlation-ID"] = correlation_id
 
     try:
         system_health = await health_monitor.get_system_health()
@@ -88,7 +97,7 @@ async def get_health() -> dict[str, Any]:
 
 
 @router.get("/health/detailed")
-async def get_detailed_health() -> dict[str, Any]:
+async def get_detailed_health(response: Response) -> dict[str, Any]:
     """
     Detailed health check with additional diagnostic information.
 
@@ -96,9 +105,18 @@ async def get_detailed_health() -> dict[str, Any]:
     """
     correlation_id = TracingManager.get_correlation_id()
 
+    # Generate a correlation ID if one doesn't exist
+    if not correlation_id:
+        import uuid
+        correlation_id = str(uuid.uuid4())
+        TracingManager.set_correlation_id(correlation_id)
+
+    # Add correlation ID to response headers
+    response.headers["X-Correlation-ID"] = correlation_id
+
     try:
         # Get basic health information
-        basic_health = await get_health()
+        basic_health = await get_health(response)
 
         # Add detailed dependency information
         dependencies = {}
@@ -233,8 +251,8 @@ async def get_readiness(response: Response) -> dict[str, Any]:
         }
 
 
-@router.get("/metrics", response_class=PlainTextResponse)
-async def get_prometheus_metrics() -> str:
+@router.get("/metrics")
+async def get_prometheus_metrics() -> PlainTextResponse:
     """
     Prometheus-compatible metrics endpoint.
 
@@ -262,7 +280,11 @@ async def get_prometheus_metrics() -> str:
             extra={"correlation_id": correlation_id},
         )
 
-        return all_metrics
+        # Return PlainTextResponse with Prometheus-compatible content-type header
+        return PlainTextResponse(
+            content=all_metrics,
+            media_type="text/plain; version=0.0.4; charset=utf-8"
+        )
 
     except Exception as e:
         logger.error(
@@ -282,7 +304,10 @@ metrics_collection_errors_total{{error_type="collection_failure"}} 1
 # TYPE metrics_collection_last_error_timestamp gauge
 metrics_collection_last_error_timestamp {asyncio.get_event_loop().time()}
 """
-        return error_metrics.strip()
+        return PlainTextResponse(
+            content=error_metrics.strip(),
+            media_type="text/plain; version=0.0.4; charset=utf-8"
+        )
 
 
 @router.get("/metrics/json")

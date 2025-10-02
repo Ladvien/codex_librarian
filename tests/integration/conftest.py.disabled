@@ -1,0 +1,13 @@
+"""
+Integration test configuration - imports real service fixtures.
+
+This conftest automatically loads fixtures for integration tests that use
+real services (PostgreSQL, GPU, Redis, Ollama, etc.).
+
+All fixtures from integration_conftest.py are automatically available here.
+"""
+
+# Import integration test fixtures
+pytest_plugins = ["tests.integration_conftest"]
+
+# Any integration-specific fixtures can be added here
